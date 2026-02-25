@@ -4,6 +4,7 @@ Permite upload de imagens de exames e gera laudos comparativos.
 """
 
 import os
+import sys
 import uuid
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
@@ -50,7 +51,7 @@ def analyze():
     """Endpoint para receber e analisar o exame médico."""
     api_key = get_api_key()
     if not api_key:
-        flash("Erro: GEMINI_API_KEY não configurada. Verifique o arquivo .env", "error")
+        flash("Erro: GEMINI_API_KEY não configurada. Adicione a variável de ambiente no painel do Vercel (Settings → Environment Variables).", "error")
         return redirect(url_for("index"))
 
     if "exam_image" not in request.files:
@@ -94,9 +95,11 @@ def analyze():
 
     except Exception as e:
         error_msg = str(e)
-        if "API_KEY" in error_msg.upper() or "api key" in error_msg.lower():
-            flash("Erro de autenticação: verifique sua GEMINI_API_KEY.", "error")
-        elif "quota" in error_msg.lower():
+        print(f"[ERRO ANÁLISE] {type(e).__name__}: {error_msg}", file=sys.stderr)
+        error_lower = error_msg.lower()
+        if "api key not valid" in error_lower or "invalid api key" in error_lower or "api_key_invalid" in error_lower:
+            flash("Erro de autenticação: GEMINI_API_KEY inválida. Verifique a chave no painel do Vercel.", "error")
+        elif "quota" in error_lower or "rate limit" in error_lower or "resource_exhausted" in error_lower:
             flash("Cota da API excedida. Tente novamente mais tarde.", "error")
         else:
             flash(f"Erro durante a análise: {error_msg}", "error")
