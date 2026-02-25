@@ -49,7 +49,7 @@ def detect_exam_type(filename: str, user_description: str = "") -> str:
     return "geral"
 
 
-def fetch_reference_image(exam_type: str, save_dir: str = "reference_data") -> list[str]:
+def fetch_reference_image(exam_type: str, save_dir: str = "/tmp/reference_data") -> list[str]:
     """
     Busca imagens de referência normais para o tipo de exame.
     Retorna lista de caminhos locais das imagens baixadas.
