@@ -73,7 +73,7 @@ def analyze_exam(
     exam_image_path: str,
     api_key: str,
     user_description: str = "",
-    model_name: str = "gemini-1.5-pro",
+    model_name: str = "gemini-2.5-flash",
 ) -> dict:
     """
     Analisa um exame médico comparando com imagens de referência normais.
@@ -152,7 +152,7 @@ def analyze_exam_from_bytes(
     exam_filename: str,
     api_key: str,
     user_description: str = "",
-    model_name: str = "gemini-1.5-pro",
+    model_name: str = "gemini-2.5-flash",
 ) -> dict:
     """
     Analisa um exame médico diretamente dos bytes da imagem.

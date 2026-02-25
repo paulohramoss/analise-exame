@@ -35,6 +35,11 @@ def get_api_key() -> str:
     return os.environ.get("GEMINI_API_KEY", "")
 
 
+def get_model_name() -> str:
+    """Obtém o modelo Gemini configurado."""
+    return os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -74,6 +79,7 @@ def analyze():
             exam_image_path=str(filepath),
             api_key=api_key,
             user_description=user_description,
+            model_name=get_model_name(),
         )
 
         return render_template(
@@ -130,6 +136,7 @@ def api_analyze():
             exam_image_path=str(filepath),
             api_key=api_key,
             user_description=user_description,
+            model_name=get_model_name(),
         )
         return jsonify(result), 200
 
