@@ -3,23 +3,17 @@ Módulo principal de análise de exames médicos usando a API do Gemini.
 Compara o exame enviado com imagens de referência normais e gera um laudo.
 """
 
-import os
-import base64
+import io
 from pathlib import Path
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from PIL import Image
-import io
 
 from core.reference_images import (
     detect_exam_type,
     get_reference_images_as_bytes,
 )
-
-
-def configure_gemini(api_key: str):
-    """Configura a API do Gemini com a chave fornecida."""
-    genai.configure(api_key=api_key)
 
 
 def build_analysis_prompt(exam_type: str) -> str:
@@ -87,7 +81,7 @@ def analyze_exam(
     Returns:
         Dicionário com resultado da análise e metadados
     """
-    configure_gemini(api_key)
+    client = genai.Client(api_key=api_key)
 
     # Detecta o tipo de exame
     filename = Path(exam_image_path).name
@@ -114,29 +108,28 @@ def analyze_exam(
     reference_images = get_reference_images_as_bytes(exam_type)
 
     # Monta o conteúdo para envio ao Gemini
-    model = genai.GenerativeModel(model_name)
     content_parts = []
 
     # Adiciona imagens de referência primeiro
     if reference_images:
-        content_parts.append("**IMAGENS DE REFERÊNCIA (exames normais para comparação):**")
+        content_parts.append(types.Part.from_text("**IMAGENS DE REFERÊNCIA (exames normais para comparação):**"))
         for i, (ref_bytes, ref_mime) in enumerate(reference_images):
-            content_parts.append(f"Referência {i + 1} - Exame normal:")
-            content_parts.append({"mime_type": ref_mime, "data": ref_bytes})
+            content_parts.append(types.Part.from_text(f"Referência {i + 1} - Exame normal:"))
+            content_parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
 
     # Adiciona imagem do paciente
-    content_parts.append("\n**EXAME DO PACIENTE (imagem para análise):**")
-    content_parts.append({"mime_type": mime_type, "data": exam_image_bytes})
+    content_parts.append(types.Part.from_text("\n**EXAME DO PACIENTE (imagem para análise):**"))
+    content_parts.append(types.Part.from_bytes(data=exam_image_bytes, mime_type=mime_type))
 
     # Adiciona descrição do usuário se fornecida
     if user_description:
-        content_parts.append(f"\n**Informações adicionais do solicitante:** {user_description}")
+        content_parts.append(types.Part.from_text(f"\n**Informações adicionais do solicitante:** {user_description}"))
 
     # Adiciona o prompt de análise
-    content_parts.append(build_analysis_prompt(exam_type))
+    content_parts.append(types.Part.from_text(build_analysis_prompt(exam_type)))
 
     # Gera a análise
-    response = model.generate_content(content_parts)
+    response = client.models.generate_content(model=model_name, contents=content_parts)
 
     return {
         "success": True,
@@ -158,7 +151,7 @@ def analyze_exam_from_bytes(
     Analisa um exame médico diretamente dos bytes da imagem.
     Versão alternativa que não requer salvar o arquivo primeiro.
     """
-    configure_gemini(api_key)
+    client = genai.Client(api_key=api_key)
 
     exam_type = detect_exam_type(exam_filename, user_description)
 
@@ -177,24 +170,23 @@ def analyze_exam_from_bytes(
 
     reference_images = get_reference_images_as_bytes(exam_type)
 
-    model = genai.GenerativeModel(model_name)
     content_parts = []
 
     if reference_images:
-        content_parts.append("**IMAGENS DE REFERÊNCIA (exames normais para comparação):**")
+        content_parts.append(types.Part.from_text("**IMAGENS DE REFERÊNCIA (exames normais para comparação):**"))
         for i, (ref_bytes, ref_mime) in enumerate(reference_images):
-            content_parts.append(f"Referência {i + 1} - Exame normal:")
-            content_parts.append({"mime_type": ref_mime, "data": ref_bytes})
+            content_parts.append(types.Part.from_text(f"Referência {i + 1} - Exame normal:"))
+            content_parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
 
-    content_parts.append("\n**EXAME DO PACIENTE (imagem para análise):**")
-    content_parts.append({"mime_type": mime_type, "data": exam_image_bytes})
+    content_parts.append(types.Part.from_text("\n**EXAME DO PACIENTE (imagem para análise):**"))
+    content_parts.append(types.Part.from_bytes(data=exam_image_bytes, mime_type=mime_type))
 
     if user_description:
-        content_parts.append(f"\n**Informações adicionais:** {user_description}")
+        content_parts.append(types.Part.from_text(f"\n**Informações adicionais:** {user_description}"))
 
-    content_parts.append(build_analysis_prompt(exam_type))
+    content_parts.append(types.Part.from_text(build_analysis_prompt(exam_type)))
 
-    response = model.generate_content(content_parts)
+    response = client.models.generate_content(model=model_name, contents=content_parts)
 
     return {
         "success": True,
