@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analisador de Exames Médicos - IA</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">🩺</span>
+                <div>
+                    <h1>MedAI Analyzer</h1>
+                    <p class="subtitle">Análise de Exames por Inteligência Artificial</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Aviso médico -->
+        <div class="disclaimer-banner">
+            <span class="disclaimer-icon">⚕️</span>
+            <p>
+                <strong>Aviso Médico:</strong> Esta ferramenta é um auxiliar para profissionais de saúde.
+                O resultado gerado por IA <strong>não substitui</strong> o diagnóstico de um médico especialista.
+                Sempre consulte um profissional qualificado.
+            </p>
+        </div>
+
+        <!-- Alertas Flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        <span>{{ '❌' if category == 'error' else '✅' }}</span>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Formulário de upload -->
+        <div class="card upload-card">
+            <h2>Enviar Exame para Análise</h2>
+            <p class="card-description">
+                Faça upload da imagem do exame médico. O sistema irá buscar imagens de referência normais
+                e utilizar IA para comparar e gerar um laudo detalhado.
+            </p>
+
+            <form action="/analyze" method="POST" enctype="multipart/form-data" id="upload-form">
+                <div class="upload-area" id="upload-area">
+                    <input
+                        type="file"
+                        name="exam_image"
+                        id="exam_image"
+                        accept=".png,.jpg,.jpeg,.webp,.gif"
+                        class="file-input"
+                        required
+                    >
+                    <label for="exam_image" class="upload-label">
+                        <span class="upload-icon">📷</span>
+                        <span class="upload-text">Clique para selecionar ou arraste a imagem aqui</span>
+                        <span class="upload-hint">PNG, JPG, JPEG, WEBP — Máximo 20MB</span>
+                    </label>
+                    <div class="preview-container" id="preview-container" style="display:none;">
+                        <img id="image-preview" src="" alt="Preview do exame">
+                        <button type="button" class="remove-btn" id="remove-btn">✕ Remover</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Informações Adicionais (opcional)</label>
+                    <textarea
+                        name="description"
+                        id="description"
+                        placeholder="Ex: Ressonância magnética do joelho direito. Paciente relata dor ao flexionar. Suspeita de lesão no menisco..."
+                        rows="3"
+                    ></textarea>
+                    <small>Forneça contexto clínico para uma análise mais precisa.</small>
+                </div>
+
+                <button type="submit" class="btn-primary" id="submit-btn">
+                    <span class="btn-icon">🔬</span>
+                    Analisar Exame com IA
+                </button>
+            </form>
+        </div>
+
+        <!-- Como funciona -->
+        <div class="how-it-works">
+            <h2>Como Funciona</h2>
+            <div class="steps-grid">
+                <div class="step">
+                    <div class="step-icon">📤</div>
+                    <h3>1. Upload</h3>
+                    <p>Envie a imagem do exame médico (Ressonância, Raio-X, Tomografia, etc.)</p>
+                </div>
+                <div class="step">
+                    <div class="step-icon">🔍</div>
+                    <h3>2. Referência</h3>
+                    <p>O sistema busca automaticamente imagens de referência de exames normais para comparação</p>
+                </div>
+                <div class="step">
+                    <div class="step-icon">🤖</div>
+                    <h3>3. Análise IA</h3>
+                    <p>O modelo Gemini analisa e compara as imagens, identificando alterações e anomalias</p>
+                </div>
+                <div class="step">
+                    <div class="step-icon">📋</div>
+                    <h3>4. Laudo</h3>
+                    <p>Receba um laudo estruturado com achados, hipóteses diagnósticas e recomendações</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tipos de exame suportados -->
+        <div class="card supported-exams">
+            <h2>Tipos de Exame Suportados</h2>
+            <div class="exam-tags">
+                <span class="tag">Ressonância Magnética (RM)</span>
+                <span class="tag">Raio-X</span>
+                <span class="tag">Tomografia Computadorizada (TC)</span>
+                <span class="tag">Ultrassonografia</span>
+                <span class="tag">Mamografia</span>
+                <span class="tag">PET Scan</span>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>MedAI Analyzer — Powered by Google Gemini AI</p>
+        <p class="footer-warning">Uso exclusivo como ferramenta de apoio. Não substitui avaliação médica.</p>
+    </footer>
+
+    <div class="loading-overlay" id="loading-overlay" style="display:none;">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h3>Analisando exame...</h3>
+            <p>Buscando imagens de referência e gerando laudo com IA.</p>
+            <p>Isso pode levar alguns segundos.</p>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('exam_image');
+        const uploadArea = document.getElementById('upload-area');
+        const previewContainer = document.getElementById('preview-container');
+        const imagePreview = document.getElementById('image-preview');
+        const removeBtn = document.getElementById('remove-btn');
+        const form = document.getElementById('upload-form');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const uploadLabel = uploadArea.querySelector('.upload-label');
+
+        fileInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imagePreview.src = e.target.result;
+                    previewContainer.style.display = 'flex';
+                    uploadLabel.style.display = 'none';
+                };
+                reader.readAsDataURL(this.files[0]);
+            }
+        });
+
+        removeBtn.addEventListener('click', function() {
+            fileInput.value = '';
+            previewContainer.style.display = 'none';
+            uploadLabel.style.display = 'flex';
+            imagePreview.src = '';
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', function() {
+            this.classList.remove('drag-over');
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                fileInput.files = dt.files;
+                fileInput.dispatchEvent(new Event('change'));
+            }
+        });
+
+        form.addEventListener('submit', function() {
+            loadingOverlay.style.display = 'flex';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laudo - MedAI Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">🩺</span>
+                <div>
+                    <h1>MedAI Analyzer</h1>
+                    <p class="subtitle">Análise de Exames por Inteligência Artificial</p>
+                </div>
+            </div>
+            <a href="/" class="btn-secondary">← Nova Análise</a>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Aviso médico -->
+        <div class="disclaimer-banner">
+            <span class="disclaimer-icon">⚕️</span>
+            <p>
+                <strong>Aviso:</strong> Este laudo foi gerado por IA como ferramenta de apoio.
+                <strong>Não substitui</strong> o diagnóstico de um médico especialista.
+                Os achados devem ser confirmados por um profissional de saúde qualificado.
+            </p>
+        </div>
+
+        <!-- Metadados da análise -->
+        <div class="result-meta card">
+            <div class="meta-grid">
+                <div class="meta-item">
+                    <span class="meta-label">Tipo de Exame Detectado</span>
+                    <span class="meta-value">{{ exam_type }}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Imagens de Referência</span>
+                    <span class="meta-value">
+                        {% if references_used > 0 %}
+                            {{ references_used }} imagem(ns) normal(is) usada(s)
+                        {% else %}
+                            Análise sem referência externa
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Modelo de IA</span>
+                    <span class="meta-value">Google {{ model_used }}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Status</span>
+                    <span class="meta-value status-ok">✅ Análise Concluída</span>
+                </div>
+            </div>
+
+            {% if user_description %}
+            <div class="user-description">
+                <span class="meta-label">Informações Fornecidas:</span>
+                <p>{{ user_description }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Laudo da análise -->
+        <div class="card report-card">
+            <div class="report-header">
+                <h2>📋 Laudo de Análise por IA</h2>
+                <div class="report-actions">
+                    <button onclick="window.print()" class="btn-secondary btn-small">🖨️ Imprimir</button>
+                    <button onclick="copyReport()" class="btn-secondary btn-small">📋 Copiar</button>
+                </div>
+            </div>
+
+            <div class="report-content" id="report-content">
+                {{ analysis | safe }}
+            </div>
+        </div>
+
+        <!-- Ações -->
+        <div class="result-actions">
+            <a href="/" class="btn-primary">🔬 Analisar Novo Exame</a>
+        </div>
+    </main>
+
+    <footer>
+        <p>MedAI Analyzer — Powered by Google Gemini AI</p>
+        <p class="footer-warning">Uso exclusivo como ferramenta de apoio. Não substitui avaliação médica.</p>
+    </footer>
+
+    <script>
+        // Converte markdown para HTML simples para o laudo
+        function renderMarkdown(element) {
+            let html = element.innerHTML;
+
+            // Headers
+            html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+            html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+            html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+
+            // Bold
+            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+            // Italic
+            html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+            // Lists
+            html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+            html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+
+            // Numbered lists
+            html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+
+            // Paragraphs
+            html = html.replace(/\n\n/g, '</p><p>');
+            html = '<p>' + html + '</p>';
+
+            element.innerHTML = html;
+        }
+
+        const reportContent = document.getElementById('report-content');
+        renderMarkdown(reportContent);
+
+        function copyReport() {
+            const text = reportContent.innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Laudo copiado para a área de transferência!');
+            }).catch(() => {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                alert('Laudo copiado!');
+            });
+        }
+    </script>
+
+    <style>
+        @media print {
+            header, footer, .result-actions, .report-actions, .disclaimer-banner { display: none; }
+            .card { box-shadow: none; border: 1px solid #ccc; }
+        }
+    </style>
+</body>
+</html>
