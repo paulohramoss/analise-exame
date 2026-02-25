@@ -80,29 +80,30 @@ curl -X POST http://localhost:5000/api/analyze \
 ```
 
 **Resposta:**
+
 ```json
 {
   "success": true,
   "exam_type": "ressonancia_joelho",
   "analysis": "## 1. IDENTIFICAÇÃO DO EXAME...",
   "references_used": 2,
-  "model_used": "gemini-1.5-pro"
+  "model_used": "GEMINI_MODEL=gemini-2.5-flash"
 }
 ```
 
 ## Tipos de Exame Suportados
 
-| Tipo | Palavras-chave detectadas |
-|------|--------------------------|
+| Tipo                 | Palavras-chave detectadas        |
+| -------------------- | -------------------------------- |
 | Ressonância Cerebral | cerebro, cranio, brain, mri head |
-| Ressonância Joelho | joelho, knee, tibial, femoral |
-| Raio-X Tórax | torax, pulm, chest, xray |
-| Ressonância Coluna | coluna, lombar, cervical, spine |
-| Tomografia Crânio | tomografia, ct scan, tac |
+| Ressonância Joelho   | joelho, knee, tibial, femoral    |
+| Raio-X Tórax         | torax, pulm, chest, xray         |
+| Ressonância Coluna   | coluna, lombar, cervical, spine  |
+| Tomografia Crânio    | tomografia, ct scan, tac         |
 
 ## Tecnologias
 
 - **Backend:** Python, Flask
-- **IA:** Google Gemini 1.5 Pro (multimodal)
+- **IA:** GEMINI_MODEL=gemini-2.5-flash
 - **Imagens de referência:** Wikipedia Commons (domínio público)
 - **Frontend:** HTML5, CSS3 (sem frameworks externos)
