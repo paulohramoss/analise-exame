@@ -17,7 +17,7 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key-change-in-prod")
 
-UPLOAD_FOLDER = Path("uploads")
+UPLOAD_FOLDER = Path("/tmp/uploads")
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "dcm"}
 MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20MB
