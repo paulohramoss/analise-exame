@@ -112,21 +112,21 @@ def analyze_exam(
 
     # Adiciona imagens de referência primeiro
     if reference_images:
-        content_parts.append(types.Part.from_text("**IMAGENS DE REFERÊNCIA (exames normais para comparação):**"))
+        content_parts.append(types.Part.from_text(text="**IMAGENS DE REFERÊNCIA (exames normais para comparação):**"))
         for i, (ref_bytes, ref_mime) in enumerate(reference_images):
-            content_parts.append(types.Part.from_text(f"Referência {i + 1} - Exame normal:"))
+            content_parts.append(types.Part.from_text(text=f"Referência {i + 1} - Exame normal:"))
             content_parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
 
     # Adiciona imagem do paciente
-    content_parts.append(types.Part.from_text("\n**EXAME DO PACIENTE (imagem para análise):**"))
+    content_parts.append(types.Part.from_text(text="\n**EXAME DO PACIENTE (imagem para análise):**"))
     content_parts.append(types.Part.from_bytes(data=exam_image_bytes, mime_type=mime_type))
 
     # Adiciona descrição do usuário se fornecida
     if user_description:
-        content_parts.append(types.Part.from_text(f"\n**Informações adicionais do solicitante:** {user_description}"))
+        content_parts.append(types.Part.from_text(text=f"\n**Informações adicionais do solicitante:** {user_description}"))
 
     # Adiciona o prompt de análise
-    content_parts.append(types.Part.from_text(build_analysis_prompt(exam_type)))
+    content_parts.append(types.Part.from_text(text=build_analysis_prompt(exam_type)))
 
     # Gera a análise
     response = client.models.generate_content(model=model_name, contents=content_parts)
@@ -173,18 +173,18 @@ def analyze_exam_from_bytes(
     content_parts = []
 
     if reference_images:
-        content_parts.append(types.Part.from_text("**IMAGENS DE REFERÊNCIA (exames normais para comparação):**"))
+        content_parts.append(types.Part.from_text(text="**IMAGENS DE REFERÊNCIA (exames normais para comparação):**"))
         for i, (ref_bytes, ref_mime) in enumerate(reference_images):
-            content_parts.append(types.Part.from_text(f"Referência {i + 1} - Exame normal:"))
+            content_parts.append(types.Part.from_text(text=f"Referência {i + 1} - Exame normal:"))
             content_parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
 
-    content_parts.append(types.Part.from_text("\n**EXAME DO PACIENTE (imagem para análise):**"))
+    content_parts.append(types.Part.from_text(text="\n**EXAME DO PACIENTE (imagem para análise):**"))
     content_parts.append(types.Part.from_bytes(data=exam_image_bytes, mime_type=mime_type))
 
     if user_description:
-        content_parts.append(types.Part.from_text(f"\n**Informações adicionais:** {user_description}"))
+        content_parts.append(types.Part.from_text(text=f"\n**Informações adicionais:** {user_description}"))
 
-    content_parts.append(types.Part.from_text(build_analysis_prompt(exam_type)))
+    content_parts.append(types.Part.from_text(text=build_analysis_prompt(exam_type)))
 
     response = client.models.generate_content(model=model_name, contents=content_parts)
 
