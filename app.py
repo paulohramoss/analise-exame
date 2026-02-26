@@ -6,6 +6,7 @@ Permite upload de imagens de exames e gera laudos comparativos.
 import os
 import sys
 import uuid
+import base64
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 from werkzeug.utils import secure_filename
@@ -75,6 +76,14 @@ def analyze():
     filepath = UPLOAD_FOLDER / unique_name
     file.save(str(filepath))
 
+    # Lê a imagem como base64 para exibir no resultado
+    ext = filepath.suffix.lower().lstrip(".")
+    mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                "webp": "image/webp", "gif": "image/gif"}
+    image_mime = mime_map.get(ext, "image/jpeg")
+    with open(str(filepath), "rb") as f:
+        image_b64 = base64.b64encode(f.read()).decode("utf-8")
+
     try:
         result = analyze_exam(
             exam_image_path=str(filepath),
@@ -89,7 +98,8 @@ def analyze():
             exam_type=result["exam_type"].replace("_", " ").title(),
             references_used=result["references_used"],
             model_used=result["model_used"],
-            image_filename=unique_name,
+            image_b64=image_b64,
+            image_mime=image_mime,
             user_description=user_description,
         )
 
