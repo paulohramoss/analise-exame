@@ -479,6 +479,50 @@ main .btn-secondary {
     color: var(--text);
 }
 
+/* ===== Result Layout (side by side) ===== */
+.result-layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 1.5rem;
+    align-items: start;
+    margin-bottom: 1.5rem;
+}
+
+.exam-image-card h2 {
+    margin-bottom: 1rem;
+}
+
+.exam-image-wrapper {
+    background: #0a0a0a;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+}
+
+.exam-image {
+    width: 100%;
+    height: auto;
+    display: block;
+    object-fit: contain;
+}
+
+@media (max-width: 860px) {
+    .result-layout {
+        grid-template-columns: 1fr;
+    }
+    .exam-image-wrapper {
+        max-height: 340px;
+    }
+    .exam-image {
+        max-height: 340px;
+        width: auto;
+        margin: 0 auto;
+    }
+}
+
 /* ===== Result Actions ===== */
 .result-actions {
     display: flex;

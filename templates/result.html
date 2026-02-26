@@ -66,19 +66,34 @@
             {% endif %}
         </div>
 
-        <!-- Laudo da análise -->
-        <div class="card report-card">
-            <div class="report-header">
-                <h2>📋 Laudo de Análise por IA</h2>
-                <div class="report-actions">
-                    <button onclick="window.print()" class="btn-secondary btn-small">🖨️ Imprimir</button>
-                    <button onclick="copyReport()" class="btn-secondary btn-small">📋 Copiar</button>
+        <!-- Layout lado a lado: imagem + laudo -->
+        <div class="result-layout">
+
+            <!-- Imagem do exame -->
+            <div class="card exam-image-card">
+                <h2>🔬 Exame Analisado</h2>
+                <div class="exam-image-wrapper">
+                    <img src="data:{{ image_mime }};base64,{{ image_b64 }}"
+                         alt="Exame enviado para análise"
+                         class="exam-image" />
                 </div>
             </div>
 
-            <div class="report-content" id="report-content">
-                {{ analysis | safe }}
+            <!-- Laudo da análise -->
+            <div class="card report-card">
+                <div class="report-header">
+                    <h2>📋 Laudo de Análise por IA</h2>
+                    <div class="report-actions">
+                        <button onclick="window.print()" class="btn-secondary btn-small">🖨️ Imprimir</button>
+                        <button onclick="copyReport()" class="btn-secondary btn-small">📋 Copiar</button>
+                    </div>
+                </div>
+
+                <div class="report-content" id="report-content">
+                    {{ analysis | safe }}
+                </div>
             </div>
+
         </div>
 
         <!-- Ações -->
@@ -145,6 +160,7 @@
         @media print {
             header, footer, .result-actions, .report-actions, .disclaimer-banner { display: none; }
             .card { box-shadow: none; border: 1px solid #ccc; }
+            .result-layout { grid-template-columns: 260px 1fr; }
         }
     </style>
 </body>
