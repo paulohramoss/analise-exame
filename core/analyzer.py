@@ -19,47 +19,60 @@ from core.reference_images import (
 def build_analysis_prompt(exam_type: str) -> str:
     """Constrói o prompt especializado para análise médica."""
     return f"""
-Você é um assistente de análise de imagens médicas especializado.
-Sua função é auxiliar médicos na interpretação de exames de imagem.
+Você é um assistente especializado em análise de imagens médicas da plataforma Three Health.
+Sua função é auxiliar profissionais de saúde na interpretação de exames de imagem.
 
-**AVISO IMPORTANTE:** Esta análise é uma ferramenta de suporte e NÃO substitui
-o diagnóstico de um médico especialista. Sempre consulte um profissional de saúde.
+**BASE DE CONHECIMENTO:**
+Sua análise deve ser fundamentada nas referências anatômicas e de imagem mais consagradas:
+- **Gray's Anatomy** (41ª edição) — anatomia topográfica e relações estruturais
+- **Netter's Atlas of Human Anatomy** — referência visual de estruturas anatômicas normais
+- **Fundamentals of Diagnostic Radiology** (Brant & Helms) — padrões radiológicos normais e patológicos
+- **Radiopaedia.org** — casos clínicos com consenso radiológico
+- **ACR Appropriateness Criteria** — critérios de adequação do American College of Radiology
+
+**AVISO IMPORTANTE:** Esta análise é uma ferramenta de suporte educacional e de apoio.
+NÃO substitui o diagnóstico de um médico especialista.
+Sempre consulte um radiologista ou médico qualificado.
 
 Tipo de exame detectado: {exam_type.replace("_", " ").title()}
 
 Você recebeu:
-1. Uma imagem de exame do paciente (última imagem enviada)
-2. Imagem(ns) de referência de exames normais (imagens anteriores)
+1. Imagem(ns) de referência anatômica normal (imagens anteriores) — use como base de comparação
+2. O exame do paciente (última imagem) — objeto da análise
 
-Por favor, realize uma análise comparativa detalhada seguindo esta estrutura:
+Realize uma análise comparativa estruturada e detalhada:
 
 ## 1. IDENTIFICAÇÃO DO EXAME
-- Tipo de exame e região anatômica
-- Qualidade técnica da imagem
-- Plano/corte da imagem (quando aplicável)
+- Modalidade de imagem e região anatômica
+- Qualidade técnica (ruído, contraste, artefatos)
+- Plano/corte/incidência (quando aplicável)
 
-## 2. COMPARAÇÃO COM PADRÃO NORMAL
-- Estruturas que apresentam aspecto normal
-- Diferenças observadas em relação ao padrão de referência
-- Alterações de sinal, densidade, forma ou tamanho (se houver)
+## 2. ANÁLISE ANATÔMICA — COMPARAÇÃO COM PADRÃO NORMAL
+Com base nas referências anatômicas (Gray's, Netter):
+- Estruturas visíveis e seus aspectos normais esperados
+- Desvios identificados em relação ao padrão de referência
+- Alterações de sinal (RM), densidade (TC/Rx), ecogenicidade (US)
+- Alterações morfológicas: forma, tamanho, bordas, contornos
 
 ## 3. ACHADOS PRINCIPAIS
-- Liste as principais alterações identificadas
-- Localização precisa de cada achado
-- Características das alterações (dimensões estimadas, bordas, intensidade)
+- Liste cada achado com localização anatômica precisa
+- Dimensões estimadas quando possível
+- Características semiológicas (ex.: hipointensidade T2, hiperdensidade, calcificação)
+- Diferencie achados incidentais de potencialmente patológicos
 
 ## 4. IMPRESSÃO DIAGNÓSTICA
 - Hipóteses diagnósticas em ordem de probabilidade
-- Correlação com possíveis condições clínicas
-- Grau de certeza dos achados
+- Correlação anatômica e fisiopatológica de cada hipótese
+- Grau de confiança: alto / moderado / baixo (com justificativa)
 
 ## 5. RECOMENDAÇÕES
-- Exames complementares sugeridos (se necessário)
-- Urgência de avaliação médica (baixa/média/alta)
-- Observações adicionais relevantes
+- Correlação clínica necessária
+- Exames complementares sugeridos (com justificativa)
+- Urgência de avaliação: eletiva / prioritária / urgente
+- Referências anatômicas relevantes para o caso
 
-Seja preciso, objetivo e utilize terminologia médica adequada.
-Indique claramente quando há limitações na análise.
+Use terminologia médica precisa (SNOMED/RadLex quando aplicável).
+Seja objetivo e indique explicitamente as limitações da análise por IA.
 """
 
 
@@ -112,9 +125,9 @@ def analyze_exam(
 
     # Adiciona imagens de referência primeiro
     if reference_images:
-        content_parts.append(types.Part.from_text(text="**IMAGENS DE REFERÊNCIA (exames normais para comparação):**"))
+        content_parts.append(types.Part.from_text(text="**IMAGENS DE REFERÊNCIA ANATÔMICA NORMAL (base de comparação):**"))
         for i, (ref_bytes, ref_mime) in enumerate(reference_images):
-            content_parts.append(types.Part.from_text(text=f"Referência {i + 1} - Exame normal:"))
+            content_parts.append(types.Part.from_text(text=f"Referência {i + 1} — Anatomia normal:"))
             content_parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
 
     # Adiciona imagem do paciente
@@ -123,7 +136,7 @@ def analyze_exam(
 
     # Adiciona descrição do usuário se fornecida
     if user_description:
-        content_parts.append(types.Part.from_text(text=f"\n**Informações adicionais do solicitante:** {user_description}"))
+        content_parts.append(types.Part.from_text(text=f"\n**Contexto clínico fornecido:** {user_description}"))
 
     # Adiciona o prompt de análise
     content_parts.append(types.Part.from_text(text=build_analysis_prompt(exam_type)))
@@ -173,16 +186,16 @@ def analyze_exam_from_bytes(
     content_parts = []
 
     if reference_images:
-        content_parts.append(types.Part.from_text(text="**IMAGENS DE REFERÊNCIA (exames normais para comparação):**"))
+        content_parts.append(types.Part.from_text(text="**IMAGENS DE REFERÊNCIA ANATÔMICA NORMAL (base de comparação):**"))
         for i, (ref_bytes, ref_mime) in enumerate(reference_images):
-            content_parts.append(types.Part.from_text(text=f"Referência {i + 1} - Exame normal:"))
+            content_parts.append(types.Part.from_text(text=f"Referência {i + 1} — Anatomia normal:"))
             content_parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
 
     content_parts.append(types.Part.from_text(text="\n**EXAME DO PACIENTE (imagem para análise):**"))
     content_parts.append(types.Part.from_bytes(data=exam_image_bytes, mime_type=mime_type))
 
     if user_description:
-        content_parts.append(types.Part.from_text(text=f"\n**Informações adicionais:** {user_description}"))
+        content_parts.append(types.Part.from_text(text=f"\n**Contexto clínico fornecido:** {user_description}"))
 
     content_parts.append(types.Part.from_text(text=build_analysis_prompt(exam_type)))
 
