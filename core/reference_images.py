@@ -1,58 +1,59 @@
 """
-Gerencia imagens de referência (normais) e atlas em PDF para comparação com exames.
+Gerencia imagens de referência (normais) e atlas em PDF para exames ortopédicos.
 
 Ordem de prioridade:
 1. PDFs de atlas em reference_data/docs/          (base de conhecimento global)
-2. Imagens commitadas em reference_data/<tipo>/   (referências por tipo de exame)
+2. Imagens commitadas em reference_data/<tipo>/   (referências por região anatômica)
 3. Download de URLs públicas como fallback
 """
 
 import requests
 from pathlib import Path
 
-# Diretórios do repositório (disponíveis localmente e no Vercel)
 _THIS_DIR = Path(__file__).parent
 REFERENCE_DATA_DIR = _THIS_DIR.parent / "reference_data"
 DOCS_DIR = REFERENCE_DATA_DIR / "docs"
 
-# URLs de fallback — usadas somente se não houver imagens locais no repo
-REFERENCE_URLS = {
-    "ressonancia_cerebro": [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Lateral_head_on_MRI_edit.jpg/800px-Lateral_head_on_MRI_edit.jpg",
-    ],
-    "ressonancia_joelho": [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/MRI_of_human_knee.jpg/800px-MRI_of_human_knee.jpg",
-    ],
-    "raio_x_torax": [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Normal_posteroanterior_%28PA%29_chest_radiograph_%28X-ray%29.jpg/800px-Normal_posteroanterior_%28PA%29_chest_radiograph_%28X-ray%29.jpg",
-    ],
-    "ressonancia_coluna": [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Vertebral_column_lateral_diagram.png/400px-Vertebral_column_lateral_diagram.png",
-    ],
-    "tomografia_cranio": [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Computed_tomography_of_human_brain_-_large.png/800px-Computed_tomography_of_human_brain_-_large.png",
-    ],
-    "geral": [
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Lateral_head_on_MRI_edit.jpg/800px-Lateral_head_on_MRI_edit.jpg",
-    ],
+# Regiões anatômicas ortopédicas suportadas
+EXAM_TYPE_KEYWORDS = {
+    "joelho":       ["joelho", "knee", "tibial", "femoral", "patela", "ligamento cruzado",
+                     "menisco", "lcl", "lcm", "lca", "lcp"],
+    "coluna":       ["coluna", "lombar", "cervical", "toracica", "torácica", "spine",
+                     "vertebr", "disco", "hernia de disco", "sacro", "coccix", "l1", "l2",
+                     "l3", "l4", "l5", "s1", "c1", "c2", "c3", "c4", "c5", "c6", "c7"],
+    "ombro":        ["ombro", "shoulder", "manguito", "rotador", "acromioclavicular",
+                     "glenoumeral", "umero", "clavícula", "clavicula", "escapula", "scapula"],
+    "quadril":      ["quadril", "hip", "fêmur", "femur", "acetábulo", "acetabulo",
+                     "ilíaco", "iliaco", "sacroilíaca", "sacroiliaca"],
+    "pe_tornozelo": ["pé", "pe", "tornozelo", "ankle", "foot", "calcâneo", "calcaneo",
+                     "tálus", "talus", "metatarso", "hallux", "plantar"],
+    "mao_punho":    ["mão", "mao", "punho", "wrist", "hand", "carpo", "metacarpo",
+                     "falange", "navicular", "escafoide"],
+    "cotovelo":     ["cotovelo", "elbow", "úmero distal", "radio proximal", "ulna",
+                     "epicondilo", "olecrano"],
 }
 
-EXAM_TYPE_KEYWORDS = {
-    "ressonancia_cerebro": ["cerebro", "cranio", "brain", "mri head", "ressonancia cranio"],
-    "ressonancia_joelho": ["joelho", "knee", "tibial", "femoral"],
-    "raio_x_torax": ["torax", "pulm", "chest", "xray", "raio-x", "radiografia"],
-    "ressonancia_coluna": ["coluna", "lombar", "cervical", "spine", "vertebr"],
-    "tomografia_cranio": ["tomografia", "ct scan", "tac"],
-    "ultrassonografia": ["ultrassom", "ultrasson", "ecografia", "doppler"],
-    "mamografia": ["mamografia", "mama", "mamary", "breast"],
+FALLBACK_URLS = {
+    "joelho": [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/MRI_of_human_knee.jpg/800px-MRI_of_human_knee.jpg",
+    ],
+    "coluna": [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Vertebral_column_lateral_diagram.png/400px-Vertebral_column_lateral_diagram.png",
+    ],
+    "ombro": [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Slide1bgshoulder.JPG/800px-Slide1bgshoulder.JPG",
+    ],
+    "quadril": [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/Pelvis_diagram.svg/800px-Pelvis_diagram.svg.png",
+    ],
 }
 
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-_PDF_MAX_BYTES = 20 * 1024 * 1024  # 20 MB — limite inline do Gemini
+_PDF_MAX_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
 def detect_exam_type(filename: str, user_description: str = "") -> str:
-    """Detecta o tipo de exame pelo nome do arquivo ou descrição."""
+    """Detecta a região anatômica ortopédica pelo nome do arquivo ou descrição."""
     combined = (filename + " " + user_description).lower()
     for exam_type, keywords in EXAM_TYPE_KEYWORDS.items():
         if any(kw in combined for kw in keywords):
@@ -72,7 +73,6 @@ def get_reference_pdfs() -> list[tuple[bytes, str]]:
     if not pdf_files:
         return []
 
-    # Usa apenas o primeiro PDF para não exceder o contexto do Gemini
     pdf_path = pdf_files[0]
     try:
         data = pdf_path.read_bytes()
@@ -111,7 +111,8 @@ def _load_images_from_dir(directory: Path, max_images: int = 2) -> list[tuple[by
 
 def _download_fallback(exam_type: str) -> list[tuple[bytes, str]]:
     """Baixa imagens de referência da internet como fallback. Cache em /tmp."""
-    urls = REFERENCE_URLS.get(exam_type, REFERENCE_URLS["geral"])
+    key = exam_type if exam_type in FALLBACK_URLS else "joelho"
+    urls = FALLBACK_URLS[key]
     cache_dir = Path("/tmp/reference_data") / exam_type
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -127,7 +128,7 @@ def _download_fallback(exam_type: str) -> list[tuple[bytes, str]]:
                 pass
 
         try:
-            resp = requests.get(url, headers={"User-Agent": "ThreeHealth/1.0"}, timeout=15)
+            resp = requests.get(url, headers={"User-Agent": "EHealthOrtopedia/1.0"}, timeout=15)
             if resp.status_code == 200:
                 cached_path.write_bytes(resp.content)
                 results.append((resp.content, "image/jpeg"))
