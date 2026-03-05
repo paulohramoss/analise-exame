@@ -1,9 +1,16 @@
 """
 Módulo principal de análise de exames médicos usando a API do Gemini.
 Compara o exame enviado com atlas em PDF e imagens de referência normais.
+
+PDFs são enviados via Gemini File API (upload na primeira chamada, URI cacheado
+em memória por 47h para não re-enviar o arquivo a cada análise).
 """
 
+import hashlib
 import io
+import os
+import tempfile
+import time
 from pathlib import Path
 
 from google import genai
@@ -15,6 +22,54 @@ from core.reference_images import (
     get_reference_images_as_bytes,
     get_reference_pdfs,
 )
+
+# Cache in-memory: {md5_hash: {"uri": str, "mime": str, "expires_at": float}}
+# Persiste enquanto o container Vercel estiver ativo (evita re-upload a cada request)
+_pdf_uri_cache: dict = {}
+
+
+def _get_or_upload_pdf(client: genai.Client, pdf_bytes: bytes) -> tuple[str, str] | None:
+    """
+    Faz upload do PDF para a Gemini File API na primeira chamada e cacheia o URI.
+    Retorna (uri, mime_type) ou None se o upload falhar.
+    O arquivo expira em 48h; o cache é invalidado após 47h.
+    """
+    pdf_hash = hashlib.md5(pdf_bytes).hexdigest()
+
+    cached = _pdf_uri_cache.get(pdf_hash)
+    if cached and cached["expires_at"] > time.time():
+        print(f"[PDF cache] Reutilizando URI: {cached['uri'][:60]}...")
+        return cached["uri"], cached["mime"]
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(pdf_bytes)
+            tmp_path = tmp.name
+
+        print(f"[PDF upload] Enviando {len(pdf_bytes)//1024} KB para Gemini File API...")
+        file_response = client.files.upload(file=tmp_path)
+
+        uri = file_response.uri
+        mime = file_response.mime_type or "application/pdf"
+
+        _pdf_uri_cache[pdf_hash] = {
+            "uri": uri,
+            "mime": mime,
+            "expires_at": time.time() + 47 * 3600,
+        }
+        print(f"[PDF upload] Concluído. URI: {uri[:60]}...")
+        return uri, mime
+
+    except Exception as e:
+        print(f"[PDF upload] Falhou: {e}. Usando bytes inline como fallback.")
+        return None
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
 
 def build_analysis_prompt(exam_type: str) -> str:
@@ -80,28 +135,45 @@ Seja objetivo e indique explicitamente as limitações da análise por IA.
 
 
 def _build_content_parts(
+    client: genai.Client,
     exam_image_bytes: bytes,
     mime_type: str,
     exam_type: str,
     user_description: str,
     reference_pdfs: list,
     reference_images: list,
-) -> list:
-    """Monta a lista de parts para envio ao Gemini."""
+) -> tuple[list, int]:
+    """
+    Monta a lista de parts para envio ao Gemini.
+    Retorna (content_parts, total_references_used).
+    """
     parts = []
+    refs_used = 0
 
-    # 1. Atlas em PDF (base de conhecimento anatômico)
+    # 1. Atlas em PDF via File API (ou inline como fallback)
     if reference_pdfs:
-        parts.append(types.Part.from_text(text="**ATLAS DE REFERÊNCIA ANATÔMICA (use como base de conhecimento):**"))
-        for pdf_bytes, pdf_mime in reference_pdfs:
-            parts.append(types.Part.from_bytes(data=pdf_bytes, mime_type=pdf_mime))
+        parts.append(types.Part.from_text(
+            text="**ATLAS DE REFERÊNCIA ANATÔMICA (use como base de conhecimento):**"
+        ))
+        for pdf_bytes, _ in reference_pdfs:
+            result = _get_or_upload_pdf(client, pdf_bytes)
+            if result:
+                uri, mime = result
+                parts.append(types.Part.from_uri(uri=uri, mime_type=mime))
+            else:
+                # Fallback inline se File API falhar (somente se < 20MB)
+                parts.append(types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
+            refs_used += 1
 
     # 2. Imagens de referência de exame normal
     if reference_images:
-        parts.append(types.Part.from_text(text="**IMAGENS DE REFERÊNCIA NORMAL (padrão visual de comparação):**"))
+        parts.append(types.Part.from_text(
+            text="**IMAGENS DE REFERÊNCIA NORMAL (padrão visual de comparação):**"
+        ))
         for i, (ref_bytes, ref_mime) in enumerate(reference_images):
             parts.append(types.Part.from_text(text=f"Referência {i + 1} — Anatomia normal:"))
             parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
+            refs_used += 1
 
     # 3. Exame do paciente
     parts.append(types.Part.from_text(text="\n**EXAME DO PACIENTE (imagem para análise):**"))
@@ -109,12 +181,14 @@ def _build_content_parts(
 
     # 4. Contexto clínico
     if user_description:
-        parts.append(types.Part.from_text(text=f"\n**Contexto clínico fornecido:** {user_description}"))
+        parts.append(types.Part.from_text(
+            text=f"\n**Contexto clínico fornecido:** {user_description}"
+        ))
 
     # 5. Prompt de análise
     parts.append(types.Part.from_text(text=build_analysis_prompt(exam_type)))
 
-    return parts
+    return parts, refs_used
 
 
 def analyze_exam(
@@ -158,8 +232,8 @@ def analyze_exam(
     reference_pdfs = get_reference_pdfs()
     reference_images = get_reference_images_as_bytes(exam_type)
 
-    content_parts = _build_content_parts(
-        exam_image_bytes, mime_type, exam_type, user_description,
+    content_parts, refs_used = _build_content_parts(
+        client, exam_image_bytes, mime_type, exam_type, user_description,
         reference_pdfs, reference_images,
     )
 
@@ -169,7 +243,7 @@ def analyze_exam(
         "success": True,
         "exam_type": exam_type,
         "analysis": response.text,
-        "references_used": len(reference_images) + len(reference_pdfs),
+        "references_used": refs_used,
         "model_used": model_name,
     }
 
@@ -204,8 +278,8 @@ def analyze_exam_from_bytes(
     reference_pdfs = get_reference_pdfs()
     reference_images = get_reference_images_as_bytes(exam_type)
 
-    content_parts = _build_content_parts(
-        exam_image_bytes, mime_type, exam_type, user_description,
+    content_parts, refs_used = _build_content_parts(
+        client, exam_image_bytes, mime_type, exam_type, user_description,
         reference_pdfs, reference_images,
     )
 
@@ -215,6 +289,6 @@ def analyze_exam_from_bytes(
         "success": True,
         "exam_type": exam_type,
         "analysis": response.text,
-        "references_used": len(reference_images) + len(reference_pdfs),
+        "references_used": refs_used,
         "model_used": model_name,
     }
