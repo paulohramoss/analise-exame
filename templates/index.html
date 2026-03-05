@@ -48,10 +48,10 @@
 
         <!-- Formulário de upload -->
         <div class="card upload-card">
-            <h2>Enviar Exame para Análise</h2>
+            <h2>Enviar Exame Ortopédico para Análise</h2>
             <p class="card-description">
-                Faça upload da imagem do exame médico. O sistema irá buscar imagens de referência normais
-                e utilizar IA para comparar e gerar um laudo detalhado.
+                Faça upload da imagem do exame ortopédico (RM, Raio-X, TC). O sistema compara com
+                referências anatômicas normais e gera um laudo musculoesquelético estruturado.
             </p>
 
             <form action="/analyze" method="POST" enctype="multipart/form-data" id="upload-form">
@@ -67,7 +67,7 @@
                     <label for="exam_image" class="upload-label">
                         <span class="upload-icon">📷</span>
                         <span class="upload-text">Clique para selecionar ou arraste a imagem aqui</span>
-                        <span class="upload-hint">PNG, JPG, JPEG, WEBP — Máximo 20MB</span>
+                        <span class="upload-hint">RM · Raio-X · TC · PNG, JPG, WEBP — Máximo 20MB</span>
                     </label>
                     <div class="preview-container" id="preview-container" style="display:none;">
                         <img id="image-preview" src="" alt="Preview do exame">
@@ -80,15 +80,15 @@
                     <textarea
                         name="description"
                         id="description"
-                        placeholder="Ex: Ressonância magnética do joelho direito. Paciente relata dor ao flexionar. Suspeita de lesão no menisco..."
+                        placeholder="Ex: RM do joelho direito. Dor ao flexionar, mecanismo torção. Suspeita lesão menisco. Ou: Raio-X ombro esquerdo, impacto direto..."
                         rows="3"
                     ></textarea>
-                    <small>Forneça contexto clínico para uma análise mais precisa.</small>
+                    <small>Região anatômica, lateralidade e contexto clínico melhoram a precisão da análise.</small>
                 </div>
 
                 <button type="submit" class="btn-primary" id="submit-btn">
-                    <span class="btn-icon">🔬</span>
-                    Analisar Exame com IA
+                    <span class="btn-icon">🦴</span>
+                    Analisar Exame Ortopédico
                 </button>
             </form>
         </div>
@@ -100,36 +100,37 @@
                 <div class="step">
                     <div class="step-icon">📤</div>
                     <h3>1. Upload</h3>
-                    <p>Envie a imagem do exame médico (Ressonância, Raio-X, Tomografia, etc.)</p>
+                    <p>Envie a imagem do exame ortopédico (RM, Raio-X ou TC)</p>
                 </div>
                 <div class="step">
                     <div class="step-icon">🔍</div>
                     <h3>2. Referência</h3>
-                    <p>O sistema busca automaticamente imagens de referência de exames normais para comparação</p>
+                    <p>O sistema carrega atlas anatômico e imagens de referência da região correspondente</p>
                 </div>
                 <div class="step">
                     <div class="step-icon">🤖</div>
                     <h3>3. Análise IA</h3>
-                    <p>O modelo Gemini analisa e compara as imagens, identificando alterações e anomalias</p>
+                    <p>O Gemini compara com o padrão normal, avaliando ossos, ligamentos, cartilagem e partes moles</p>
                 </div>
                 <div class="step">
                     <div class="step-icon">📋</div>
                     <h3>4. Laudo</h3>
-                    <p>Receba um laudo estruturado com achados, hipóteses diagnósticas e recomendações</p>
+                    <p>Laudo ortopédico estruturado com achados, classificações e sugestões de conduta</p>
                 </div>
             </div>
         </div>
 
-        <!-- Tipos de exame suportados -->
+        <!-- Regiões anatômicas suportadas -->
         <div class="card supported-exams">
-            <h2>Tipos de Exame Suportados</h2>
+            <h2>Regiões Anatômicas</h2>
             <div class="exam-tags">
-                <span class="tag">Ressonância Magnética (RM)</span>
-                <span class="tag">Raio-X</span>
-                <span class="tag">Tomografia Computadorizada (TC)</span>
-                <span class="tag">Ultrassonografia</span>
-                <span class="tag">Mamografia</span>
-                <span class="tag">PET Scan</span>
+                <span class="tag">Joelho</span>
+                <span class="tag">Coluna Vertebral</span>
+                <span class="tag">Ombro</span>
+                <span class="tag">Quadril</span>
+                <span class="tag">Pé e Tornozelo</span>
+                <span class="tag">Mão e Punho</span>
+                <span class="tag">Cotovelo</span>
             </div>
         </div>
     </main>
