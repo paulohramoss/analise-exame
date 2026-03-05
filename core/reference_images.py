@@ -1,20 +1,21 @@
 """
-Gerencia imagens de referência (normais) para comparação com exames.
+Gerencia imagens de referência (normais) e atlas em PDF para comparação com exames.
 
 Ordem de prioridade:
-1. Imagens commitadas no repositório em reference_data/<tipo_exame>/
-2. Download de URLs públicas como fallback (cache em /tmp/reference_data)
+1. PDFs de atlas em reference_data/docs/          (base de conhecimento global)
+2. Imagens commitadas em reference_data/<tipo>/   (referências por tipo de exame)
+3. Download de URLs públicas como fallback
 """
 
 import requests
-import os
 from pathlib import Path
 
-# Diretório de referências commitadas no repo (disponível no Vercel e localmente)
+# Diretórios do repositório (disponíveis localmente e no Vercel)
 _THIS_DIR = Path(__file__).parent
 REFERENCE_DATA_DIR = _THIS_DIR.parent / "reference_data"
+DOCS_DIR = REFERENCE_DATA_DIR / "docs"
 
-# URLs de fallback — usadas apenas se não houver imagens locais no repo
+# URLs de fallback — usadas somente se não houver imagens locais no repo
 REFERENCE_URLS = {
     "ressonancia_cerebro": [
         "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Lateral_head_on_MRI_edit.jpg/800px-Lateral_head_on_MRI_edit.jpg",
@@ -47,6 +48,7 @@ EXAM_TYPE_KEYWORDS = {
 }
 
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+_PDF_MAX_BYTES = 20 * 1024 * 1024  # 20 MB — limite inline do Gemini
 
 
 def detect_exam_type(filename: str, user_description: str = "") -> str:
@@ -56,6 +58,32 @@ def detect_exam_type(filename: str, user_description: str = "") -> str:
         if any(kw in combined for kw in keywords):
             return exam_type
     return "geral"
+
+
+def get_reference_pdfs() -> list[tuple[bytes, str]]:
+    """
+    Carrega PDFs de atlas/livros de reference_data/docs/.
+    Retorna lista de (bytes, 'application/pdf'). Máximo 1 PDF por análise.
+    """
+    if not DOCS_DIR.exists():
+        return []
+
+    pdf_files = sorted(DOCS_DIR.glob("*.pdf"))
+    if not pdf_files:
+        return []
+
+    # Usa apenas o primeiro PDF para não exceder o contexto do Gemini
+    pdf_path = pdf_files[0]
+    try:
+        data = pdf_path.read_bytes()
+        if len(data) > _PDF_MAX_BYTES:
+            print(f"Aviso: {pdf_path.name} excede 20 MB ({len(data)//1024//1024} MB) — ignorado.")
+            return []
+        print(f"Atlas carregado: {pdf_path.name} ({len(data)//1024} KB)")
+        return [(data, "application/pdf")]
+    except Exception as e:
+        print(f"Erro ao carregar PDF {pdf_path.name}: {e}")
+        return []
 
 
 def _load_images_from_dir(directory: Path, max_images: int = 2) -> list[tuple[bytes, str]]:
@@ -71,8 +99,7 @@ def _load_images_from_dir(directory: Path, max_images: int = 2) -> list[tuple[by
 
     for img_path in image_files[:max_images]:
         try:
-            with open(img_path, "rb") as f:
-                data = f.read()
+            data = img_path.read_bytes()
             ext = img_path.suffix.lower().lstrip(".")
             mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
             results.append((data, mime))
@@ -94,8 +121,7 @@ def _download_fallback(exam_type: str) -> list[tuple[bytes, str]]:
 
         if cached_path.exists():
             try:
-                with open(cached_path, "rb") as f:
-                    results.append((f.read(), "image/jpeg"))
+                results.append((cached_path.read_bytes(), "image/jpeg"))
                 continue
             except Exception:
                 pass
@@ -119,15 +145,12 @@ def get_reference_images_as_bytes(exam_type: str) -> list[tuple[bytes, str]]:
     1. Imagens em reference_data/<exam_type>/ no repositório
     2. Download de URL pública como fallback
     """
-    # 1. Tenta carregar do repositório
     local_dir = REFERENCE_DATA_DIR / exam_type
     images = _load_images_from_dir(local_dir)
 
-    # Fallback para "geral" se o tipo específico não tiver imagens
     if not images and exam_type != "geral":
         images = _load_images_from_dir(REFERENCE_DATA_DIR / "geral")
 
-    # 2. Se não houver imagens locais, baixa como fallback
     if not images:
         images = _download_fallback(exam_type)
 
