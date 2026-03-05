@@ -1,6 +1,6 @@
 """
 Módulo principal de análise de exames médicos usando a API do Gemini.
-Compara o exame enviado com imagens de referência normais e gera um laudo.
+Compara o exame enviado com atlas em PDF e imagens de referência normais.
 """
 
 import io
@@ -13,6 +13,7 @@ from PIL import Image
 from core.reference_images import (
     detect_exam_type,
     get_reference_images_as_bytes,
+    get_reference_pdfs,
 )
 
 
@@ -24,6 +25,7 @@ Sua função é auxiliar profissionais de saúde na interpretação de exames de
 
 **BASE DE CONHECIMENTO:**
 Sua análise deve ser fundamentada nas referências anatômicas e de imagem mais consagradas:
+- **Atlas(es) fornecido(s) acima** — use como referência primária de anatomia normal
 - **Gray's Anatomy** (41ª edição) — anatomia topográfica e relações estruturais
 - **Netter's Atlas of Human Anatomy** — referência visual de estruturas anatômicas normais
 - **Fundamentals of Diagnostic Radiology** (Brant & Helms) — padrões radiológicos normais e patológicos
@@ -36,9 +38,10 @@ Sempre consulte um radiologista ou médico qualificado.
 
 Tipo de exame detectado: {exam_type.replace("_", " ").title()}
 
-Você recebeu:
-1. Imagem(ns) de referência anatômica normal (imagens anteriores) — use como base de comparação
-2. O exame do paciente (última imagem) — objeto da análise
+Você recebeu (nesta ordem):
+1. Atlas/livro de referência anatômica em PDF (se enviado) — base de conhecimento
+2. Imagem(ns) de referência de exame normal — padrão visual de comparação
+3. O exame do paciente (última imagem) — objeto da análise
 
 Realize uma análise comparativa estruturada e detalhada:
 
@@ -48,7 +51,7 @@ Realize uma análise comparativa estruturada e detalhada:
 - Plano/corte/incidência (quando aplicável)
 
 ## 2. ANÁLISE ANATÔMICA — COMPARAÇÃO COM PADRÃO NORMAL
-Com base nas referências anatômicas (Gray's, Netter):
+Com base no atlas de referência e nas imagens normais fornecidas:
 - Estruturas visíveis e seus aspectos normais esperados
 - Desvios identificados em relação ao padrão de referência
 - Alterações de sinal (RM), densidade (TC/Rx), ecogenicidade (US)
@@ -76,6 +79,44 @@ Seja objetivo e indique explicitamente as limitações da análise por IA.
 """
 
 
+def _build_content_parts(
+    exam_image_bytes: bytes,
+    mime_type: str,
+    exam_type: str,
+    user_description: str,
+    reference_pdfs: list,
+    reference_images: list,
+) -> list:
+    """Monta a lista de parts para envio ao Gemini."""
+    parts = []
+
+    # 1. Atlas em PDF (base de conhecimento anatômico)
+    if reference_pdfs:
+        parts.append(types.Part.from_text(text="**ATLAS DE REFERÊNCIA ANATÔMICA (use como base de conhecimento):**"))
+        for pdf_bytes, pdf_mime in reference_pdfs:
+            parts.append(types.Part.from_bytes(data=pdf_bytes, mime_type=pdf_mime))
+
+    # 2. Imagens de referência de exame normal
+    if reference_images:
+        parts.append(types.Part.from_text(text="**IMAGENS DE REFERÊNCIA NORMAL (padrão visual de comparação):**"))
+        for i, (ref_bytes, ref_mime) in enumerate(reference_images):
+            parts.append(types.Part.from_text(text=f"Referência {i + 1} — Anatomia normal:"))
+            parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
+
+    # 3. Exame do paciente
+    parts.append(types.Part.from_text(text="\n**EXAME DO PACIENTE (imagem para análise):**"))
+    parts.append(types.Part.from_bytes(data=exam_image_bytes, mime_type=mime_type))
+
+    # 4. Contexto clínico
+    if user_description:
+        parts.append(types.Part.from_text(text=f"\n**Contexto clínico fornecido:** {user_description}"))
+
+    # 5. Prompt de análise
+    parts.append(types.Part.from_text(text=build_analysis_prompt(exam_type)))
+
+    return parts
+
+
 def analyze_exam(
     exam_image_path: str,
     api_key: str,
@@ -83,7 +124,7 @@ def analyze_exam(
     model_name: str = "gemini-2.5-flash",
 ) -> dict:
     """
-    Analisa um exame médico comparando com imagens de referência normais.
+    Analisa um exame médico comparando com atlas em PDF e imagens de referência normais.
 
     Args:
         exam_image_path: Caminho para a imagem do exame a ser analisado
@@ -96,15 +137,12 @@ def analyze_exam(
     """
     client = genai.Client(api_key=api_key)
 
-    # Detecta o tipo de exame
     filename = Path(exam_image_path).name
     exam_type = detect_exam_type(filename, user_description)
 
-    # Carrega imagem do exame do paciente
     with open(exam_image_path, "rb") as f:
         exam_image_bytes = f.read()
 
-    # Verifica e converte a imagem para JPEG se necessário
     try:
         img = Image.open(io.BytesIO(exam_image_bytes))
         img_format = img.format or "JPEG"
@@ -117,38 +155,21 @@ def analyze_exam(
     except Exception:
         mime_type = "image/jpeg"
 
-    # Busca imagens de referência normais
+    reference_pdfs = get_reference_pdfs()
     reference_images = get_reference_images_as_bytes(exam_type)
 
-    # Monta o conteúdo para envio ao Gemini
-    content_parts = []
+    content_parts = _build_content_parts(
+        exam_image_bytes, mime_type, exam_type, user_description,
+        reference_pdfs, reference_images,
+    )
 
-    # Adiciona imagens de referência primeiro
-    if reference_images:
-        content_parts.append(types.Part.from_text(text="**IMAGENS DE REFERÊNCIA ANATÔMICA NORMAL (base de comparação):**"))
-        for i, (ref_bytes, ref_mime) in enumerate(reference_images):
-            content_parts.append(types.Part.from_text(text=f"Referência {i + 1} — Anatomia normal:"))
-            content_parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
-
-    # Adiciona imagem do paciente
-    content_parts.append(types.Part.from_text(text="\n**EXAME DO PACIENTE (imagem para análise):**"))
-    content_parts.append(types.Part.from_bytes(data=exam_image_bytes, mime_type=mime_type))
-
-    # Adiciona descrição do usuário se fornecida
-    if user_description:
-        content_parts.append(types.Part.from_text(text=f"\n**Contexto clínico fornecido:** {user_description}"))
-
-    # Adiciona o prompt de análise
-    content_parts.append(types.Part.from_text(text=build_analysis_prompt(exam_type)))
-
-    # Gera a análise
     response = client.models.generate_content(model=model_name, contents=content_parts)
 
     return {
         "success": True,
         "exam_type": exam_type,
         "analysis": response.text,
-        "references_used": len(reference_images),
+        "references_used": len(reference_images) + len(reference_pdfs),
         "model_used": model_name,
     }
 
@@ -168,7 +189,6 @@ def analyze_exam_from_bytes(
 
     exam_type = detect_exam_type(exam_filename, user_description)
 
-    # Verifica e converte imagem
     try:
         img = Image.open(io.BytesIO(exam_image_bytes))
         img_format = img.format or "JPEG"
@@ -181,23 +201,13 @@ def analyze_exam_from_bytes(
     except Exception:
         mime_type = "image/jpeg"
 
+    reference_pdfs = get_reference_pdfs()
     reference_images = get_reference_images_as_bytes(exam_type)
 
-    content_parts = []
-
-    if reference_images:
-        content_parts.append(types.Part.from_text(text="**IMAGENS DE REFERÊNCIA ANATÔMICA NORMAL (base de comparação):**"))
-        for i, (ref_bytes, ref_mime) in enumerate(reference_images):
-            content_parts.append(types.Part.from_text(text=f"Referência {i + 1} — Anatomia normal:"))
-            content_parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
-
-    content_parts.append(types.Part.from_text(text="\n**EXAME DO PACIENTE (imagem para análise):**"))
-    content_parts.append(types.Part.from_bytes(data=exam_image_bytes, mime_type=mime_type))
-
-    if user_description:
-        content_parts.append(types.Part.from_text(text=f"\n**Contexto clínico fornecido:** {user_description}"))
-
-    content_parts.append(types.Part.from_text(text=build_analysis_prompt(exam_type)))
+    content_parts = _build_content_parts(
+        exam_image_bytes, mime_type, exam_type, user_description,
+        reference_pdfs, reference_images,
+    )
 
     response = client.models.generate_content(model=model_name, contents=content_parts)
 
@@ -205,6 +215,6 @@ def analyze_exam_from_bytes(
         "success": True,
         "exam_type": exam_type,
         "analysis": response.text,
-        "references_used": len(reference_images),
+        "references_used": len(reference_images) + len(reference_pdfs),
         "model_used": model_name,
     }
