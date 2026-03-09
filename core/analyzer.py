@@ -87,7 +87,7 @@ def build_analysis_prompt(exam_type: str) -> str:
     region_label = region_map.get(exam_type, region_map["geral"])
 
     return f"""
-Você é um assistente especializado em imagens ortopédicas e musculoesqueléticas da plataforma ≡health.
+Você é um assistente especializado em imagens ortopédicas e musculoesqueléticas da plataforma Three Health.
 Sua função é auxiliar ortopedistas e médicos na interpretação de exames de imagem do aparelho locomotor.
 
 **BASE DE CONHECIMENTO:**
@@ -150,6 +150,11 @@ Para cada achado:
 - Considerações cirúrgicas relevantes quando aplicável
 
 Use terminologia ortopédica precisa. Indique explicitamente as limitações da análise por IA.
+
+Ao final da resposta, assine como:
+Atenciosamente,
+
+Three Health AI Assistant
 """
 
 
