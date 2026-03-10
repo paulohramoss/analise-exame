@@ -123,6 +123,76 @@ def analyze():
             pass
 
 
+@app.route("/trial")
+def trial():
+    """Página de teste gratuito para embed via iframe."""
+    return render_template("trial.html")
+
+
+@app.route("/trial/analyze", methods=["POST"])
+def trial_analyze():
+    """Endpoint para análise no modo de teste gratuito (retorna JSON)."""
+    api_key = get_api_key()
+    if not api_key:
+        return jsonify({"error": "Serviço temporariamente indisponível. Tente novamente mais tarde."}), 503
+
+    if "exam_image" not in request.files:
+        return jsonify({"error": "Nenhuma imagem enviada."}), 400
+
+    file = request.files["exam_image"]
+    if file.filename == "":
+        return jsonify({"error": "Nenhum arquivo selecionado."}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({"error": f"Formato não suportado. Use: {', '.join(ALLOWED_EXTENSIONS)}"}), 400
+
+    user_description = request.form.get("description", "").strip()
+
+    original_name = secure_filename(file.filename)
+    unique_name = f"{uuid.uuid4().hex}_{original_name}"
+    filepath = UPLOAD_FOLDER / unique_name
+    file.save(str(filepath))
+
+    ext = filepath.suffix.lower().lstrip(".")
+    mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                "webp": "image/webp", "gif": "image/gif"}
+    image_mime = mime_map.get(ext, "image/jpeg")
+    with open(str(filepath), "rb") as f:
+        image_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    try:
+        result = analyze_exam(
+            exam_image_path=str(filepath),
+            api_key=api_key,
+            user_description=user_description,
+            model_name=get_model_name(),
+        )
+        return jsonify({
+            "analysis": result["analysis"],
+            "exam_type": result["exam_type"].replace("_", " ").title(),
+            "references_used": result["references_used"],
+            "model_used": result["model_used"],
+            "image_b64": image_b64,
+            "image_mime": image_mime,
+        }), 200
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"[ERRO TRIAL ANÁLISE] {type(e).__name__}: {error_msg}", file=sys.stderr)
+        error_lower = error_msg.lower()
+        if "api key not valid" in error_lower or "invalid api key" in error_lower:
+            return jsonify({"error": "Serviço temporariamente indisponível."}), 503
+        elif "quota" in error_lower or "rate limit" in error_lower or "resource_exhausted" in error_lower:
+            return jsonify({"error": "Muitas solicitações. Tente novamente em alguns instantes."}), 429
+        return jsonify({"error": f"Erro durante a análise: {error_msg}"}), 500
+
+    finally:
+        try:
+            filepath.unlink()
+        except Exception:
+            pass
+
+
 @app.route("/api/analyze", methods=["POST"])
 def api_analyze():
     """Endpoint REST para integração programática."""
