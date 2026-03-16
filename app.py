@@ -1,6 +1,6 @@
 """
 Aplicação Flask para análise de exames médicos com IA (Gemini).
-Permite upload de imagens de exames e gera laudos comparativos.
+Permite upload de uma ou múltiplas imagens de exames e gera laudos comparativos.
 """
 
 import os
@@ -23,6 +23,7 @@ UPLOAD_FOLDER = Path("/tmp/uploads")
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "dcm"}
 MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20MB
+MAX_IMAGES_PER_ANALYSIS = 5  # máximo de imagens por análise
 
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
@@ -42,6 +43,32 @@ def get_model_name() -> str:
     return os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 
+def save_upload_file(file) -> tuple[Path, str, str] | None:
+    """
+    Salva um arquivo de upload em disco.
+    Retorna (filepath, image_b64, image_mime) ou None se inválido.
+    """
+    if not file or file.filename == "" or not allowed_file(file.filename):
+        return None
+
+    original_name = secure_filename(file.filename)
+    unique_name = f"{uuid.uuid4().hex}_{original_name}"
+    filepath = UPLOAD_FOLDER / unique_name
+    file.save(str(filepath))
+
+    ext = filepath.suffix.lower().lstrip(".")
+    mime_map = {
+        "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+        "webp": "image/webp", "gif": "image/gif",
+    }
+    image_mime = mime_map.get(ext, "image/jpeg")
+
+    with open(str(filepath), "rb") as f:
+        image_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    return filepath, image_b64, image_mime
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -49,44 +76,51 @@ def index():
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    """Endpoint para receber e analisar o exame médico."""
+    """Endpoint para receber e analisar o(s) exame(s) médico(s)."""
     api_key = get_api_key()
     if not api_key:
         flash("Erro: GEMINI_API_KEY não configurada. Adicione a variável de ambiente no painel do Vercel (Settings → Environment Variables).", "error")
         return redirect(url_for("index"))
 
-    if "exam_image" not in request.files:
-        flash("Nenhuma imagem enviada.", "error")
-        return redirect(url_for("index"))
+    # Suporta múltiplos arquivos via campo "exam_images[]" ou "exam_images"
+    files = request.files.getlist("exam_images") or request.files.getlist("exam_images[]")
 
-    file = request.files["exam_image"]
-    if file.filename == "":
-        flash("Nenhum arquivo selecionado.", "error")
-        return redirect(url_for("index"))
+    # Compatibilidade com campo legado "exam_image" (singular)
+    if not files or all(f.filename == "" for f in files):
+        legacy = request.files.get("exam_image")
+        if legacy and legacy.filename != "":
+            files = [legacy]
+        else:
+            flash("Nenhuma imagem enviada.", "error")
+            return redirect(url_for("index"))
 
-    if not allowed_file(file.filename):
-        flash(f"Formato de arquivo não suportado. Use: {', '.join(ALLOWED_EXTENSIONS)}", "error")
+    # Limita ao máximo de imagens permitidas
+    files = [f for f in files if f.filename != ""][:MAX_IMAGES_PER_ANALYSIS]
+
+    if not files:
+        flash("Nenhuma imagem válida enviada.", "error")
         return redirect(url_for("index"))
 
     user_description = request.form.get("description", "").strip()
 
-    # Salva o arquivo com nome único
-    original_name = secure_filename(file.filename)
-    unique_name = f"{uuid.uuid4().hex}_{original_name}"
-    filepath = UPLOAD_FOLDER / unique_name
-    file.save(str(filepath))
+    filepaths = []
+    images_data = []  # Lista de {"b64": str, "mime": str} para exibição no resultado
 
-    # Lê a imagem como base64 para exibir no resultado
-    ext = filepath.suffix.lower().lstrip(".")
-    mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
-                "webp": "image/webp", "gif": "image/gif"}
-    image_mime = mime_map.get(ext, "image/jpeg")
-    with open(str(filepath), "rb") as f:
-        image_b64 = base64.b64encode(f.read()).decode("utf-8")
+    for file in files:
+        result = save_upload_file(file)
+        if result is None:
+            continue
+        filepath, image_b64, image_mime = result
+        filepaths.append(str(filepath))
+        images_data.append({"b64": image_b64, "mime": image_mime})
+
+    if not filepaths:
+        flash(f"Formato de arquivo não suportado. Use: {', '.join(ALLOWED_EXTENSIONS)}", "error")
+        return redirect(url_for("index"))
 
     try:
         result = analyze_exam(
-            exam_image_path=str(filepath),
+            exam_image_paths=filepaths,
             api_key=api_key,
             user_description=user_description,
             model_name=get_model_name(),
@@ -98,8 +132,8 @@ def analyze():
             exam_type=result["exam_type"].replace("_", " ").title(),
             references_used=result["references_used"],
             model_used=result["model_used"],
-            image_b64=image_b64,
-            image_mime=image_mime,
+            images=images_data,
+            num_images=result["num_images"],
             user_description=user_description,
         )
 
@@ -116,11 +150,11 @@ def analyze():
         return redirect(url_for("index"))
 
     finally:
-        # Remove arquivo temporário após análise
-        try:
-            filepath.unlink()
-        except Exception:
-            pass
+        for fp in filepaths:
+            try:
+                Path(fp).unlink()
+            except Exception:
+                pass
 
 
 @app.route("/trial")
@@ -131,7 +165,7 @@ def trial():
 
 @app.route("/trial/analyze", methods=["POST"])
 def trial_analyze():
-    """Endpoint para análise no modo de teste gratuito (retorna JSON)."""
+    """Endpoint para análise no modo de teste gratuito (retorna JSON, aceita apenas 1 imagem)."""
     api_key = get_api_key()
     if not api_key:
         return jsonify({"error": "Serviço temporariamente indisponível. Tente novamente mais tarde."}), 503
@@ -148,21 +182,15 @@ def trial_analyze():
 
     user_description = request.form.get("description", "").strip()
 
-    original_name = secure_filename(file.filename)
-    unique_name = f"{uuid.uuid4().hex}_{original_name}"
-    filepath = UPLOAD_FOLDER / unique_name
-    file.save(str(filepath))
+    result_save = save_upload_file(file)
+    if result_save is None:
+        return jsonify({"error": "Erro ao processar o arquivo enviado."}), 400
 
-    ext = filepath.suffix.lower().lstrip(".")
-    mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
-                "webp": "image/webp", "gif": "image/gif"}
-    image_mime = mime_map.get(ext, "image/jpeg")
-    with open(str(filepath), "rb") as f:
-        image_b64 = base64.b64encode(f.read()).decode("utf-8")
+    filepath, image_b64, image_mime = result_save
 
     try:
         result = analyze_exam(
-            exam_image_path=str(filepath),
+            exam_image_paths=[str(filepath)],
             api_key=api_key,
             user_description=user_description,
             model_name=get_model_name(),
@@ -195,28 +223,40 @@ def trial_analyze():
 
 @app.route("/api/analyze", methods=["POST"])
 def api_analyze():
-    """Endpoint REST para integração programática."""
+    """Endpoint REST para integração programática. Suporta múltiplas imagens."""
     api_key = request.headers.get("X-API-Key") or get_api_key()
     if not api_key:
         return jsonify({"error": "API key não fornecida"}), 401
 
-    if "exam_image" not in request.files:
-        return jsonify({"error": "Nenhuma imagem enviada"}), 400
+    # Suporta múltiplos arquivos via exam_images ou exam_images[]
+    files = request.files.getlist("exam_images") or request.files.getlist("exam_images[]")
+    if not files or all(f.filename == "" for f in files):
+        # Compatibilidade com campo legado
+        legacy = request.files.get("exam_image")
+        if legacy:
+            files = [legacy]
+        else:
+            return jsonify({"error": "Nenhuma imagem enviada"}), 400
 
-    file = request.files["exam_image"]
-    if not allowed_file(file.filename):
+    files = [f for f in files if f and f.filename != "" and allowed_file(f.filename)]
+    files = files[:MAX_IMAGES_PER_ANALYSIS]
+
+    if not files:
         return jsonify({"error": "Formato de arquivo não suportado"}), 400
 
     user_description = request.form.get("description", "")
 
-    original_name = secure_filename(file.filename)
-    unique_name = f"{uuid.uuid4().hex}_{original_name}"
-    filepath = UPLOAD_FOLDER / unique_name
-    file.save(str(filepath))
+    filepaths = []
+    for file in files:
+        original_name = secure_filename(file.filename)
+        unique_name = f"{uuid.uuid4().hex}_{original_name}"
+        filepath = UPLOAD_FOLDER / unique_name
+        file.save(str(filepath))
+        filepaths.append(str(filepath))
 
     try:
         result = analyze_exam(
-            exam_image_path=str(filepath),
+            exam_image_paths=filepaths,
             api_key=api_key,
             user_description=user_description,
             model_name=get_model_name(),
@@ -227,10 +267,11 @@ def api_analyze():
         return jsonify({"error": str(e), "success": False}), 500
 
     finally:
-        try:
-            filepath.unlink()
-        except Exception:
-            pass
+        for fp in filepaths:
+            try:
+                Path(fp).unlink()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

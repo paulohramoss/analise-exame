@@ -6,6 +6,48 @@
     <title>Three Health — Laudo</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .exam-images-gallery {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+
+        .exam-images-gallery .exam-image-wrapper {
+            background: #0a0a0a;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .exam-image-label {
+            font-size: 0.72rem;
+            color: #64748b;
+            text-align: center;
+            margin-top: 0.2rem;
+            font-weight: 600;
+        }
+
+        .btn-pdf {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: #16a34a;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.45rem 0.9rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.2s;
+        }
+
+        .btn-pdf:hover { background: #15803d; }
+    </style>
 </head>
 <body>
     <header>
@@ -44,6 +86,10 @@
                     <span class="meta-value">{{ exam_type }}</span>
                 </div>
                 <div class="meta-item">
+                    <span class="meta-label">Imagens Analisadas</span>
+                    <span class="meta-value">{{ num_images }} imagem{% if num_images > 1 %}ns{% endif %}</span>
+                </div>
+                <div class="meta-item">
                     <span class="meta-label">Imagens de Referência</span>
                     <span class="meta-value">
                         {% if references_used > 0 %}
@@ -67,16 +113,25 @@
             {% endif %}
         </div>
 
-        <!-- Layout lado a lado: imagem + laudo -->
+        <!-- Layout lado a lado: imagens + laudo -->
         <div class="result-layout">
 
-            <!-- Imagem do exame -->
+            <!-- Imagens do exame -->
             <div class="card exam-image-card">
-                <h2>🔬 Exame Analisado</h2>
-                <div class="exam-image-wrapper">
-                    <img src="data:{{ image_mime }};base64,{{ image_b64 }}"
-                         alt="Exame enviado para análise"
-                         class="exam-image" />
+                <h2>🔬 Exame{% if num_images > 1 %}s{% endif %} Analisado{% if num_images > 1 %}s{% endif %}</h2>
+                <div class="exam-images-gallery">
+                    {% for img in images %}
+                    <div>
+                        <div class="exam-image-wrapper">
+                            <img src="data:{{ img.mime }};base64,{{ img.b64 }}"
+                                 alt="Imagem {{ loop.index }} do exame"
+                                 class="exam-image" />
+                        </div>
+                        {% if num_images > 1 %}
+                        <div class="exam-image-label">Imagem {{ loop.index }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
 
@@ -85,6 +140,7 @@
                 <div class="report-header">
                     <h2>📋 Laudo de Análise por IA</h2>
                     <div class="report-actions">
+                        <button onclick="downloadPDF()" class="btn-pdf">⬇️ Baixar PDF</button>
                         <button onclick="window.print()" class="btn-secondary btn-small">🖨️ Imprimir</button>
                         <button onclick="copyReport()" class="btn-secondary btn-small">📋 Copiar</button>
                     </div>
@@ -150,13 +206,171 @@
                 alert('Laudo copiado!');
             });
         }
+
+        function downloadPDF() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+            // Coleta imagens do exame como base64
+            const examImages = document.querySelectorAll('.exam-images-gallery img');
+            let imagesHTML = '';
+            examImages.forEach((img, i) => {
+                imagesHTML += `
+                    <div class="pdf-img-item">
+                        <img src="${img.src}" alt="Imagem ${i + 1}" style="max-width:100%; max-height:240px; object-fit:contain; border-radius:6px; border:1px solid #ddd; background:#0a0a0a;">
+                        ${examImages.length > 1 ? `<div style="text-align:center;font-size:11px;color:#666;margin-top:4px;">Imagem ${i + 1}</div>` : ''}
+                    </div>`;
+            });
+
+            const reportHTML = reportContent.innerHTML;
+
+            {% if user_description %}
+            const userDesc = `{{ user_description | e }}`;
+            {% else %}
+            const userDesc = '';
+            {% endif %}
+
+            const examType = `{{ exam_type }}`;
+            const refsUsed = `{{ references_used }}`;
+            const numImages = `{{ num_images }}`;
+
+            const pdfContent = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Laudo Three Health — ${dateStr}</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Nunito', Arial, sans-serif; font-size: 13px; color: #1e293b; background: white; padding: 0; }
+    .page { max-width: 780px; margin: 0 auto; padding: 32px 36px; }
+
+    /* Header */
+    .pdf-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1B72E8; padding-bottom: 16px; margin-bottom: 20px; }
+    .pdf-logo { display: flex; flex-direction: column; align-items: flex-start; }
+    .pdf-logo-row { display: flex; align-items: center; gap: 8px; }
+    .pdf-logo-lines { display: flex; flex-direction: column; gap: 3px; }
+    .pdf-logo-lines span { display: block; height: 3px; border-radius: 2px; background: #22C97A; }
+    .pdf-logo-lines span:nth-child(1) { width: 22px; }
+    .pdf-logo-lines span:nth-child(2) { width: 16px; }
+    .pdf-logo-lines span:nth-child(3) { width: 11px; }
+    .pdf-logo-wordmark { font-size: 22px; font-weight: 800; color: #1B72E8; letter-spacing: -0.5px; line-height: 1; }
+    .pdf-logo-underline { width: 100%; height: 2px; background: #1B72E8; margin-top: 3px; }
+    .pdf-title-block { text-align: right; }
+    .pdf-title { font-size: 15px; font-weight: 800; color: #1B72E8; }
+    .pdf-subtitle { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+    /* Meta */
+    .pdf-meta { background: #f4f7fb; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .pdf-meta-item { display: flex; flex-direction: column; gap: 2px; }
+    .pdf-meta-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; font-weight: 700; }
+    .pdf-meta-value { font-size: 12px; font-weight: 600; color: #1e293b; }
+
+    /* Clinical info */
+    .pdf-clinical { background: #eff6ff; border-left: 3px solid #1B72E8; border-radius: 0 6px 6px 0; padding: 8px 12px; margin-bottom: 16px; font-size: 12px; color: #1e40af; }
+    .pdf-clinical strong { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; color: #1B72E8; }
+
+    /* Images */
+    .pdf-images-section { margin-bottom: 16px; }
+    .pdf-images-section h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 8px; font-weight: 700; }
+    .pdf-images-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+    .pdf-img-item { flex: 0 0 auto; }
+
+    /* Report */
+    .pdf-report-section { margin-bottom: 20px; }
+    .pdf-report-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 10px; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
+    .pdf-report-content { line-height: 1.7; font-size: 12.5px; }
+    .pdf-report-content h2 { font-size: 14px; color: #1B72E8; margin: 14px 0 5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
+    .pdf-report-content h3 { font-size: 13px; color: #1B72E8; margin: 12px 0 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
+    .pdf-report-content h4 { font-size: 12px; color: #155FC4; margin: 8px 0 3px; }
+    .pdf-report-content ul, .pdf-report-content ol { padding-left: 18px; margin: 4px 0; }
+    .pdf-report-content li { margin-bottom: 2px; }
+    .pdf-report-content p { margin: 4px 0; }
+    .pdf-report-content strong { color: #0f172a; }
+
+    /* Footer */
+    .pdf-footer { border-top: 2px solid #1B72E8; padding-top: 14px; margin-top: 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+    .pdf-footer-sig { font-size: 12px; color: #1B72E8; font-weight: 700; }
+    .pdf-footer-sig span { display: block; font-size: 10px; color: #64748b; font-weight: 400; margin-top: 2px; }
+    .pdf-disclaimer { font-size: 10px; color: #78350f; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 8px 10px; flex: 1; line-height: 1.5; }
+
+    @media print {
+        body { padding: 0; }
+        .page { padding: 20px 24px; }
+    }
+</style>
+</head>
+<body>
+<div class="page">
+    <div class="pdf-header">
+        <div class="pdf-logo">
+            <div class="pdf-logo-row">
+                <div class="pdf-logo-lines"><span></span><span></span><span></span></div>
+                <span class="pdf-logo-wordmark">health</span>
+            </div>
+            <div class="pdf-logo-underline"></div>
+        </div>
+        <div class="pdf-title-block">
+            <div class="pdf-title">LAUDO DE ANÁLISE POR INTELIGÊNCIA ARTIFICIAL</div>
+            <div class="pdf-subtitle">Data: ${dateStr} · Hora: ${timeStr} · Three Health Platform</div>
+        </div>
+    </div>
+
+    <div class="pdf-meta">
+        <div class="pdf-meta-item">
+            <span class="pdf-meta-label">Tipo de Exame</span>
+            <span class="pdf-meta-value">${examType}</span>
+        </div>
+        <div class="pdf-meta-item">
+            <span class="pdf-meta-label">Imagens Analisadas</span>
+            <span class="pdf-meta-value">${numImages} imagem${numImages > 1 ? 'ns' : ''}</span>
+        </div>
+        <div class="pdf-meta-item">
+            <span class="pdf-meta-label">Referências Usadas</span>
+            <span class="pdf-meta-value">${refsUsed > 0 ? refsUsed + ' imagem(ns) normal(is)' : 'Sem referência'}</span>
+        </div>
+    </div>
+
+    ${userDesc ? `<div class="pdf-clinical"><strong>Informações Clínicas Fornecidas</strong>${userDesc}</div>` : ''}
+
+    <div class="pdf-images-section">
+        <h3>Imagem${examImages.length > 1 ? 'ns' : ''} do Exame</h3>
+        <div class="pdf-images-grid">${imagesHTML}</div>
+    </div>
+
+    <div class="pdf-report-section">
+        <div class="pdf-report-title">Laudo Ortopédico — Análise por IA</div>
+        <div class="pdf-report-content">${reportHTML}</div>
+    </div>
+
+    <div class="pdf-footer">
+        <div class="pdf-footer-sig">
+            Three Health AI Assistant
+            <span>Gerado automaticamente por IA · ${dateStr}</span>
+        </div>
+        <div class="pdf-disclaimer">
+            ⚕️ <strong>AVISO:</strong> Este laudo foi gerado por Inteligência Artificial como ferramenta de apoio educacional.
+            <strong>Não substitui</strong> o diagnóstico, interpretação ou laudo de um médico especialista qualificado.
+            Os achados descritos devem ser validados por profissional de saúde habilitado.
+        </div>
+    </div>
+</div>
+<script>window.onload = function() { window.print(); }<\/script>
+</body>
+</html>`;
+
+            const printWindow = window.open('', '_blank', 'width=900,height=700');
+            printWindow.document.write(pdfContent);
+            printWindow.document.close();
+        }
     </script>
 
     <style>
         @media print {
             header, footer, .result-actions, .report-actions, .disclaimer-banner { display: none; }
             .card { box-shadow: none; border: 1px solid #ccc; }
-            .result-layout { grid-template-columns: 260px 1fr; }
+            .result-layout { grid-template-columns: 220px 1fr; }
         }
     </style>
 </body>
