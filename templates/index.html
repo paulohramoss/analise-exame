@@ -6,6 +6,76 @@
     <title>Three Health — Análise de Exames por IA</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .multi-image-info {
+            background: #eaf2fd;
+            border: 1px solid #1B72E8;
+            border-radius: 8px;
+            padding: 0.6rem 0.9rem;
+            font-size: 0.82rem;
+            color: #155FC4;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .image-thumbnails {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+            justify-content: center;
+        }
+
+        .thumb-item {
+            position: relative;
+            width: 90px;
+            height: 90px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid #1B72E8;
+            background: #0a0a0a;
+            flex-shrink: 0;
+        }
+
+        .thumb-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .thumb-remove {
+            position: absolute;
+            top: 3px;
+            right: 3px;
+            background: rgba(220,38,38,0.85);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 11px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            z-index: 5;
+        }
+
+        .thumb-count {
+            font-size: 0.78rem;
+            color: #64748b;
+            text-align: center;
+            margin-top: 0.4rem;
+        }
+
+        .upload-area.has-files {
+            border-color: #1B72E8;
+            background: #f0f7ff;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -51,28 +121,37 @@
         <div class="card upload-card">
             <h2>Enviar Exame Ortopédico para Análise</h2>
             <p class="card-description">
-                Faça upload da imagem do exame ortopédico (RM, Raio-X, TC). O sistema compara com
+                Faça upload de uma ou mais imagens do exame ortopédico (RM, Raio-X, TC). O sistema compara com
                 referências anatômicas normais e gera um laudo musculoesquelético estruturado.
             </p>
+
+            <div class="multi-image-info">
+                <span>📎</span>
+                <span>Você pode enviar <strong>até 5 imagens</strong> por análise — diferentes planos, incidências ou sequências do mesmo exame.</span>
+            </div>
 
             <form action="/analyze" method="POST" enctype="multipart/form-data" id="upload-form">
                 <div class="upload-area" id="upload-area">
                     <input
                         type="file"
-                        name="exam_image"
-                        id="exam_image"
+                        name="exam_images"
+                        id="exam_images"
                         accept=".png,.jpg,.jpeg,.webp,.gif"
                         class="file-input"
+                        multiple
                         required
                     >
-                    <label for="exam_image" class="upload-label">
+                    <label for="exam_images" class="upload-label" id="upload-label">
                         <span class="upload-icon">📷</span>
-                        <span class="upload-text">Clique para selecionar ou arraste a imagem aqui</span>
-                        <span class="upload-hint">RM · Raio-X · TC · PNG, JPG, WEBP — Máximo 20MB</span>
+                        <span class="upload-text">Clique para selecionar ou arraste as imagens aqui</span>
+                        <span class="upload-hint">RM · Raio-X · TC · PNG, JPG, WEBP — Máximo 20MB por imagem · Até 5 imagens</span>
                     </label>
-                    <div class="preview-container" id="preview-container" style="display:none;">
-                        <img id="image-preview" src="" alt="Preview do exame">
-                        <button type="button" class="remove-btn" id="remove-btn">✕ Remover</button>
+                    <div id="thumbnails-container" style="display:none; padding: 0.75rem 0;">
+                        <div class="image-thumbnails" id="image-thumbnails"></div>
+                        <div class="thumb-count" id="thumb-count"></div>
+                        <label for="exam_images" style="cursor:pointer; font-size:0.82rem; color:#1B72E8; text-decoration:underline; display:block; text-align:center; margin-top:0.4rem;">
+                            + Adicionar mais imagens
+                        </label>
                     </div>
                 </div>
 
@@ -101,7 +180,7 @@
                 <div class="step">
                     <div class="step-icon">📤</div>
                     <h3>1. Upload</h3>
-                    <p>Envie a imagem do exame ortopédico (RM, Raio-X ou TC)</p>
+                    <p>Envie uma ou mais imagens do exame ortopédico (RM, Raio-X ou TC) — diferentes planos e incidências</p>
                 </div>
                 <div class="step">
                     <div class="step-icon">🔍</div>
@@ -115,8 +194,8 @@
                 </div>
                 <div class="step">
                     <div class="step-icon">📋</div>
-                    <h3>4. Laudo</h3>
-                    <p>Laudo ortopédico estruturado com achados, classificações e sugestões de conduta</p>
+                    <h3>4. Laudo PDF</h3>
+                    <p>Laudo ortopédico estruturado com achados, classificações e sugestões de conduta — disponível para download em PDF</p>
                 </div>
             </div>
         </div>
@@ -146,32 +225,79 @@
     </div>
 
     <script>
-        const fileInput = document.getElementById('exam_image');
+        const MAX_FILES = 5;
+        const fileInput = document.getElementById('exam_images');
         const uploadArea = document.getElementById('upload-area');
-        const previewContainer = document.getElementById('preview-container');
-        const imagePreview = document.getElementById('image-preview');
-        const removeBtn = document.getElementById('remove-btn');
+        const uploadLabel = document.getElementById('upload-label');
+        const thumbnailsContainer = document.getElementById('thumbnails-container');
+        const imageThumbnails = document.getElementById('image-thumbnails');
+        const thumbCount = document.getElementById('thumb-count');
         const form = document.getElementById('upload-form');
         const loadingOverlay = document.getElementById('loading-overlay');
-        const uploadLabel = uploadArea.querySelector('.upload-label');
 
-        fileInput.addEventListener('change', function() {
-            if (this.files && this.files[0]) {
+        // Armazena os arquivos selecionados
+        let selectedFiles = [];
+
+        function updateThumbnails() {
+            if (selectedFiles.length === 0) {
+                thumbnailsContainer.style.display = 'none';
+                uploadLabel.style.display = 'flex';
+                uploadArea.classList.remove('has-files');
+                return;
+            }
+
+            uploadLabel.style.display = 'none';
+            thumbnailsContainer.style.display = 'block';
+            uploadArea.classList.add('has-files');
+
+            imageThumbnails.innerHTML = '';
+            selectedFiles.forEach((file, index) => {
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    imagePreview.src = e.target.result;
-                    previewContainer.style.display = 'flex';
-                    uploadLabel.style.display = 'none';
-                };
-                reader.readAsDataURL(this.files[0]);
-            }
-        });
+                    const item = document.createElement('div');
+                    item.className = 'thumb-item';
+                    item.innerHTML = `
+                        <img src="${e.target.result}" alt="Imagem ${index + 1}">
+                        <button type="button" class="thumb-remove" data-index="${index}" title="Remover imagem">✕</button>
+                    `;
+                    imageThumbnails.appendChild(item);
 
-        removeBtn.addEventListener('click', function() {
-            fileInput.value = '';
-            previewContainer.style.display = 'none';
-            uploadLabel.style.display = 'flex';
-            imagePreview.src = '';
+                    item.querySelector('.thumb-remove').addEventListener('click', function() {
+                        const idx = parseInt(this.getAttribute('data-index'));
+                        selectedFiles.splice(idx, 1);
+                        syncFilesInput();
+                        updateThumbnails();
+                    });
+                };
+                reader.readAsDataURL(file);
+            });
+
+            const count = selectedFiles.length;
+            thumbCount.textContent = `${count} imagem${count > 1 ? 'ns' : ''} selecionada${count > 1 ? 's' : ''}`;
+        }
+
+        function syncFilesInput() {
+            const dt = new DataTransfer();
+            selectedFiles.forEach(f => dt.items.add(f));
+            fileInput.files = dt.files;
+        }
+
+        fileInput.addEventListener('change', function() {
+            const newFiles = Array.from(this.files);
+            newFiles.forEach(file => {
+                if (selectedFiles.length < MAX_FILES) {
+                    // Evita duplicatas pelo nome
+                    if (!selectedFiles.find(f => f.name === file.name && f.size === file.size)) {
+                        selectedFiles.push(file);
+                    }
+                }
+            });
+            if (selectedFiles.length > MAX_FILES) {
+                selectedFiles = selectedFiles.slice(0, MAX_FILES);
+                alert(`Máximo de ${MAX_FILES} imagens por análise. Apenas as primeiras ${MAX_FILES} foram mantidas.`);
+            }
+            syncFilesInput();
+            updateThumbnails();
         });
 
         // Drag and drop
@@ -187,16 +313,23 @@
         uploadArea.addEventListener('drop', function(e) {
             e.preventDefault();
             this.classList.remove('drag-over');
-            const file = e.dataTransfer.files[0];
-            if (file) {
-                const dt = new DataTransfer();
-                dt.items.add(file);
-                fileInput.files = dt.files;
-                fileInput.dispatchEvent(new Event('change'));
+            const droppedFiles = Array.from(e.dataTransfer.files);
+            droppedFiles.forEach(file => {
+                if (selectedFiles.length < MAX_FILES) {
+                    if (!selectedFiles.find(f => f.name === file.name && f.size === file.size)) {
+                        selectedFiles.push(file);
+                    }
+                }
+            });
+            if (selectedFiles.length > MAX_FILES) {
+                selectedFiles = selectedFiles.slice(0, MAX_FILES);
             }
+            syncFilesInput();
+            updateThumbnails();
         });
 
         form.addEventListener('submit', function() {
+            if (selectedFiles.length === 0) return;
             loadingOverlay.style.display = 'flex';
         });
     </script>

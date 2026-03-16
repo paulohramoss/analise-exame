@@ -472,6 +472,50 @@
             .exam-image { max-height: 280px; width: auto; margin: 0 auto; }
             .upgrade-card { padding: 1.75rem 1.25rem; }
         }
+
+        /* ── Multi-image premium notice ── */
+        .multi-image-lock {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            background: #fffbeb;
+            border: 1.5px solid #f59e0b;
+            border-radius: 8px;
+            padding: 0.6rem 0.875rem;
+            font-size: 0.82rem;
+            color: #78350f;
+            margin-bottom: 0.875rem;
+        }
+
+        .multi-image-lock .lock-badge {
+            background: #f59e0b;
+            color: white;
+            border-radius: 4px;
+            padding: 0.15rem 0.4rem;
+            font-size: 0.72rem;
+            font-weight: 800;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        /* ── PDF Download button ── */
+        .btn-pdf {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: #16a34a;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.3rem 0.7rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.2s;
+        }
+
+        .btn-pdf:hover { background: #15803d; }
     </style>
 </head>
 <body>
@@ -516,6 +560,20 @@
                     Faça upload da imagem do exame ortopédico (RM, Raio-X, TC) e receba um laudo gerado por IA.
                     Você tem <strong id="analyses-remaining">2 análises</strong> gratuitas disponíveis.
                 </p>
+
+                <!-- Aviso: múltiplas imagens apenas no plano pago -->
+                <div class="multi-image-lock">
+                    <span style="font-size:1.1rem;flex-shrink:0">🔒</span>
+                    <span class="lock-badge">PREMIUM</span>
+                    <span>
+                        <strong>Upload de múltiplas imagens</strong> disponível apenas no plano completo —
+                        analise diferentes planos e incidências do mesmo exame.
+                        <a href="https://wa.me/5549999469546?text=Ol%C3%A1%2C%20tenho%20interesse%20na%20Plataforma%20Three%20Health"
+                           target="_blank" rel="noopener" style="color:#92400e; font-weight:700; text-decoration:underline;">
+                            Contratar agora →
+                        </a>
+                    </span>
+                </div>
 
                 <form id="trial-form">
                     <div class="upload-area" id="upload-area">
@@ -581,6 +639,7 @@
                     <div class="report-header">
                         <h2>📋 Laudo por IA</h2>
                         <div class="report-actions">
+                            <button onclick="downloadPDF()" class="btn-pdf">⬇️ Baixar PDF</button>
                             <button onclick="copyReport()" class="btn-secondary btn-small">📋 Copiar</button>
                         </div>
                     </div>
@@ -621,8 +680,10 @@
 
                 <div class="upgrade-features">
                     <span class="upgrade-feature">✅ Análises ilimitadas</span>
+                    <span class="upgrade-feature">✅ Upload de múltiplas imagens</span>
                     <span class="upgrade-feature">✅ RM · Raio-X · TC</span>
                     <span class="upgrade-feature">✅ Laudos estruturados</span>
+                    <span class="upgrade-feature">✅ Download em PDF</span>
                     <span class="upgrade-feature">✅ Banco de referências anatômicas</span>
                     <span class="upgrade-feature">✅ Suporte especializado</span>
                     <span class="upgrade-feature">✅ Integração via API</span>
@@ -845,6 +906,115 @@
                 document.body.removeChild(ta);
                 alert('Laudo copiado!');
             });
+        }
+
+        // ── Download PDF ──
+        function downloadPDF() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+            const examType = document.getElementById('r-exam-type').textContent || '—';
+            const refs = document.getElementById('r-refs').textContent || '—';
+            const reportEl = document.getElementById('report-content');
+            const reportHTML = reportEl.innerHTML;
+            const imgEl = document.getElementById('r-image');
+            const imgSrc = imgEl ? imgEl.src : '';
+
+            const pdfContent = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Laudo Three Health — ${dateStr}</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Nunito', Arial, sans-serif; font-size: 13px; color: #1e293b; background: white; }
+    .page { max-width: 780px; margin: 0 auto; padding: 32px 36px; }
+    .pdf-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1B72E8; padding-bottom: 16px; margin-bottom: 20px; }
+    .pdf-logo-row { display: flex; align-items: center; gap: 8px; }
+    .pdf-logo-lines { display: flex; flex-direction: column; gap: 3px; }
+    .pdf-logo-lines span { display: block; height: 3px; border-radius: 2px; background: #22C97A; }
+    .pdf-logo-lines span:nth-child(1) { width: 22px; }
+    .pdf-logo-lines span:nth-child(2) { width: 16px; }
+    .pdf-logo-lines span:nth-child(3) { width: 11px; }
+    .pdf-logo-wordmark { font-size: 22px; font-weight: 800; color: #1B72E8; letter-spacing: -0.5px; }
+    .pdf-logo-underline { width: 100%; height: 2px; background: #1B72E8; margin-top: 3px; }
+    .pdf-title { font-size: 14px; font-weight: 800; color: #1B72E8; }
+    .pdf-subtitle { font-size: 10px; color: #64748b; margin-top: 2px; }
+    .pdf-trial-badge { background: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 700; color: #78350f; margin-top: 4px; display: inline-block; }
+    .pdf-meta { background: #f4f7fb; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .pdf-meta-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; font-weight: 700; display: block; }
+    .pdf-meta-value { font-size: 12px; font-weight: 600; color: #1e293b; display: block; }
+    .pdf-image-section { margin-bottom: 16px; }
+    .pdf-image-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 6px; font-weight: 700; }
+    .pdf-image-section img { max-width: 100%; max-height: 260px; object-fit: contain; border-radius: 6px; border: 1px solid #ddd; background: #0a0a0a; }
+    .pdf-report-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 10px; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
+    .pdf-report-content { line-height: 1.7; font-size: 12.5px; }
+    .pdf-report-content h2, .pdf-report-content h3 { font-size: 13px; color: #1B72E8; margin: 12px 0 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
+    .pdf-report-content h4 { font-size: 12px; color: #155FC4; margin: 8px 0 3px; }
+    .pdf-report-content ul, .pdf-report-content ol { padding-left: 18px; margin: 4px 0; }
+    .pdf-report-content li { margin-bottom: 2px; }
+    .pdf-report-content p { margin: 4px 0; }
+    .pdf-footer { border-top: 2px solid #1B72E8; padding-top: 14px; margin-top: 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+    .pdf-footer-sig { font-size: 12px; color: #1B72E8; font-weight: 700; }
+    .pdf-footer-sig span { display: block; font-size: 10px; color: #64748b; font-weight: 400; margin-top: 2px; }
+    .pdf-disclaimer { font-size: 10px; color: #78350f; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 8px 10px; flex: 1; line-height: 1.5; }
+    @media print { body { padding: 0; } .page { padding: 20px 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+    <div class="pdf-header">
+        <div>
+            <div class="pdf-logo-row">
+                <div class="pdf-logo-lines"><span></span><span></span><span></span></div>
+                <span class="pdf-logo-wordmark">health</span>
+            </div>
+            <div class="pdf-logo-underline"></div>
+            <div class="pdf-trial-badge">TESTE GRATUITO</div>
+        </div>
+        <div style="text-align:right">
+            <div class="pdf-title">LAUDO DE ANÁLISE POR INTELIGÊNCIA ARTIFICIAL</div>
+            <div class="pdf-subtitle">Data: ${dateStr} · Hora: ${timeStr} · Three Health Platform</div>
+        </div>
+    </div>
+
+    <div class="pdf-meta">
+        <div><span class="pdf-meta-label">Tipo de Exame</span><span class="pdf-meta-value">${examType}</span></div>
+        <div><span class="pdf-meta-label">Referências Usadas</span><span class="pdf-meta-value">${refs}</span></div>
+        <div><span class="pdf-meta-label">Modo</span><span class="pdf-meta-value">Teste Gratuito (1 imagem)</span></div>
+    </div>
+
+    ${imgSrc ? `<div class="pdf-image-section">
+        <div class="pdf-image-title">Imagem do Exame</div>
+        <img src="${imgSrc}" alt="Exame analisado">
+    </div>` : ''}
+
+    <div>
+        <div class="pdf-report-title">Laudo Ortopédico — Análise por IA</div>
+        <div class="pdf-report-content">${reportHTML}</div>
+    </div>
+
+    <div class="pdf-footer">
+        <div class="pdf-footer-sig">
+            Three Health AI Assistant
+            <span>Gerado automaticamente por IA · ${dateStr}</span>
+        </div>
+        <div class="pdf-disclaimer">
+            ⚕️ <strong>AVISO:</strong> Este laudo foi gerado por Inteligência Artificial como ferramenta de apoio educacional.
+            <strong>Não substitui</strong> o diagnóstico de um médico especialista qualificado.
+            Os achados devem ser validados por profissional de saúde habilitado.
+        </div>
+    </div>
+</div>
+<script>window.onload = function() { window.print(); }<\/script>
+</body>
+</html>`;
+
+            const printWindow = window.open('', '_blank', 'width=900,height=700');
+            printWindow.document.write(pdfContent);
+            printWindow.document.close();
         }
     </script>
 </body>

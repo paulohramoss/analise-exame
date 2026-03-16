@@ -72,7 +72,7 @@ def _get_or_upload_pdf(client: genai.Client, pdf_bytes: bytes) -> tuple[str, str
                 pass
 
 
-def build_analysis_prompt(exam_type: str) -> str:
+def build_analysis_prompt(exam_type: str, num_images: int = 1) -> str:
     """Constrói o prompt especializado para análise ortopédica."""
     region_map = {
         "joelho":       "Joelho (estruturas ósseas, meniscos, ligamentos, cartilagem)",
@@ -85,6 +85,10 @@ def build_analysis_prompt(exam_type: str) -> str:
         "geral":        "Ortopédica (região a identificar pela imagem)",
     }
     region_label = region_map.get(exam_type, region_map["geral"])
+
+    multi_image_note = ""
+    if num_images > 1:
+        multi_image_note = f"\n**NOTA:** Foram fornecidas **{num_images} imagens** do exame. Analise todas as imagens em conjunto, correlacionando os achados entre elas (diferentes planos, incidências ou sequências do mesmo exame).\n"
 
     return f"""
 Você é um assistente especializado em imagens ortopédicas e musculoesqueléticas da plataforma Three Health.
@@ -102,11 +106,11 @@ Sua função é auxiliar ortopedistas e médicos na interpretação de exames de
 **AVISO:** Ferramenta de apoio educacional. NÃO substitui laudo de médico especialista.
 
 Região detectada: **{region_label}**
-
+{multi_image_note}
 Você recebeu (nesta ordem):
 1. Atlas de referência em PDF (se fornecido) — base anatômica
 2. Imagem(ns) de referência normal — padrão de comparação
-3. Exame do paciente (última imagem) — objeto da análise
+3. Exame do paciente (última(s) imagem(ns)) — objeto da análise
 
 Realize análise comparativa ortopédica estruturada:
 
@@ -158,10 +162,25 @@ Three Health AI Assistant
 """
 
 
+def _process_image_bytes(raw_bytes: bytes) -> tuple[bytes, str]:
+    """Valida e converte imagem para formato compatível. Retorna (bytes, mime_type)."""
+    try:
+        img = Image.open(io.BytesIO(raw_bytes))
+        img_format = img.format or "JPEG"
+        if img_format.upper() not in ["JPEG", "PNG", "WEBP", "GIF"]:
+            buffer = io.BytesIO()
+            img.convert("RGB").save(buffer, format="JPEG")
+            raw_bytes = buffer.getvalue()
+            img_format = "JPEG"
+        mime_type = f"image/{img_format.lower()}"
+    except Exception:
+        mime_type = "image/jpeg"
+    return raw_bytes, mime_type
+
+
 def _build_content_parts(
     client: genai.Client,
-    exam_image_bytes: bytes,
-    mime_type: str,
+    exam_images: list[tuple[bytes, str]],
     exam_type: str,
     user_description: str,
     reference_pdfs: list,
@@ -169,6 +188,7 @@ def _build_content_parts(
 ) -> tuple[list, int]:
     """
     Monta a lista de parts para envio ao Gemini.
+    exam_images: lista de tuplas (bytes, mime_type) das imagens do exame do paciente.
     Retorna (content_parts, total_references_used).
     """
     parts = []
@@ -199,9 +219,18 @@ def _build_content_parts(
             parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
             refs_used += 1
 
-    # 3. Exame do paciente
-    parts.append(types.Part.from_text(text="\n**EXAME DO PACIENTE (imagem para análise):**"))
-    parts.append(types.Part.from_bytes(data=exam_image_bytes, mime_type=mime_type))
+    # 3. Exame(s) do paciente
+    num_images = len(exam_images)
+    if num_images == 1:
+        parts.append(types.Part.from_text(text="\n**EXAME DO PACIENTE (imagem para análise):**"))
+        parts.append(types.Part.from_bytes(data=exam_images[0][0], mime_type=exam_images[0][1]))
+    else:
+        parts.append(types.Part.from_text(
+            text=f"\n**EXAME DO PACIENTE ({num_images} imagens para análise — analise todas em conjunto):**"
+        ))
+        for i, (img_bytes, img_mime) in enumerate(exam_images):
+            parts.append(types.Part.from_text(text=f"Imagem {i + 1} do exame:"))
+            parts.append(types.Part.from_bytes(data=img_bytes, mime_type=img_mime))
 
     # 4. Contexto clínico
     if user_description:
@@ -210,22 +239,22 @@ def _build_content_parts(
         ))
 
     # 5. Prompt de análise
-    parts.append(types.Part.from_text(text=build_analysis_prompt(exam_type)))
+    parts.append(types.Part.from_text(text=build_analysis_prompt(exam_type, num_images)))
 
     return parts, refs_used
 
 
 def analyze_exam(
-    exam_image_path: str,
+    exam_image_paths: list[str] | str,
     api_key: str,
     user_description: str = "",
     model_name: str = "gemini-2.5-flash",
 ) -> dict:
     """
-    Analisa um exame médico comparando com atlas em PDF e imagens de referência normais.
+    Analisa um ou mais exames médicos comparando com atlas em PDF e imagens de referência normais.
 
     Args:
-        exam_image_path: Caminho para a imagem do exame a ser analisado
+        exam_image_paths: Caminho (str) ou lista de caminhos para as imagens do exame
         api_key: Chave da API do Gemini
         user_description: Descrição adicional fornecida pelo usuário
         model_name: Modelo Gemini a utilizar
@@ -233,31 +262,29 @@ def analyze_exam(
     Returns:
         Dicionário com resultado da análise e metadados
     """
+    # Aceita tanto string única quanto lista para compatibilidade
+    if isinstance(exam_image_paths, str):
+        exam_image_paths = [exam_image_paths]
+
     client = genai.Client(api_key=api_key)
 
-    filename = Path(exam_image_path).name
-    exam_type = detect_exam_type(filename, user_description)
+    # Usa o primeiro arquivo para detecção do tipo de exame
+    first_filename = Path(exam_image_paths[0]).name
+    exam_type = detect_exam_type(first_filename, user_description)
 
-    with open(exam_image_path, "rb") as f:
-        exam_image_bytes = f.read()
-
-    try:
-        img = Image.open(io.BytesIO(exam_image_bytes))
-        img_format = img.format or "JPEG"
-        if img_format.upper() not in ["JPEG", "PNG", "WEBP", "GIF"]:
-            buffer = io.BytesIO()
-            img.convert("RGB").save(buffer, format="JPEG")
-            exam_image_bytes = buffer.getvalue()
-            img_format = "JPEG"
-        mime_type = f"image/{img_format.lower()}"
-    except Exception:
-        mime_type = "image/jpeg"
+    # Processa todas as imagens
+    exam_images = []
+    for path in exam_image_paths:
+        with open(path, "rb") as f:
+            raw_bytes = f.read()
+        processed_bytes, mime_type = _process_image_bytes(raw_bytes)
+        exam_images.append((processed_bytes, mime_type))
 
     reference_pdfs = get_reference_pdfs()
     reference_images = get_reference_images_as_bytes(exam_type)
 
     content_parts, refs_used = _build_content_parts(
-        client, exam_image_bytes, mime_type, exam_type, user_description,
+        client, exam_images, exam_type, user_description,
         reference_pdfs, reference_images,
     )
 
@@ -269,41 +296,45 @@ def analyze_exam(
         "analysis": response.text,
         "references_used": refs_used,
         "model_used": model_name,
+        "num_images": len(exam_images),
     }
 
 
 def analyze_exam_from_bytes(
-    exam_image_bytes: bytes,
+    exam_images_data: list[tuple[bytes, str]] | tuple[bytes, str],
     exam_filename: str,
     api_key: str,
     user_description: str = "",
     model_name: str = "gemini-2.5-flash",
 ) -> dict:
     """
-    Analisa um exame médico diretamente dos bytes da imagem.
-    Versão alternativa que não requer salvar o arquivo primeiro.
+    Analisa um ou mais exames médicos diretamente dos bytes das imagens.
+
+    Args:
+        exam_images_data: Tupla única (bytes, filename) ou lista de tuplas para múltiplas imagens
+        exam_filename: Nome do arquivo principal (para detecção do tipo de exame)
+        api_key: Chave da API do Gemini
+        user_description: Descrição adicional fornecida pelo usuário
+        model_name: Modelo Gemini a utilizar
     """
+    # Aceita tupla única ou lista de tuplas
+    if isinstance(exam_images_data, tuple) and len(exam_images_data) == 2 and isinstance(exam_images_data[0], bytes):
+        exam_images_data = [exam_images_data]
+
     client = genai.Client(api_key=api_key)
 
     exam_type = detect_exam_type(exam_filename, user_description)
 
-    try:
-        img = Image.open(io.BytesIO(exam_image_bytes))
-        img_format = img.format or "JPEG"
-        if img_format.upper() not in ["JPEG", "PNG", "WEBP"]:
-            buffer = io.BytesIO()
-            img.convert("RGB").save(buffer, format="JPEG")
-            exam_image_bytes = buffer.getvalue()
-            img_format = "JPEG"
-        mime_type = f"image/{img_format.lower()}"
-    except Exception:
-        mime_type = "image/jpeg"
+    exam_images = []
+    for raw_bytes, _ in exam_images_data:
+        processed_bytes, mime_type = _process_image_bytes(raw_bytes)
+        exam_images.append((processed_bytes, mime_type))
 
     reference_pdfs = get_reference_pdfs()
     reference_images = get_reference_images_as_bytes(exam_type)
 
     content_parts, refs_used = _build_content_parts(
-        client, exam_image_bytes, mime_type, exam_type, user_description,
+        client, exam_images, exam_type, user_description,
         reference_pdfs, reference_images,
     )
 
@@ -315,4 +346,5 @@ def analyze_exam_from_bytes(
         "analysis": response.text,
         "references_used": refs_used,
         "model_used": model_name,
+        "num_images": len(exam_images),
     }
