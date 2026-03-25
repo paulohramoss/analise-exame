@@ -76,19 +76,58 @@
             background: #f0f7ff;
         }
 
+        .clinical-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: none;
+            border: 1.5px dashed #1B72E8;
+            border-radius: 8px;
+            padding: 0.55rem 1rem;
+            width: 100%;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #1B72E8;
+            margin-bottom: 0.6rem;
+            transition: background 0.18s, border-color 0.18s;
+            text-align: left;
+        }
+
+        .clinical-toggle:hover {
+            background: #eaf2fd;
+            border-style: solid;
+        }
+
+        .clinical-toggle-arrow {
+            margin-left: auto;
+            font-size: 0.75rem;
+            transition: transform 0.25s;
+            display: inline-block;
+        }
+
+        .clinical-toggle.open .clinical-toggle-arrow {
+            transform: rotate(180deg);
+        }
+
         .clinical-section {
-            border: 1px solid #e2e8f0;
+            border: 1px solid #bfdbfe;
             border-radius: 10px;
             padding: 1rem 1.1rem;
             margin-bottom: 1rem;
             background: #f8fafc;
+            display: none;
+            animation: fadeSlideIn 0.22s ease;
         }
 
-        .clinical-section-title {
-            font-weight: 700;
-            font-size: 0.92rem;
-            color: #1B72E8;
-            margin-bottom: 0.2rem;
+        .clinical-section.open {
+            display: block;
+        }
+
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
 
         .clinical-section-hint {
@@ -230,9 +269,14 @@
                     </div>
                 </div>
 
-                <!-- Histórico Clínico do Paciente -->
-                <div class="clinical-section">
-                    <div class="clinical-section-title">Histórico Clínico do Paciente</div>
+                <!-- Histórico Clínico do Paciente (colapsável) -->
+                <button type="button" class="clinical-toggle" id="clinical-toggle">
+                    <span>➕ Adicionar Histórico Clínico do Paciente</span>
+                    <span style="font-size:0.75rem; font-weight:400; color:#64748b;">&nbsp;· melhora a precisão da análise</span>
+                    <span class="clinical-toggle-arrow">▼</span>
+                </button>
+
+                <div class="clinical-section" id="clinical-section">
                     <small class="clinical-section-hint">Quanto mais informação, mais precisa e assertiva será a análise.</small>
 
                     <div class="form-row">
@@ -299,16 +343,17 @@
                         <label for="previous_treatments">Tratamentos Anteriores</label>
                         <input type="text" name="previous_treatments" id="previous_treatments" placeholder="Ex: fisioterapia (3 meses), infiltração (2x), uso de anti-inflamatório, cirurgia anterior...">
                     </div>
+                </div>
 
-                    <div class="form-group">
-                        <label for="additional_info">Informações Adicionais</label>
-                        <textarea
-                            name="additional_info"
-                            id="additional_info"
-                            placeholder="Comorbidades relevantes, suspeita diagnóstica do médico, outros exames realizados..."
-                            rows="2"
-                        ></textarea>
-                    </div>
+                <div class="form-group">
+                    <label for="additional_info">Informações Adicionais (opcional)</label>
+                    <textarea
+                        name="additional_info"
+                        id="additional_info"
+                        placeholder="Ex: RM do joelho direito. Dor ao flexionar, mecanismo torção. Suspeita lesão menisco. Comorbidades, suspeita diagnóstica..."
+                        rows="3"
+                    ></textarea>
+                    <small>Região anatômica, lateralidade e contexto clínico melhoram a precisão da análise.</small>
                 </div>
 
                 <button type="submit" class="btn-primary" id="submit-btn">
@@ -370,6 +415,16 @@
     </div>
 
     <script>
+        // Toggle do Histórico Clínico
+        const clinicalToggle = document.getElementById('clinical-toggle');
+        const clinicalSection = document.getElementById('clinical-section');
+        clinicalToggle.addEventListener('click', function() {
+            const isOpen = clinicalSection.classList.toggle('open');
+            clinicalToggle.classList.toggle('open', isOpen);
+            clinicalToggle.querySelector('span:first-child').textContent =
+                isOpen ? '➖ Histórico Clínico do Paciente' : '➕ Adicionar Histórico Clínico do Paciente';
+        });
+
         const MAX_FILES = 5;
         const fileInput = document.getElementById('exam_images');
         const uploadArea = document.getElementById('upload-area');
