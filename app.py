@@ -7,6 +7,7 @@ import os
 import sys
 import uuid
 import base64
+import subprocess
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 from werkzeug.utils import secure_filename
@@ -18,6 +19,30 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key-change-in-prod")
+
+# Versão do build: hash do commit atual (fallback para variável de ambiente ou timestamp)
+def _get_build_version() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            cwd=Path(__file__).parent,
+        ).decode().strip()
+    except Exception:
+        return os.environ.get("VERCEL_GIT_COMMIT_SHA", "")[:7] or "dev"
+
+BUILD_VERSION = _get_build_version()
+app.jinja_env.globals["BUILD_VERSION"] = BUILD_VERSION
+
+
+@app.after_request
+def set_cache_headers(response):
+    """Impede cache de páginas HTML. Arquivos estáticos mantêm cache normal."""
+    if "text/html" in response.content_type:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 UPLOAD_FOLDER = Path("/tmp/uploads")
 UPLOAD_FOLDER.mkdir(exist_ok=True)
