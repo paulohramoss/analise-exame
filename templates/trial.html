@@ -566,8 +566,11 @@
             <div class="trial-dots">
                 <div class="trial-dot" id="dot-1"></div>
                 <div class="trial-dot" id="dot-2"></div>
+                <div class="trial-dot" id="dot-3"></div>
+                <div class="trial-dot" id="dot-4"></div>
+                <div class="trial-dot" id="dot-5"></div>
             </div>
-            <span id="trial-counter-text">0/2 usados</span>
+            <span id="trial-counter-text">0/5 usados</span>
         </div>
     </header>
 
@@ -587,7 +590,7 @@
                 <h2>Enviar Exame para Análise</h2>
                 <p class="card-description">
                     Faça upload da imagem do exame ortopédico (RM, Raio-X, TC) e receba um laudo gerado por IA.
-                    Você tem <strong id="analyses-remaining">2 análises</strong> gratuitas disponíveis.
+                    Você tem <strong id="analyses-remaining">5 análises</strong> gratuitas disponíveis.
                 </p>
 
                 <!-- Aviso: múltiplas imagens apenas no plano pago -->
@@ -740,7 +743,7 @@
             <div id="last-analysis-warning" style="display:none; margin-top:1rem">
                 <div class="alert alert-warning">
                     <span>⚠️</span>
-                    <span>Você utilizou suas <strong>2 análises gratuitas</strong>. Para continuar usando o sistema, conheça nossos planos.</span>
+                    <span>Você utilizou suas <strong>5 análises gratuitas</strong>. Para continuar usando o sistema, conheça nossos planos.</span>
                 </div>
                 <div style="display:flex; justify-content:center; margin-top:0.75rem">
                     <button class="btn-cta" id="btn-upgrade-from-result" onclick="showUpgrade()">
@@ -795,7 +798,7 @@
     </div>
 
     <script>
-        const MAX_TRIALS = 2;
+        const MAX_TRIALS = 5;
         const STORAGE_KEY = 'threehealth_trial_count';
 
         // ── State ──
@@ -808,8 +811,9 @@
         function updateBadge() {
             const remaining = Math.max(0, MAX_TRIALS - trialCount);
             document.getElementById('trial-counter-text').textContent = `${trialCount}/${MAX_TRIALS} usados`;
-            document.getElementById('dot-1').className = 'trial-dot' + (trialCount >= 1 ? ' used' : '');
-            document.getElementById('dot-2').className = 'trial-dot' + (trialCount >= 2 ? ' used' : '');
+            for (let i = 1; i <= MAX_TRIALS; i++) {
+                document.getElementById('dot-' + i).className = 'trial-dot' + (trialCount >= i ? ' used' : '');
+            }
             const remEl = document.getElementById('analyses-remaining');
             if (remEl) {
                 remEl.textContent = remaining === 1 ? '1 análise' : `${remaining} análises`;
