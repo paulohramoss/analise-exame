@@ -75,6 +75,81 @@
             border-color: #1B72E8;
             background: #f0f7ff;
         }
+
+        .clinical-section {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 1rem 1.1rem;
+            margin-bottom: 1rem;
+            background: #f8fafc;
+        }
+
+        .clinical-section-title {
+            font-weight: 700;
+            font-size: 0.92rem;
+            color: #1B72E8;
+            margin-bottom: 0.2rem;
+        }
+
+        .clinical-section-hint {
+            display: block;
+            color: #64748b;
+            font-size: 0.78rem;
+            margin-bottom: 0.85rem;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .form-group-half {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .clinical-section .form-group {
+            margin-bottom: 0.75rem;
+        }
+
+        .clinical-section label {
+            display: block;
+            font-weight: 600;
+            font-size: 0.82rem;
+            margin-bottom: 0.25rem;
+            color: #334155;
+        }
+
+        .clinical-section input[type="text"],
+        .clinical-section input[type="number"],
+        .clinical-section select,
+        .clinical-section textarea {
+            width: 100%;
+            padding: 0.5rem 0.65rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            font-family: inherit;
+            font-size: 0.85rem;
+            background: #fff;
+            color: #1e293b;
+            transition: border-color 0.2s;
+        }
+
+        .clinical-section input:focus,
+        .clinical-section select:focus,
+        .clinical-section textarea:focus {
+            outline: none;
+            border-color: #1B72E8;
+            box-shadow: 0 0 0 3px #eaf2fd;
+        }
+
+        .clinical-section textarea {
+            resize: vertical;
+        }
+
+        @media (max-width: 540px) {
+            .form-row { flex-direction: column; gap: 0; }
+        }
     </style>
 </head>
 <body>
@@ -155,15 +230,85 @@
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="description">Informações Adicionais (opcional)</label>
-                    <textarea
-                        name="description"
-                        id="description"
-                        placeholder="Ex: RM do joelho direito. Dor ao flexionar, mecanismo torção. Suspeita lesão menisco. Ou: Raio-X ombro esquerdo, impacto direto..."
-                        rows="3"
-                    ></textarea>
-                    <small>Região anatômica, lateralidade e contexto clínico melhoram a precisão da análise.</small>
+                <!-- Histórico Clínico do Paciente -->
+                <div class="clinical-section">
+                    <div class="clinical-section-title">Histórico Clínico do Paciente</div>
+                    <small class="clinical-section-hint">Quanto mais informação, mais precisa e assertiva será a análise.</small>
+
+                    <div class="form-row">
+                        <div class="form-group form-group-half">
+                            <label for="patient_age">Idade</label>
+                            <input type="number" name="patient_age" id="patient_age" min="1" max="120" placeholder="Ex: 38">
+                        </div>
+                        <div class="form-group form-group-half">
+                            <label for="patient_sex">Sexo</label>
+                            <select name="patient_sex" id="patient_sex">
+                                <option value="">— Selecione —</option>
+                                <option value="Masculino">Masculino</option>
+                                <option value="Feminino">Feminino</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group form-group-half">
+                            <label for="laterality">Lateralidade</label>
+                            <select name="laterality" id="laterality">
+                                <option value="">— Selecione —</option>
+                                <option value="Direito">Direito (D)</option>
+                                <option value="Esquerdo">Esquerdo (E)</option>
+                                <option value="Bilateral">Bilateral</option>
+                                <option value="Não aplicável">Não aplicável</option>
+                            </select>
+                        </div>
+                        <div class="form-group form-group-half">
+                            <label for="activity_level">Nível de Atividade Física</label>
+                            <select name="activity_level" id="activity_level">
+                                <option value="">— Selecione —</option>
+                                <option value="Sedentário">Sedentário</option>
+                                <option value="Leve (caminhada, atividades domésticas)">Leve</option>
+                                <option value="Moderado (exercício 2-3x/semana)">Moderado</option>
+                                <option value="Ativo (exercício 4-5x/semana)">Ativo</option>
+                                <option value="Atleta / Alta performance">Atleta / Alta performance</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="main_complaint">Queixa Principal e Sintomas</label>
+                        <textarea
+                            name="main_complaint"
+                            id="main_complaint"
+                            placeholder="Descreva a dor, limitação de movimento, instabilidade, estalos, inchaço — onde exatamente, quando piora, o que alivia..."
+                            rows="2"
+                        ></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group form-group-half">
+                            <label for="symptom_duration">Tempo de Evolução dos Sintomas</label>
+                            <input type="text" name="symptom_duration" id="symptom_duration" placeholder="Ex: 3 semanas, 6 meses, 2 anos">
+                        </div>
+                        <div class="form-group form-group-half">
+                            <label for="injury_mechanism">Mecanismo de Lesão (se trauma)</label>
+                            <input type="text" name="injury_mechanism" id="injury_mechanism" placeholder="Ex: torção em valgo, queda, impacto direto, esforço repetitivo">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="previous_treatments">Tratamentos Anteriores</label>
+                        <input type="text" name="previous_treatments" id="previous_treatments" placeholder="Ex: fisioterapia (3 meses), infiltração (2x), uso de anti-inflamatório, cirurgia anterior...">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="additional_info">Informações Adicionais</label>
+                        <textarea
+                            name="additional_info"
+                            id="additional_info"
+                            placeholder="Comorbidades relevantes, suspeita diagnóstica do médico, outros exames realizados..."
+                            rows="2"
+                        ></textarea>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn-primary" id="submit-btn">
@@ -328,8 +473,41 @@
             updateThumbnails();
         });
 
-        form.addEventListener('submit', function() {
+        form.addEventListener('submit', function(e) {
             if (selectedFiles.length === 0) return;
+
+            // Monta o contexto clínico estruturado a partir dos campos individuais
+            const age        = document.getElementById('patient_age').value.trim();
+            const sex        = document.getElementById('patient_sex').value;
+            const laterality = document.getElementById('laterality').value;
+            const activity   = document.getElementById('activity_level').value;
+            const complaint  = document.getElementById('main_complaint').value.trim();
+            const duration   = document.getElementById('symptom_duration').value.trim();
+            const mechanism  = document.getElementById('injury_mechanism').value.trim();
+            const treatments = document.getElementById('previous_treatments').value.trim();
+            const extra      = document.getElementById('additional_info').value.trim();
+
+            const parts = [];
+            if (age || sex)        parts.push(`Paciente: ${[age ? age + ' anos' : '', sex].filter(Boolean).join(', ')}`);
+            if (laterality)        parts.push(`Lateralidade: ${laterality}`);
+            if (activity)          parts.push(`Atividade física: ${activity}`);
+            if (complaint)         parts.push(`Queixa principal: ${complaint}`);
+            if (duration)          parts.push(`Tempo de evolução: ${duration}`);
+            if (mechanism)         parts.push(`Mecanismo de lesão: ${mechanism}`);
+            if (treatments)        parts.push(`Tratamentos anteriores: ${treatments}`);
+            if (extra)             parts.push(`Informações adicionais: ${extra}`);
+
+            // Injeta em um campo hidden que o backend já lê
+            let hidden = document.getElementById('description_combined');
+            if (!hidden) {
+                hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'description';
+                hidden.id = 'description_combined';
+                form.appendChild(hidden);
+            }
+            hidden.value = parts.join(' | ');
+
             loadingOverlay.style.display = 'flex';
         });
     </script>

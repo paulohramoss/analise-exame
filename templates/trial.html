@@ -591,11 +591,57 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="description">Informações Adicionais (opcional)</label>
-                        <textarea name="description" id="description" rows="2"
-                            placeholder="Ex: RM do joelho direito. Dor ao flexionar, suspeita lesão de menisco..."></textarea>
-                        <small>Região anatômica e contexto clínico melhoram a precisão da análise.</small>
+                    <!-- Histórico Clínico -->
+                    <div class="form-group" style="border:1px solid var(--border); border-radius:10px; padding:0.85rem 1rem; background:#f8fafc; margin-bottom:0.75rem;">
+                        <div style="font-weight:700; font-size:0.88rem; color:var(--primary); margin-bottom:0.2rem;">Histórico Clínico</div>
+                        <small style="display:block; color:var(--text-muted); font-size:0.76rem; margin-bottom:0.75rem;">Mais contexto = análise mais precisa</small>
+
+                        <div style="display:flex; gap:0.6rem; margin-bottom:0.6rem;">
+                            <div style="flex:1;">
+                                <label style="font-size:0.8rem; font-weight:600; display:block; margin-bottom:0.2rem;">Idade</label>
+                                <input type="number" id="trial_age" min="1" max="120" placeholder="Ex: 38"
+                                    style="width:100%; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:7px; font-size:0.83rem; background:#fff;">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="font-size:0.8rem; font-weight:600; display:block; margin-bottom:0.2rem;">Sexo</label>
+                                <select id="trial_sex"
+                                    style="width:100%; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:7px; font-size:0.83rem; background:#fff;">
+                                    <option value="">— Selecione —</option>
+                                    <option value="Masculino">Masculino</option>
+                                    <option value="Feminino">Feminino</option>
+                                </select>
+                            </div>
+                            <div style="flex:1;">
+                                <label style="font-size:0.8rem; font-weight:600; display:block; margin-bottom:0.2rem;">Lateralidade</label>
+                                <select id="trial_laterality"
+                                    style="width:100%; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:7px; font-size:0.83rem; background:#fff;">
+                                    <option value="">— Selecione —</option>
+                                    <option value="Direito">Direito (D)</option>
+                                    <option value="Esquerdo">Esquerdo (E)</option>
+                                    <option value="Bilateral">Bilateral</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom:0.6rem;">
+                            <label style="font-size:0.8rem; font-weight:600; display:block; margin-bottom:0.2rem;">Queixa principal e sintomas</label>
+                            <textarea id="trial_complaint" rows="2"
+                                placeholder="Dor, limitação de movimento, instabilidade, quando piora..."
+                                style="width:100%; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:7px; font-size:0.83rem; background:#fff; resize:vertical;"></textarea>
+                        </div>
+
+                        <div style="display:flex; gap:0.6rem;">
+                            <div style="flex:1;">
+                                <label style="font-size:0.8rem; font-weight:600; display:block; margin-bottom:0.2rem;">Tempo de evolução</label>
+                                <input type="text" id="trial_duration" placeholder="Ex: 3 semanas, 6 meses"
+                                    style="width:100%; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:7px; font-size:0.83rem; background:#fff;">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="font-size:0.8rem; font-weight:600; display:block; margin-bottom:0.2rem;">Mecanismo de lesão</label>
+                                <input type="text" id="trial_mechanism" placeholder="Ex: torção, queda, esforço repetitivo"
+                                    style="width:100%; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:7px; font-size:0.83rem; background:#fff;">
+                            </div>
+                        </div>
                     </div>
 
                     <button type="submit" class="btn-primary" id="submit-btn">
@@ -827,9 +873,24 @@
             submitBtn.disabled = true;
             document.getElementById('loading-overlay').style.display = 'flex';
 
+            // Monta contexto clínico estruturado
+            const age       = (document.getElementById('trial_age')?.value || '').trim();
+            const sex       = document.getElementById('trial_sex')?.value || '';
+            const lat       = document.getElementById('trial_laterality')?.value || '';
+            const complaint = (document.getElementById('trial_complaint')?.value || '').trim();
+            const duration  = (document.getElementById('trial_duration')?.value || '').trim();
+            const mechanism = (document.getElementById('trial_mechanism')?.value || '').trim();
+
+            const parts = [];
+            if (age || sex) parts.push(`Paciente: ${[age ? age + ' anos' : '', sex].filter(Boolean).join(', ')}`);
+            if (lat)        parts.push(`Lateralidade: ${lat}`);
+            if (complaint)  parts.push(`Queixa principal: ${complaint}`);
+            if (duration)   parts.push(`Tempo de evolução: ${duration}`);
+            if (mechanism)  parts.push(`Mecanismo de lesão: ${mechanism}`);
+
             const formData = new FormData();
             formData.append('exam_image', file);
-            formData.append('description', document.getElementById('description').value);
+            formData.append('description', parts.join(' | '));
 
             try {
                 const resp = await fetch('/trial/analyze', { method: 'POST', body: formData });
