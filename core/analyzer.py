@@ -227,26 +227,28 @@ def detect_exam_type_from_image(
     client: genai.Client,
     image_bytes: bytes,
     mime_type: str,
-    model_name: str = "gemini-2.0-flash",
+    model_name: str = "gemini-2.5-flash",
 ) -> str | None:
     """
     Detecta a região anatômica do exame analisando visualmente a imagem via Gemini.
     Retorna uma das chaves de EXAM_TYPE_KEYWORDS ou None se não conseguir determinar.
     """
     prompt = (
-        "Você é um especialista em radiologia musculoesquelética. "
-        "Olhe a imagem médica fornecida e identifique a região anatômica examinada. "
-        "Responda APENAS com uma das opções abaixo, sem explicações adicionais:\n"
-        "- joelho\n"
-        "- coluna\n"
-        "- ombro\n"
-        "- quadril\n"
-        "- pe_tornozelo\n"
-        "- mao_punho\n"
-        "- cotovelo\n"
-        "- geral\n\n"
-        "Se a imagem mostrar claramente uma articulação ou região específica, escolha a opção correspondente. "
-        "Use 'geral' somente se for impossível identificar a região."
+        "Você é um especialista em radiologia musculoesquelética com vasta experiência em RM, TC e Raio-X.\n\n"
+        "TAREFA: Identifique a região anatômica mostrada neste exame de imagem.\n\n"
+        "IMPORTANTE: A imagem pode ser uma foto tirada de uma tela de computador/monitor — isso é normal. "
+        "Ignore artefatos de reflexo, moldura da tela, teclado ou interface do software de visualização. "
+        "Foque exclusivamente nas estruturas anatômicas visíveis dentro da imagem médica.\n\n"
+        "Guia de identificação:\n"
+        "- joelho: fêmur distal, tíbia proximal, fíbula proximal, patela, meniscos, ligamentos cruzados\n"
+        "- coluna: corpos vertebrais, discos intervertebrais, canal medular, processo espinhoso\n"
+        "- ombro: cabeça do úmero, glenoide, acrômio, manguito rotador\n"
+        "- quadril: cabeça femoral, acetábulo, colo do fêmur, articulação coxofemoral\n"
+        "- pe_tornozelo: calcâneo, tálus, tíbia distal, metatarsos, tornozelo\n"
+        "- mao_punho: carpo, metacarpos, falanges, rádio distal\n"
+        "- cotovelo: úmero distal, rádio proximal, ulna proximal, olécrano\n"
+        "- geral: use somente se for impossível identificar a região\n\n"
+        "Responda APENAS com uma das palavras-chave acima (ex: joelho), sem mais nenhum texto."
     )
     try:
         response = client.models.generate_content(
@@ -260,9 +262,11 @@ def detect_exam_type_from_image(
         valid_types = {"joelho", "coluna", "ombro", "quadril", "pe_tornozelo", "mao_punho", "cotovelo", "geral"}
         # Extrai o primeiro token válido da resposta (tolerância a respostas com espaços/pontuação)
         for token in result.replace("\n", " ").split():
-            token_clean = token.strip(".,;:-")
+            token_clean = token.strip(".,;:-*")
             if token_clean in valid_types:
+                print(f"[detect_exam_type_from_image] Resposta bruta: '{result}' → detectado: '{token_clean}'")
                 return token_clean
+        print(f"[detect_exam_type_from_image] Resposta não mapeável: '{result}'")
         return None
     except Exception as e:
         print(f"[detect_exam_type_from_image] Falhou: {e}")
@@ -369,7 +373,7 @@ def analyze_exam(
 
     # Detecção do tipo de exame: visual (IA) tem prioridade; keywords apenas como fallback
     first_filename = Path(exam_image_paths[0]).name
-    visual_type = detect_exam_type_from_image(client, exam_images[0][0], exam_images[0][1]) if exam_images else None
+    visual_type = detect_exam_type_from_image(client, exam_images[0][0], exam_images[0][1], model_name) if exam_images else None
     if visual_type and visual_type != "geral":
         exam_type = visual_type
         print(f"[detect_exam_type] Tipo detectado visualmente: {exam_type}")
@@ -426,7 +430,7 @@ def analyze_exam_from_bytes(
         exam_images.append((processed_bytes, mime_type))
 
     # Detecção do tipo de exame: visual (IA) tem prioridade; keywords apenas como fallback
-    visual_type = detect_exam_type_from_image(client, exam_images[0][0], exam_images[0][1]) if exam_images else None
+    visual_type = detect_exam_type_from_image(client, exam_images[0][0], exam_images[0][1], model_name) if exam_images else None
     if visual_type and visual_type != "geral":
         exam_type = visual_type
         print(f"[detect_exam_type] Tipo detectado visualmente: {exam_type}")
