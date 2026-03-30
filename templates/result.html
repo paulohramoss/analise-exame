@@ -162,12 +162,12 @@
     <script>
         // Converte markdown para HTML simples para o laudo
         function renderMarkdown(element) {
-            let html = element.innerHTML;
+            let html = element.innerHTML.trim();
 
-            // Headers
-            html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
-            html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
-            html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+            // Headers (aceita espaços opcionais antes do #)
+            html = html.replace(/^\s*### (.+)$/gm, '<h4>$1</h4>');
+            html = html.replace(/^\s*## (.+)$/gm, '<h3>$1</h3>');
+            html = html.replace(/^\s*# (.+)$/gm, '<h2>$1</h2>');
 
             // Bold
             html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
