@@ -3,21 +3,23 @@ Aplicação Flask para análise de exames médicos com IA (Gemini).
 Permite upload de uma ou múltiplas imagens de exames e gera laudos comparativos.
 """
 
+import base64
+import hashlib
 import os
 import sys
 import tempfile
+import time
 import uuid
-import base64
 import subprocess
 from functools import wraps
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, make_response
+from flask import Flask, g, render_template, request, jsonify, redirect, url_for, flash, make_response
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
 from core.analyzer import analyze_exam
-from core import asaas
+from core import asaas, db
 
 load_dotenv()
 
@@ -63,7 +65,8 @@ def premium_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# Versão do build: hash do commit atual (fallback para variável de ambiente ou timestamp)
+
+# Versão do build
 def _get_build_version() -> str:
     try:
         return subprocess.check_output(
@@ -74,24 +77,78 @@ def _get_build_version() -> str:
     except Exception:
         return os.environ.get("VERCEL_GIT_COMMIT_SHA", "")[:7] or "dev"
 
+
 BUILD_VERSION = _get_build_version()
 app.jinja_env.globals["BUILD_VERSION"] = BUILD_VERSION
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _get_ip() -> str | None:
+    """Retorna o IP real do cliente (considera proxy/Vercel)."""
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip() or None
+    return request.remote_addr or None
+
+
+def _detect_modalidade(user_description: str) -> str | None:
+    """Detecta a modalidade de imagem pela descrição do usuário."""
+    desc = (user_description or "").lower()
+    if any(k in desc for k in ["ressonância", "ressonancia", " rm ", "rm:", "mri", "ressonância magnética"]):
+        return "RM"
+    if any(k in desc for k in ["raio-x", "raio x", "radiografia", " rx ", "rx:", "x-ray"]):
+        return "RX"
+    if any(k in desc for k in ["tomografia", " tc ", "tc:", "ct scan"]):
+        return "TC"
+    if any(k in desc for k in ["ultrassom", "ultrassonografia", " us ", "us:", "ultrasound"]):
+        return "US"
+    return None
+
+
+# ── Hooks de request ──────────────────────────────────────────────────────────
+
+@app.before_request
+def _before():
+    g.t0 = time.time()
+    g.analise_id = None
+    g.cliente_id = None
+    g.modo = None
+
+
 @app.after_request
 def set_cache_headers(response):
-    """Impede cache de páginas HTML. Arquivos estáticos mantêm cache normal."""
+    """Impede cache de páginas HTML e registra log de acesso no banco."""
     if "text/html" in response.content_type:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+
+    # Log de acesso (exclui assets estáticos para não poluir o banco)
+    if not request.path.startswith("/static"):
+        tempo_ms = int((time.time() - g.get("t0", time.time())) * 1000)
+        db.salvar_log(
+            endpoint=request.path,
+            metodo=request.method,
+            status_code=response.status_code,
+            ip_address=_get_ip(),
+            user_agent=request.headers.get("User-Agent"),
+            modo=g.get("modo"),
+            tempo_ms=tempo_ms,
+            cliente_id=g.get("cliente_id"),
+            analise_id=g.get("analise_id"),
+        )
+
     return response
+
+
+# ── Upload ────────────────────────────────────────────────────────────────────
 
 UPLOAD_FOLDER = Path(tempfile.gettempdir()) / "analise_exame_uploads"
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "dcm"}
 MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20MB
-MAX_IMAGES_PER_ANALYSIS = 5  # máximo de imagens por análise
+MAX_IMAGES_PER_ANALYSIS = 5
 
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
@@ -102,12 +159,10 @@ def allowed_file(filename: str) -> bool:
 
 
 def get_api_key() -> str:
-    """Obtém a chave da API do Gemini."""
     return os.environ.get("GEMINI_API_KEY", "")
 
 
 def get_model_name() -> str:
-    """Obtém o modelo Gemini configurado."""
     return os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 
@@ -137,6 +192,8 @@ def save_upload_file(file) -> tuple[Path, str, str] | None:
     return filepath, image_b64, image_mime
 
 
+# ── Rotas principais ──────────────────────────────────────────────────────────
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -145,6 +202,9 @@ def index():
 @app.route("/analyze", methods=["POST"])
 def analyze():
     """Endpoint para receber e analisar o(s) exame(s) médico(s)."""
+    g.modo = "premium"
+    t0 = time.time()
+
     api_key = get_api_key()
     if not api_key:
         flash("Erro: GEMINI_API_KEY não configurada. Adicione a variável de ambiente no painel do Vercel (Settings → Environment Variables).", "error")
@@ -194,6 +254,33 @@ def analyze():
             model_name=get_model_name(),
         )
 
+        # Persiste análise e imagens no banco
+        analise_id = db.salvar_analise(
+            tipo_exame=result["exam_type"],
+            analise_completa=result["analysis"],
+            modelo_ia=result["model_used"],
+            referencias_usadas=result["references_used"],
+            num_imagens=result["num_images"],
+            modo="premium",
+            descricao_usuario=user_description,
+            modalidade=_detect_modalidade(user_description),
+            ip_address=_get_ip(),
+            user_agent=request.headers.get("User-Agent"),
+            tempo_ms=int((time.time() - t0) * 1000),
+            cliente_id=g.get("cliente_id"),
+        )
+        if analise_id:
+            g.analise_id = analise_id
+            for i, img_data in enumerate(images_data, 1):
+                raw = base64.b64decode(img_data["b64"])
+                db.salvar_imagem_exame(
+                    analise_id=analise_id,
+                    mime_type=img_data["mime"],
+                    tamanho_bytes=len(raw),
+                    hash_md5=hashlib.md5(raw).hexdigest(),
+                    ordem=i,
+                )
+
         return render_template(
             "result.html",
             analysis=result["analysis"],
@@ -234,6 +321,9 @@ def trial():
 @app.route("/trial/analyze", methods=["POST"])
 def trial_analyze():
     """Endpoint para análise no modo de teste gratuito (retorna JSON, aceita apenas 1 imagem)."""
+    g.modo = "trial"
+    t0 = time.time()
+
     api_key = get_api_key()
     if not api_key:
         return jsonify({"error": "Serviço temporariamente indisponível. Tente novamente mais tarde."}), 503
@@ -263,6 +353,31 @@ def trial_analyze():
             user_description=user_description,
             model_name=get_model_name(),
         )
+
+        # Persiste análise no banco
+        analise_id = db.salvar_analise(
+            tipo_exame=result["exam_type"],
+            analise_completa=result["analysis"],
+            modelo_ia=result["model_used"],
+            referencias_usadas=result["references_used"],
+            num_imagens=1,
+            modo="trial",
+            descricao_usuario=user_description,
+            modalidade=_detect_modalidade(user_description),
+            ip_address=_get_ip(),
+            user_agent=request.headers.get("User-Agent"),
+            tempo_ms=int((time.time() - t0) * 1000),
+        )
+        if analise_id:
+            g.analise_id = analise_id
+            raw = base64.b64decode(image_b64)
+            db.salvar_imagem_exame(
+                analise_id=analise_id,
+                mime_type=image_mime,
+                tamanho_bytes=len(raw),
+                hash_md5=hashlib.md5(raw).hexdigest(),
+            )
+
         return jsonify({
             "analysis": result["analysis"],
             "exam_type": result["exam_type"].replace("_", " ").title(),
@@ -292,6 +407,9 @@ def trial_analyze():
 @app.route("/api/analyze", methods=["POST"])
 def api_analyze():
     """Endpoint REST para integração programática. Suporta múltiplas imagens."""
+    g.modo = "api"
+    t0 = time.time()
+
     api_key = request.headers.get("X-API-Key") or get_api_key()
     if not api_key:
         return jsonify({"error": "API key não fornecida"}), 401
@@ -329,6 +447,24 @@ def api_analyze():
             user_description=user_description,
             model_name=get_model_name(),
         )
+
+        # Persiste análise no banco
+        analise_id = db.salvar_analise(
+            tipo_exame=result["exam_type"],
+            analise_completa=result["analysis"],
+            modelo_ia=result["model_used"],
+            referencias_usadas=result["references_used"],
+            num_imagens=result["num_images"],
+            modo="api",
+            descricao_usuario=user_description,
+            modalidade=_detect_modalidade(user_description),
+            ip_address=_get_ip(),
+            user_agent=request.headers.get("User-Agent"),
+            tempo_ms=int((time.time() - t0) * 1000),
+        )
+        if analise_id:
+            g.analise_id = analise_id
+
         return jsonify(result), 200
 
     except Exception as e:
@@ -342,7 +478,7 @@ def api_analyze():
                 pass
 
 
-# ── Checkout / Pagamento ─────────────────────────────────────────────────────
+# ── Checkout / Pagamento ──────────────────────────────────────────────────────
 
 @app.route("/checkout")
 def checkout():
@@ -383,7 +519,6 @@ def checkout_pay():
     except Exception as e:
         err_str = str(e)
         print(f"[ASAAS] Erro ao criar cobrança: {type(e).__name__}: {err_str}", file=sys.stderr)
-        # Exibe causa específica para facilitar diagnóstico
         if "401" in err_str or "Unauthorized" in err_str or "unauthorized" in err_str.lower():
             flash("Chave da API Asaas inválida ou não configurada. Verifique ASAAS_API_KEY no painel do Vercel.", "error")
         elif "403" in err_str:
@@ -400,6 +535,19 @@ def checkout_pay():
     if not invoice_url or not payment_id:
         flash("Erro ao obter link de pagamento. Tente novamente.", "error")
         return redirect(url_for("checkout"))
+
+    # Persiste cliente e pagamento no banco
+    cliente_id = db.upsert_cliente(name, email, cpf_cnpj, customer.get("id", ""))
+    g.cliente_id = cliente_id
+    db.salvar_pagamento(
+        asaas_payment_id=payment_id,
+        valor=PRODUCT_PRICE,
+        descricao=PRODUCT_NAME,
+        invoice_url=invoice_url,
+        external_reference=email,
+        cliente_id=cliente_id,
+        payload=payment,
+    )
 
     # Redireciona para página de espera antes de ir ao Asaas
     return redirect(url_for("checkout_pending", payment_id=payment_id, invoice_url=invoice_url))
@@ -446,6 +594,19 @@ def payment_status():
             samesite="Lax",
             secure=not app.debug,
         )
+
+        # Atualiza status e registra sessão premium no banco
+        db.atualizar_status_pagamento(payment_id, "CONFIRMED")
+        cliente_id = db.buscar_cliente_id_por_email(email) if email else None
+        pagamento_id = db.buscar_pagamento_id(payment_id)
+        db.salvar_sessao(
+            cliente_id=cliente_id,
+            pagamento_id=pagamento_id,
+            ip_address=_get_ip(),
+            user_agent=request.headers.get("User-Agent"),
+        )
+        g.cliente_id = cliente_id
+
         return resp
 
     return jsonify({"confirmed": False})
@@ -455,8 +616,7 @@ def payment_status():
 def webhook_asaas():
     """
     Recebe notificações de pagamento do Asaas.
-    O cookie não pode ser emitido aqui (request server-to-server), mas
-    a rota /api/payment/status validará o status atualizado.
+    Persiste o evento e atualiza o status do pagamento no banco.
     """
     # Valida token de autenticação do webhook (configure no painel Asaas)
     webhook_token = os.environ.get("ASAAS_WEBHOOK_TOKEN", "")
@@ -468,7 +628,21 @@ def webhook_asaas():
     data = request.get_json(silent=True) or {}
     event = data.get("event", "")
     payment = data.get("payment", {})
-    print(f"[ASAAS WEBHOOK] event={event} payment_id={payment.get('id')} status={payment.get('status')}", file=sys.stderr)
+    payment_id = payment.get("id", "")
+    status = payment.get("status", "")
+
+    print(f"[ASAAS WEBHOOK] event={event} payment_id={payment_id} status={status}", file=sys.stderr)
+
+    # Persiste webhook e atualiza status do pagamento
+    db.salvar_webhook(
+        evento=event,
+        asaas_payment_id=payment_id,
+        status_pagamento=status,
+        payload=data,
+    )
+    if payment_id and status:
+        db.atualizar_status_pagamento(payment_id, status, payload=data)
+
     return jsonify({"received": True}), 200
 
 
