@@ -26,7 +26,22 @@ def _headers() -> dict:
     }
 
 
-def create_customer(name: str, email: str) -> dict:
+def _raise_for_status(resp: requests.Response) -> None:
+    """Levanta exceção com o corpo da resposta Asaas incluído na mensagem."""
+    if not resp.ok:
+        try:
+            body = resp.json()
+            errors = body.get("errors", [])
+            msg = "; ".join(e.get("description", str(e)) for e in errors) if errors else str(body)
+        except Exception:
+            msg = resp.text[:300]
+        raise requests.HTTPError(
+            f"{resp.status_code} {resp.reason} — {msg}",
+            response=resp,
+        )
+
+
+def create_customer(name: str, email: str, cpf_cnpj: str = "") -> dict:
     """Cria ou recupera um cliente no Asaas pelo e-mail."""
     # Tenta buscar cliente existente com o mesmo e-mail
     resp = requests.get(
@@ -35,19 +50,23 @@ def create_customer(name: str, email: str) -> dict:
         headers=_headers(),
         timeout=10,
     )
-    resp.raise_for_status()
+    _raise_for_status(resp)
     data = resp.json()
     if data.get("data"):
         return data["data"][0]
 
     # Cria novo cliente
+    payload: dict = {"name": name, "email": email}
+    if cpf_cnpj:
+        payload["cpfCnpj"] = cpf_cnpj.strip()
+
     resp = requests.post(
         f"{_base_url()}/customers",
-        json={"name": name, "email": email},
+        json=payload,
         headers=_headers(),
         timeout=10,
     )
-    resp.raise_for_status()
+    _raise_for_status(resp)
     return resp.json()
 
 
@@ -71,7 +90,7 @@ def create_payment(customer_id: str, value: float, description: str, external_re
         headers=_headers(),
         timeout=10,
     )
-    resp.raise_for_status()
+    _raise_for_status(resp)
     return resp.json()
 
 
@@ -82,7 +101,7 @@ def get_payment(payment_id: str) -> dict:
         headers=_headers(),
         timeout=10,
     )
-    resp.raise_for_status()
+    _raise_for_status(resp)
     return resp.json()
 
 

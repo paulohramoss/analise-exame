@@ -359,9 +359,14 @@ def checkout_pay():
     """Cria cliente + cobrança no Asaas e redireciona para a fatura."""
     name = request.form.get("name", "").strip()
     email = request.form.get("email", "").strip()
+    cpf_cnpj = request.form.get("cpf_cnpj", "").strip()
 
     if not name or not email or "@" not in email:
         flash("Preencha nome e e-mail válidos.", "error")
+        return redirect(url_for("checkout"))
+
+    if not cpf_cnpj:
+        flash("Preencha o CPF ou CNPJ.", "error")
         return redirect(url_for("checkout"))
 
     asaas_key = os.environ.get("ASAAS_API_KEY", "")
@@ -370,7 +375,7 @@ def checkout_pay():
         return redirect(url_for("checkout"))
 
     try:
-        customer = asaas.create_customer(name=name, email=email)
+        customer = asaas.create_customer(name=name, email=email, cpf_cnpj=cpf_cnpj)
         payment = asaas.create_payment(
             customer_id=customer["id"],
             value=PRODUCT_PRICE,
