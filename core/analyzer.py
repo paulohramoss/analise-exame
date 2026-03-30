@@ -93,6 +93,7 @@ def build_analysis_prompt(exam_type: str, num_images: int = 1) -> str:
     return f"""
 Você é um sistema de análise de imagens musculoesqueléticas da plataforma Three Health.
 Seu objetivo é produzir a análise mais precisa, profunda e útil possível do exame fornecido.
+Responda diretamente com o conteúdo estruturado abaixo — sem saudações, introduções, apresentações ou assinaturas.
 
 **BASE DE CONHECIMENTO:**
 - **Atlas(es) fornecido(s) acima** — referência primária de anatomia musculoesquelética normal
@@ -200,10 +201,6 @@ Seja direto: achados fortes são afirmados como fatos, não como possibilidades.
 Achados moderados são qualificados com a limitação específica que os impede de ser fortes.
 Achados fracos não aparecem no diagnóstico.
 
-Ao final da resposta, assine como:
-Atenciosamente,
-
-Three Health AI Assistant
 """
 
 
