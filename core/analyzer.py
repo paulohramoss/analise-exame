@@ -223,6 +223,52 @@ def _process_image_bytes(raw_bytes: bytes) -> tuple[bytes, str]:
     return raw_bytes, mime_type
 
 
+def detect_exam_type_from_image(
+    client: genai.Client,
+    image_bytes: bytes,
+    mime_type: str,
+    model_name: str = "gemini-2.0-flash",
+) -> str | None:
+    """
+    Detecta a região anatômica do exame analisando visualmente a imagem via Gemini.
+    Retorna uma das chaves de EXAM_TYPE_KEYWORDS ou None se não conseguir determinar.
+    """
+    prompt = (
+        "Você é um especialista em radiologia musculoesquelética. "
+        "Olhe a imagem médica fornecida e identifique a região anatômica examinada. "
+        "Responda APENAS com uma das opções abaixo, sem explicações adicionais:\n"
+        "- joelho\n"
+        "- coluna\n"
+        "- ombro\n"
+        "- quadril\n"
+        "- pe_tornozelo\n"
+        "- mao_punho\n"
+        "- cotovelo\n"
+        "- geral\n\n"
+        "Se a imagem mostrar claramente uma articulação ou região específica, escolha a opção correspondente. "
+        "Use 'geral' somente se for impossível identificar a região."
+    )
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                types.Part.from_text(text=prompt),
+            ],
+        )
+        result = response.text.strip().lower()
+        valid_types = {"joelho", "coluna", "ombro", "quadril", "pe_tornozelo", "mao_punho", "cotovelo", "geral"}
+        # Extrai o primeiro token válido da resposta (tolerância a respostas com espaços/pontuação)
+        for token in result.replace("\n", " ").split():
+            token_clean = token.strip(".,;:-")
+            if token_clean in valid_types:
+                return token_clean
+        return None
+    except Exception as e:
+        print(f"[detect_exam_type_from_image] Falhou: {e}")
+        return None
+
+
 def _build_content_parts(
     client: genai.Client,
     exam_images: list[tuple[bytes, str]],
@@ -313,10 +359,6 @@ def analyze_exam(
 
     client = genai.Client(api_key=api_key)
 
-    # Usa o primeiro arquivo para detecção do tipo de exame
-    first_filename = Path(exam_image_paths[0]).name
-    exam_type = detect_exam_type(first_filename, user_description)
-
     # Processa todas as imagens
     exam_images = []
     for path in exam_image_paths:
@@ -324,6 +366,16 @@ def analyze_exam(
             raw_bytes = f.read()
         processed_bytes, mime_type = _process_image_bytes(raw_bytes)
         exam_images.append((processed_bytes, mime_type))
+
+    # Detecção do tipo de exame: visual (IA) tem prioridade; keywords apenas como fallback
+    first_filename = Path(exam_image_paths[0]).name
+    visual_type = detect_exam_type_from_image(client, exam_images[0][0], exam_images[0][1]) if exam_images else None
+    if visual_type and visual_type != "geral":
+        exam_type = visual_type
+        print(f"[detect_exam_type] Tipo detectado visualmente: {exam_type}")
+    else:
+        exam_type = detect_exam_type(first_filename, user_description)
+        print(f"[detect_exam_type] Tipo detectado por keywords: {exam_type}")
 
     reference_pdfs = get_reference_pdfs()
     reference_images = get_reference_images_as_bytes(exam_type)
@@ -368,12 +420,19 @@ def analyze_exam_from_bytes(
 
     client = genai.Client(api_key=api_key)
 
-    exam_type = detect_exam_type(exam_filename, user_description)
-
     exam_images = []
     for raw_bytes, _ in exam_images_data:
         processed_bytes, mime_type = _process_image_bytes(raw_bytes)
         exam_images.append((processed_bytes, mime_type))
+
+    # Detecção do tipo de exame: visual (IA) tem prioridade; keywords apenas como fallback
+    visual_type = detect_exam_type_from_image(client, exam_images[0][0], exam_images[0][1]) if exam_images else None
+    if visual_type and visual_type != "geral":
+        exam_type = visual_type
+        print(f"[detect_exam_type] Tipo detectado visualmente: {exam_type}")
+    else:
+        exam_type = detect_exam_type(exam_filename, user_description)
+        print(f"[detect_exam_type] Tipo detectado por keywords: {exam_type}")
 
     reference_pdfs = get_reference_pdfs()
     reference_images = get_reference_images_as_bytes(exam_type)
