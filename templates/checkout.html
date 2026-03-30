@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Three Health – Contratar Plano Completo</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f4f8;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.10);
+    max-width: 480px;
+    width: 100%;
+    padding: 2.5rem 2rem;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-bottom: 1.75rem;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #1e3a5f;
+  }
+
+  .logo svg { width: 32px; height: 32px; }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #1e293b;
+    margin-bottom: .5rem;
+  }
+
+  .subtitle {
+    color: #64748b;
+    font-size: .95rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .price-box {
+    background: #f0fdf4;
+    border: 1.5px solid #86efac;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .price-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #16a34a;
+  }
+
+  .price-label {
+    color: #4b7a5e;
+    font-size: .9rem;
+  }
+
+  .features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .45rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .feature {
+    font-size: .85rem;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+  }
+
+  .feature::before { content: "✅"; font-size: .8rem; }
+
+  .divider {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 1.5rem 0;
+  }
+
+  label {
+    display: block;
+    font-size: .85rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: .35rem;
+  }
+
+  input[type="text"],
+  input[type="email"] {
+    width: 100%;
+    padding: .7rem 1rem;
+    border: 1.5px solid #d1d5db;
+    border-radius: 8px;
+    font-size: .95rem;
+    color: #1e293b;
+    margin-bottom: 1rem;
+    transition: border-color .2s;
+    outline: none;
+  }
+
+  input:focus { border-color: #3b82f6; }
+
+  .btn-pay {
+    width: 100%;
+    padding: .85rem;
+    background: linear-gradient(135deg, #1d4ed8, #2563eb);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s;
+  }
+
+  .btn-pay:hover { opacity: .92; transform: translateY(-1px); }
+  .btn-pay:active { transform: translateY(0); }
+  .btn-pay:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+
+  .security-note {
+    text-align: center;
+    font-size: .78rem;
+    color: #9ca3af;
+    margin-top: 1rem;
+  }
+
+  .flash {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    color: #b91c1c;
+    border-radius: 8px;
+    padding: .75rem 1rem;
+    font-size: .88rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .back-link {
+    display: block;
+    text-align: center;
+    margin-top: 1.25rem;
+    font-size: .85rem;
+    color: #6b7280;
+    text-decoration: none;
+  }
+
+  .back-link:hover { color: #374151; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="15" stroke="#1d4ed8" stroke-width="2"/>
+      <path d="M16 8v16M8 16h16" stroke="#1d4ed8" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    Three Health
+  </div>
+
+  <h1>Plano Completo</h1>
+  <p class="subtitle">Acesso ilimitado à plataforma de análise de exames por IA.</p>
+
+  <div class="price-box">
+    <span class="price-value">R$ {{ "%.2f"|format(price) }}</span>
+    <span class="price-label">pagamento único · acesso por 1 ano</span>
+  </div>
+
+  <div class="features">
+    <span class="feature">Análises ilimitadas</span>
+    <span class="feature">Múltiplas imagens</span>
+    <span class="feature">RM · Raio-X · TC</span>
+    <span class="feature">Laudos estruturados</span>
+    <span class="feature">Download em PDF</span>
+    <span class="feature">Referências anatômicas</span>
+    <span class="feature">Suporte especializado</span>
+    <span class="feature">Integração via API</span>
+  </div>
+
+  <hr class="divider">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="flash">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST" action="/checkout/pay" id="pay-form">
+    <label for="name">Nome completo</label>
+    <input type="text" id="name" name="name" placeholder="Seu nome" required autocomplete="name">
+
+    <label for="email">E-mail</label>
+    <input type="email" id="email" name="email" placeholder="seu@email.com" required autocomplete="email">
+
+    <button type="submit" class="btn-pay" id="btn-pay">
+      🔒 Ir para o pagamento
+    </button>
+  </form>
+
+  <p class="security-note">🔐 Pagamento seguro via Asaas · PIX, Boleto ou Cartão</p>
+  <a href="/trial" class="back-link">← Voltar ao teste gratuito</a>
+</div>
+
+<script>
+  document.getElementById('pay-form').addEventListener('submit', function() {
+    const btn = document.getElementById('btn-pay');
+    btn.disabled = true;
+    btn.textContent = 'Aguarde...';
+  });
+</script>
+
+</body>
+</html>

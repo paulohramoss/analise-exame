@@ -5,20 +5,63 @@ Permite upload de uma ou múltiplas imagens de exames e gera laudos comparativos
 
 import os
 import sys
+import tempfile
 import uuid
 import base64
 import subprocess
+from functools import wraps
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, make_response
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
 from core.analyzer import analyze_exam
+from core import asaas
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key-change-in-prod")
+
+# ── Produto / preço ──────────────────────────────────────────────────────────
+PRODUCT_NAME = "Three Health – Plano Completo"
+PRODUCT_PRICE = float(os.environ.get("PRODUCT_PRICE", "97.00"))
+PREMIUM_COOKIE = "threehealth_premium"
+_COOKIE_SALT = "premium-access-v1"
+_COOKIE_MAX_AGE = 365 * 24 * 3600  # 1 ano
+
+
+def _serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(app.secret_key)
+
+
+def generate_premium_token(payment_id: str, email: str) -> str:
+    return _serializer().dumps({"pid": payment_id, "email": email}, salt=_COOKIE_SALT)
+
+
+def verify_premium_token(token: str) -> dict | None:
+    try:
+        return _serializer().loads(token, salt=_COOKIE_SALT, max_age=_COOKIE_MAX_AGE)
+    except (BadSignature, SignatureExpired):
+        return None
+
+
+def is_premium(req) -> bool:
+    token = req.cookies.get(PREMIUM_COOKIE)
+    if not token:
+        return False
+    return verify_premium_token(token) is not None
+
+
+def premium_required(f):
+    """Decorator: redireciona para /trial se não for usuário premium."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not is_premium(request):
+            return redirect(url_for("trial"))
+        return f(*args, **kwargs)
+    return decorated
 
 # Versão do build: hash do commit atual (fallback para variável de ambiente ou timestamp)
 def _get_build_version() -> str:
@@ -44,7 +87,7 @@ def set_cache_headers(response):
         response.headers["Expires"] = "0"
     return response
 
-UPLOAD_FOLDER = Path("/tmp/uploads")
+UPLOAD_FOLDER = Path(tempfile.gettempdir()) / "analise_exame_uploads"
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "dcm"}
 MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20MB
@@ -95,11 +138,13 @@ def save_upload_file(file) -> tuple[Path, str, str] | None:
 
 
 @app.route("/")
+@premium_required
 def index():
     return render_template("index.html")
 
 
 @app.route("/analyze", methods=["POST"])
+@premium_required
 def analyze():
     """Endpoint para receber e analisar o(s) exame(s) médico(s)."""
     api_key = get_api_key()
@@ -297,6 +342,130 @@ def api_analyze():
                 Path(fp).unlink()
             except Exception:
                 pass
+
+
+# ── Checkout / Pagamento ─────────────────────────────────────────────────────
+
+@app.route("/checkout")
+def checkout():
+    """Página de contratação com formulário de nome + e-mail."""
+    if is_premium(request):
+        return redirect(url_for("index"))
+    return render_template("checkout.html", price=PRODUCT_PRICE, product=PRODUCT_NAME)
+
+
+@app.route("/checkout/pay", methods=["POST"])
+def checkout_pay():
+    """Cria cliente + cobrança no Asaas e redireciona para a fatura."""
+    name = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip()
+
+    if not name or not email or "@" not in email:
+        flash("Preencha nome e e-mail válidos.", "error")
+        return redirect(url_for("checkout"))
+
+    asaas_key = os.environ.get("ASAAS_API_KEY", "")
+    if not asaas_key:
+        flash("Serviço de pagamento temporariamente indisponível. Tente novamente mais tarde.", "error")
+        return redirect(url_for("checkout"))
+
+    try:
+        customer = asaas.create_customer(name=name, email=email)
+        payment = asaas.create_payment(
+            customer_id=customer["id"],
+            value=PRODUCT_PRICE,
+            description=PRODUCT_NAME,
+            external_reference=email,
+        )
+    except Exception as e:
+        print(f"[ASAAS] Erro ao criar cobrança: {e}", file=sys.stderr)
+        flash("Erro ao gerar cobrança. Tente novamente em instantes.", "error")
+        return redirect(url_for("checkout"))
+
+    invoice_url = payment.get("invoiceUrl") or payment.get("bankSlipUrl") or ""
+    payment_id = payment.get("id", "")
+
+    if not invoice_url or not payment_id:
+        flash("Erro ao obter link de pagamento. Tente novamente.", "error")
+        return redirect(url_for("checkout"))
+
+    # Redireciona para página de espera antes de ir ao Asaas
+    return redirect(url_for("checkout_pending", payment_id=payment_id, invoice_url=invoice_url))
+
+
+@app.route("/checkout/pending")
+def checkout_pending():
+    """Aguarda confirmação do pagamento com polling automático."""
+    payment_id = request.args.get("payment_id", "")
+    invoice_url = request.args.get("invoice_url", "")
+    if not payment_id:
+        return redirect(url_for("checkout"))
+    return render_template("checkout_pending.html", payment_id=payment_id, invoice_url=invoice_url)
+
+
+@app.route("/api/payment/status")
+def payment_status():
+    """Verifica o status de uma cobrança no Asaas (usado pelo polling do frontend)."""
+    payment_id = request.args.get("id", "").strip()
+    if not payment_id:
+        return jsonify({"confirmed": False, "error": "ID não informado"}), 400
+
+    try:
+        confirmed = asaas.is_payment_confirmed(payment_id)
+    except Exception as e:
+        print(f"[ASAAS] Erro ao verificar pagamento {payment_id}: {e}", file=sys.stderr)
+        return jsonify({"confirmed": False, "error": "Erro ao consultar pagamento"}), 502
+
+    if confirmed:
+        # Busca e-mail via externalReference para emitir o cookie
+        try:
+            payment = asaas.get_payment(payment_id)
+            email = payment.get("externalReference", "")
+        except Exception:
+            email = ""
+
+        token = generate_premium_token(payment_id, email)
+        resp = jsonify({"confirmed": True})
+        resp.set_cookie(
+            PREMIUM_COOKIE,
+            token,
+            max_age=_COOKIE_MAX_AGE,
+            httponly=True,
+            samesite="Lax",
+            secure=not app.debug,
+        )
+        return resp
+
+    return jsonify({"confirmed": False})
+
+
+@app.route("/webhook/asaas", methods=["POST"])
+def webhook_asaas():
+    """
+    Recebe notificações de pagamento do Asaas.
+    O cookie não pode ser emitido aqui (request server-to-server), mas
+    a rota /api/payment/status validará o status atualizado.
+    """
+    # Valida token de autenticação do webhook (configure no painel Asaas)
+    webhook_token = os.environ.get("ASAAS_WEBHOOK_TOKEN", "")
+    if webhook_token:
+        received_token = request.headers.get("asaas-access-token", "")
+        if received_token != webhook_token:
+            return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    event = data.get("event", "")
+    payment = data.get("payment", {})
+    print(f"[ASAAS WEBHOOK] event={event} payment_id={payment.get('id')} status={payment.get('status')}", file=sys.stderr)
+    return jsonify({"received": True}), 200
+
+
+@app.route("/premium/logout")
+def premium_logout():
+    """Remove o cookie premium (logout)."""
+    resp = make_response(redirect(url_for("trial")))
+    resp.delete_cookie(PREMIUM_COOKIE)
+    return resp
 
 
 if __name__ == "__main__":

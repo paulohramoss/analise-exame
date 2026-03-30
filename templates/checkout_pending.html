@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Three Health – Aguardando Pagamento</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f4f8;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.10);
+    max-width: 480px;
+    width: 100%;
+    padding: 2.5rem 2rem;
+    text-align: center;
+  }
+
+  .status-icon {
+    font-size: 3.5rem;
+    margin-bottom: 1rem;
+    display: block;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #1e293b;
+    margin-bottom: .6rem;
+  }
+
+  p {
+    color: #64748b;
+    font-size: .95rem;
+    line-height: 1.55;
+    margin-bottom: 1rem;
+  }
+
+  .invoice-btn {
+    display: inline-block;
+    padding: .8rem 2rem;
+    background: linear-gradient(135deg, #1d4ed8, #2563eb);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: 10px;
+    text-decoration: none;
+    margin-bottom: 1.5rem;
+    transition: opacity .2s;
+  }
+  .invoice-btn:hover { opacity: .9; }
+
+  .divider {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 1.5rem 0;
+  }
+
+  /* Status dinâmico */
+  #status-box {
+    border-radius: 10px;
+    padding: .9rem 1rem;
+    font-size: .9rem;
+    font-weight: 600;
+    margin-bottom: 1.25rem;
+    transition: all .3s;
+  }
+
+  .status-waiting {
+    background: #fefce8;
+    border: 1px solid #fde68a;
+    color: #92400e;
+  }
+
+  .status-confirmed {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    color: #166534;
+  }
+
+  .status-error {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    color: #b91c1c;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #92400e;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    vertical-align: middle;
+    margin-right: .4rem;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .btn-check {
+    width: 100%;
+    padding: .75rem;
+    background: #f1f5f9;
+    color: #1e293b;
+    font-size: .95rem;
+    font-weight: 600;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background .2s;
+    margin-bottom: .75rem;
+  }
+  .btn-check:hover { background: #e2e8f0; }
+  .btn-check:disabled { opacity: .5; cursor: not-allowed; }
+
+  .note {
+    font-size: .8rem;
+    color: #9ca3af;
+    margin-top: .5rem;
+  }
+
+  .back-link {
+    display: block;
+    margin-top: 1.25rem;
+    font-size: .85rem;
+    color: #6b7280;
+    text-decoration: none;
+  }
+  .back-link:hover { color: #374151; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <span class="status-icon" id="main-icon">⏳</span>
+  <h1 id="main-title">Aguardando seu pagamento</h1>
+  <p id="main-desc">
+    Clique no botão abaixo para abrir a fatura e realizar o pagamento via
+    <strong>PIX, Boleto ou Cartão</strong>.
+    Após pagar, clique em <strong>Verificar Pagamento</strong>.
+  </p>
+
+  {% if invoice_url %}
+  <a href="{{ invoice_url }}" target="_blank" rel="noopener" class="invoice-btn" id="invoice-link">
+    🧾 Abrir fatura / Pagar agora
+  </a>
+  {% endif %}
+
+  <hr class="divider">
+
+  <div id="status-box" class="status-waiting">
+    <span class="spinner" id="spinner"></span>
+    <span id="status-text">Verificando pagamento automaticamente…</span>
+  </div>
+
+  <button class="btn-check" id="btn-check" onclick="checkPayment()">
+    ✅ Verificar Pagamento
+  </button>
+
+  <p class="note">
+    O status é verificado automaticamente a cada 5 segundos.<br>
+    Para boleto bancário, a confirmação pode levar até 3 dias úteis.
+  </p>
+
+  <a href="/trial" class="back-link">← Voltar ao teste gratuito</a>
+</div>
+
+<script>
+  const PAYMENT_ID = "{{ payment_id }}";
+  let attempts = 0;
+  let polling = null;
+
+  async function checkPayment() {
+    const btn = document.getElementById('btn-check');
+    const statusBox = document.getElementById('status-box');
+    const statusText = document.getElementById('status-text');
+    const spinner = document.getElementById('spinner');
+
+    btn.disabled = true;
+    btn.textContent = 'Verificando…';
+
+    try {
+      const resp = await fetch(`/api/payment/status?id=${encodeURIComponent(PAYMENT_ID)}`);
+      const data = await resp.json();
+
+      if (data.confirmed) {
+        // Pagamento confirmado → mostra sucesso e redireciona
+        clearInterval(polling);
+        document.getElementById('main-icon').textContent = '🎉';
+        document.getElementById('main-title').textContent = 'Pagamento confirmado!';
+        document.getElementById('main-desc').textContent = 'Seu acesso foi liberado. Redirecionando…';
+        statusBox.className = 'status-confirmed';
+        spinner.style.display = 'none';
+        statusText.textContent = '✅ Pagamento confirmado — acesso liberado!';
+        btn.style.display = 'none';
+        document.getElementById('invoice-link') && (document.getElementById('invoice-link').style.display = 'none');
+        setTimeout(() => { window.location.href = '/'; }, 2000);
+      } else {
+        statusBox.className = 'status-waiting';
+        spinner.style.display = '';
+        statusText.textContent = 'Pagamento ainda não confirmado. Tente novamente após pagar.';
+        btn.disabled = false;
+        btn.textContent = '✅ Verificar Pagamento';
+        attempts++;
+      }
+    } catch (err) {
+      statusBox.className = 'status-error';
+      spinner.style.display = 'none';
+      statusText.textContent = 'Erro ao verificar. Tente novamente.';
+      btn.disabled = false;
+      btn.textContent = '✅ Verificar Pagamento';
+    }
+  }
+
+  // Polling automático a cada 5 segundos
+  polling = setInterval(checkPayment, 5000);
+  // Primeira verificação após 3 segundos
+  setTimeout(checkPayment, 3000);
+</script>
+
+</body>
+</html>
