@@ -378,8 +378,17 @@ def checkout_pay():
             external_reference=email,
         )
     except Exception as e:
-        print(f"[ASAAS] Erro ao criar cobrança: {e}", file=sys.stderr)
-        flash("Erro ao gerar cobrança. Tente novamente em instantes.", "error")
+        err_str = str(e)
+        print(f"[ASAAS] Erro ao criar cobrança: {type(e).__name__}: {err_str}", file=sys.stderr)
+        # Exibe causa específica para facilitar diagnóstico
+        if "401" in err_str or "Unauthorized" in err_str or "unauthorized" in err_str.lower():
+            flash("Chave da API Asaas inválida ou não configurada. Verifique ASAAS_API_KEY no painel do Vercel.", "error")
+        elif "403" in err_str:
+            flash("Sem permissão na API Asaas. Verifique se a chave tem as permissões corretas.", "error")
+        elif "ConnectionError" in err_str or "Timeout" in err_str or "timeout" in err_str.lower():
+            flash("Não foi possível conectar ao Asaas. Tente novamente em instantes.", "error")
+        else:
+            flash(f"Erro ao gerar cobrança: {err_str[:120]}", "error")
         return redirect(url_for("checkout"))
 
     invoice_url = payment.get("invoiceUrl") or payment.get("bankSlipUrl") or ""
