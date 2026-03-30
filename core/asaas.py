@@ -42,8 +42,12 @@ def _raise_for_status(resp: requests.Response) -> None:
 
 
 def create_customer(name: str, email: str, cpf_cnpj: str = "") -> dict:
-    """Cria ou recupera um cliente no Asaas pelo e-mail."""
-    # Tenta buscar cliente existente com o mesmo e-mail
+    """Cria ou recupera um cliente no Asaas pelo e-mail.
+    Se já existir sem CPF/CNPJ, atualiza o registro antes de retornar.
+    """
+    cpf_cnpj = cpf_cnpj.strip()
+
+    # Busca cliente existente pelo e-mail
     resp = requests.get(
         f"{_base_url()}/customers",
         params={"email": email},
@@ -52,13 +56,25 @@ def create_customer(name: str, email: str, cpf_cnpj: str = "") -> dict:
     )
     _raise_for_status(resp)
     data = resp.json()
+
     if data.get("data"):
-        return data["data"][0]
+        customer = data["data"][0]
+        # Se o cliente existente não tem CPF/CNPJ e foi fornecido um, atualiza
+        if cpf_cnpj and not customer.get("cpfCnpj"):
+            upd = requests.put(
+                f"{_base_url()}/customers/{customer['id']}",
+                json={"cpfCnpj": cpf_cnpj},
+                headers=_headers(),
+                timeout=10,
+            )
+            _raise_for_status(upd)
+            return upd.json()
+        return customer
 
     # Cria novo cliente
     payload: dict = {"name": name, "email": email}
     if cpf_cnpj:
-        payload["cpfCnpj"] = cpf_cnpj.strip()
+        payload["cpfCnpj"] = cpf_cnpj
 
     resp = requests.post(
         f"{_base_url()}/customers",

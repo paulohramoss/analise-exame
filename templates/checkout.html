@@ -212,7 +212,7 @@
     <input type="email" id="email" name="email" placeholder="seu@email.com" required autocomplete="email">
 
     <label for="cpf_cnpj">CPF ou CNPJ</label>
-    <input type="text" id="cpf_cnpj" name="cpf_cnpj" placeholder="000.000.000-00 ou 00.000.000/0001-00"
+    <input type="text" id="cpf_cnpj" name="cpf_cnpj" placeholder="000.000.000-00"
            required autocomplete="off" maxlength="18" inputmode="numeric">
 
     <button type="submit" class="btn-pay" id="btn-pay">
@@ -225,6 +225,47 @@
 </div>
 
 <script>
+  // Máscara CPF/CNPJ automática
+  const cpfCnpjInput = document.getElementById('cpf_cnpj');
+
+  function maskCpfCnpj(value) {
+    const digits = value.replace(/\D/g, '').slice(0, 14);
+    if (digits.length <= 11) {
+      // CPF: 000.000.000-00
+      return digits
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    } else {
+      // CNPJ: 00.000.000/0001-00
+      return digits
+        .replace(/(\d{2})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1/$2')
+        .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+    }
+  }
+
+  function updatePlaceholder(digits) {
+    cpfCnpjInput.placeholder = digits.length <= 11
+      ? '000.000.000-00'
+      : '00.000.000/0001-00';
+  }
+
+  cpfCnpjInput.addEventListener('input', function() {
+    const digits = this.value.replace(/\D/g, '');
+    this.value = maskCpfCnpj(this.value);
+    updatePlaceholder(digits);
+  });
+
+  cpfCnpjInput.addEventListener('keydown', function(e) {
+    // Permite backspace apagar máscara corretamente
+    if (e.key === 'Backspace') {
+      const digits = this.value.replace(/\D/g, '');
+      updatePlaceholder(digits);
+    }
+  });
+
   document.getElementById('pay-form').addEventListener('submit', function() {
     const btn = document.getElementById('btn-pay');
     btn.disabled = true;
