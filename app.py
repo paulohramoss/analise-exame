@@ -138,13 +138,11 @@ def save_upload_file(file) -> tuple[Path, str, str] | None:
 
 
 @app.route("/")
-@premium_required
 def index():
     return render_template("index.html")
 
 
 @app.route("/analyze", methods=["POST"])
-@premium_required
 def analyze():
     """Endpoint para receber e analisar o(s) exame(s) médico(s)."""
     api_key = get_api_key()
