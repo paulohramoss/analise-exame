@@ -170,13 +170,6 @@
   .btn-pay:active { transform: translateY(0); }
   .btn-pay:disabled { opacity: .6; cursor: not-allowed; transform: none; }
 
-  .security-note {
-    text-align: center;
-    font-size: .78rem;
-    color: #9ca3af;
-    margin-top: 1rem;
-  }
-
   .flash {
     background: #fef2f2;
     border: 1px solid #fca5a5;
@@ -187,16 +180,65 @@
     margin-bottom: 1.25rem;
   }
 
-  .back-link {
-    display: block;
-    text-align: center;
-    margin-top: 1.25rem;
-    font-size: .85rem;
+  .trust-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    margin-top: 1rem;
     color: #6b7280;
+    font-size: .78rem;
+  }
+
+  .trust-bar svg {
+    flex-shrink: 0;
+    color: #9ca3af;
+  }
+
+  .trust-bar .methods {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin-left: .25rem;
+  }
+
+  .method-badge {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: .7rem;
+    font-weight: 700;
+    color: #374151;
+    letter-spacing: .3px;
+  }
+
+  .footer-links {
+    border-top: 1px solid #f1f5f9;
+    margin-top: 1.25rem;
+    padding-top: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+    align-items: center;
+  }
+
+  .link-recover {
+    font-size: .85rem;
+    color: #1d4ed8;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .link-recover:hover { text-decoration: underline; }
+
+  .link-back {
+    font-size: .8rem;
+    color: #9ca3af;
     text-decoration: none;
   }
 
-  .back-link:hover { color: #374151; }
+  .link-back:hover { color: #6b7280; }
 </style>
 </head>
 <body>
@@ -252,13 +294,26 @@
            required autocomplete="off" maxlength="18" inputmode="numeric">
 
     <button type="submit" class="btn-pay" id="btn-pay">
-      🔒 Ir para o pagamento
+      Ir para o pagamento
     </button>
   </form>
 
-  <p class="security-note">🔐 Pagamento seguro via Asaas · PIX, Boleto ou Cartão</p>
-  <a href="/acesso" class="back-link">Já comprou? Recuperar acesso em outro dispositivo</a>
-  <a href="/trial" class="back-link">← Voltar ao teste gratuito</a>
+  <div class="trust-bar">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    </svg>
+    Pagamento processado por Asaas
+    <div class="methods">
+      <span class="method-badge">PIX</span>
+      <span class="method-badge">Boleto</span>
+      <span class="method-badge">Cartão</span>
+    </div>
+  </div>
+
+  <div class="footer-links">
+    <a href="/acesso" class="link-recover">Já tem acesso? Entrar em outro dispositivo</a>
+    <a href="/trial" class="link-back">Voltar ao teste gratuito</a>
+  </div>
 </div>
 
 <script>
