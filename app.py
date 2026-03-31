@@ -200,6 +200,7 @@ def index():
 
 
 @app.route("/analyze", methods=["POST"])
+@premium_required
 def analyze():
     """Endpoint para receber e analisar o(s) exame(s) médico(s)."""
     g.modo = "premium"
@@ -644,6 +645,51 @@ def webhook_asaas():
         db.atualizar_status_pagamento(payment_id, status, payload=data)
 
     return jsonify({"received": True}), 200
+
+
+@app.route("/acesso")
+def acesso():
+    """Página para recuperar acesso em outro dispositivo usando o e-mail de compra."""
+    if is_premium(request):
+        return redirect(url_for("index"))
+    return render_template("acesso.html")
+
+
+@app.route("/acesso/verificar", methods=["POST"])
+def acesso_verificar():
+    """Verifica se o e-mail tem pagamento confirmado e emite o cookie premium."""
+    email = request.form.get("email", "").strip().lower()
+    if not email or "@" not in email:
+        flash("Informe um e-mail válido.", "error")
+        return redirect(url_for("acesso"))
+
+    payment_id = db.buscar_pagamento_confirmado_por_email(email)
+    if not payment_id:
+        flash("Nenhum pagamento confirmado encontrado para este e-mail.", "error")
+        return redirect(url_for("acesso"))
+
+    token = generate_premium_token(payment_id, email)
+    resp = make_response(redirect(url_for("index")))
+    resp.set_cookie(
+        PREMIUM_COOKIE,
+        token,
+        max_age=_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="Lax",
+        secure=not app.debug,
+    )
+
+    cliente_id = db.buscar_cliente_id_por_email(email)
+    pagamento_db_id = db.buscar_pagamento_id(payment_id)
+    db.salvar_sessao(
+        cliente_id=cliente_id,
+        pagamento_id=pagamento_db_id,
+        ip_address=_get_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    )
+    g.cliente_id = cliente_id
+
+    return resp
 
 
 @app.route("/premium/logout")

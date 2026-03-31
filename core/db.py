@@ -96,6 +96,27 @@ def salvar_pagamento(
         return None
 
 
+def buscar_pagamento_confirmado_por_email(email: str) -> str | None:
+    """Retorna o asaas_payment_id mais recente com status confirmado para o e-mail, ou None."""
+    db = _get_client()
+    if not db or not email:
+        return None
+    try:
+        res = (
+            db.table("pagamentos")
+            .select("asaas_payment_id")
+            .eq("external_reference", email)
+            .in_("status", ["CONFIRMED", "RECEIVED"])
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return res.data[0]["asaas_payment_id"] if res.data else None
+    except Exception as e:
+        print(f"[DB] buscar_pagamento_confirmado_por_email: {e}")
+        return None
+
+
 def buscar_pagamento_id(asaas_payment_id: str) -> str | None:
     """Retorna UUID interno do pagamento pelo ID do Asaas, ou None."""
     db = _get_client()

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Three Health – Recuperar Acesso</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f4f8;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.10);
+    max-width: 440px;
+    width: 100%;
+    padding: 2.5rem 2rem;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-bottom: 1.75rem;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #1e3a5f;
+  }
+
+  .logo svg { width: 32px; height: 32px; }
+
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #1e293b;
+    margin-bottom: .5rem;
+  }
+
+  .subtitle {
+    color: #64748b;
+    font-size: .93rem;
+    margin-bottom: 1.75rem;
+    line-height: 1.5;
+  }
+
+  .info-box {
+    background: #eff6ff;
+    border: 1.5px solid #bfdbfe;
+    border-radius: 10px;
+    padding: .9rem 1.1rem;
+    font-size: .85rem;
+    color: #1d4ed8;
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+  }
+
+  label {
+    display: block;
+    font-size: .85rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: .35rem;
+  }
+
+  input[type="email"] {
+    width: 100%;
+    padding: .7rem 1rem;
+    border: 1.5px solid #d1d5db;
+    border-radius: 8px;
+    font-size: .95rem;
+    color: #1e293b;
+    margin-bottom: 1.25rem;
+    transition: border-color .2s;
+    outline: none;
+  }
+
+  input:focus { border-color: #3b82f6; }
+
+  .btn-acesso {
+    width: 100%;
+    padding: .85rem;
+    background: linear-gradient(135deg, #1d4ed8, #2563eb);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s;
+  }
+
+  .btn-acesso:hover { opacity: .92; transform: translateY(-1px); }
+  .btn-acesso:active { transform: translateY(0); }
+  .btn-acesso:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+
+  .flash-error {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    color: #b91c1c;
+    border-radius: 8px;
+    padding: .75rem 1rem;
+    font-size: .88rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .links {
+    margin-top: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    align-items: center;
+  }
+
+  .links a {
+    font-size: .85rem;
+    color: #6b7280;
+    text-decoration: none;
+  }
+
+  .links a:hover { color: #374151; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="15" stroke="#1d4ed8" stroke-width="2"/>
+      <path d="M16 8v16M8 16h16" stroke="#1d4ed8" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    Three Health
+  </div>
+
+  <h1>Recuperar Acesso</h1>
+  <p class="subtitle">Já comprou o plano e quer acessar em outro dispositivo? Informe o e-mail usado na compra.</p>
+
+  <div class="info-box">
+    Usamos o e-mail para confirmar seu pagamento e liberar o acesso neste dispositivo.
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="flash-error">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST" action="/acesso/verificar" id="acesso-form">
+    <label for="email">E-mail da compra</label>
+    <input type="email" id="email" name="email" placeholder="seu@email.com"
+           required autocomplete="email" autofocus>
+
+    <button type="submit" class="btn-acesso" id="btn-acesso">
+      Verificar e liberar acesso
+    </button>
+  </form>
+
+  <div class="links">
+    <a href="/checkout">Ainda não comprou? Contratar plano</a>
+    <a href="/trial">← Voltar ao teste gratuito</a>
+  </div>
+</div>
+
+<script>
+  document.getElementById('acesso-form').addEventListener('submit', function() {
+    const btn = document.getElementById('btn-acesso');
+    btn.disabled = true;
+    btn.textContent = 'Verificando...';
+  });
+</script>
+
+</body>
+</html>
