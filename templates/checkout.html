@@ -8,357 +8,242 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap">
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  body {
-    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #f0f4f8;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1.5rem;
-  }
+body {
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f0f4f8;
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
 
-  .card {
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 4px 24px rgba(0,0,0,.10);
-    max-width: 520px;
-    width: 100%;
-    padding: 2.5rem 2rem;
-  }
+.card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,.10);
+  max-width: 520px;
+  width: 100%;
+  padding: 2.5rem 2rem;
+}
 
-  .logo {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: flex-start;
-    margin-bottom: 1.75rem;
-    text-decoration: none;
-  }
-  .logo-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .logo-lines {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    padding-bottom: 2px;
-  }
-  .logo-lines span {
-    display: block;
-    height: 5px;
-    border-radius: 3px;
-    background: #22C97A;
-  }
-  .logo-lines span:nth-child(1) { width: 34px; }
-  .logo-lines span:nth-child(2) { width: 27px; }
-  .logo-lines span:nth-child(3) { width: 20px; }
-  .logo-wordmark {
-    font-family: 'Nunito', sans-serif;
-    font-size: 2rem;
-    font-weight: 800;
-    color: #1B72E8;
-    letter-spacing: -0.5px;
-    line-height: 1;
-  }
-  .logo-underline {
-    width: 100%;
-    height: 2px;
-    background: #1B72E8;
-    border-radius: 1px;
-    margin-top: 5px;
-  }
+/* ── Logo ── */
+.logo { display: inline-flex; flex-direction: column; align-items: flex-start; margin-bottom: 1.5rem; text-decoration: none; }
+.logo-row { display: flex; align-items: center; gap: 10px; }
+.logo-lines { display: flex; flex-direction: column; gap: 5px; padding-bottom: 2px; }
+.logo-lines span { display: block; height: 5px; border-radius: 3px; background: #22C97A; }
+.logo-lines span:nth-child(1) { width: 34px; }
+.logo-lines span:nth-child(2) { width: 27px; }
+.logo-lines span:nth-child(3) { width: 20px; }
+.logo-wordmark { font-size: 2rem; font-weight: 800; color: #1B72E8; letter-spacing: -0.5px; line-height: 1; }
+.logo-underline { width: 100%; height: 2px; background: #1B72E8; border-radius: 1px; margin-top: 5px; }
 
-  h1 {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: #1e293b;
-    margin-bottom: .35rem;
-  }
+h1 { font-size: 1.4rem; font-weight: 800; color: #1e293b; margin-bottom: .3rem; }
+.subtitle { color: #64748b; font-size: .9rem; margin-bottom: 1.25rem; }
 
-  .subtitle {
-    color: #64748b;
-    font-size: .95rem;
-    margin-bottom: 1.5rem;
-  }
+/* ── Section label ── */
+.sec-label {
+  font-size: .75rem;
+  font-weight: 800;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: .7px;
+  margin-bottom: .55rem;
+}
 
-  /* ── Plan selector ── */
-  .plans {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: .65rem;
-    margin-bottom: 1.25rem;
-  }
+/* ── Plan selector ── */
+.plans { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .6rem; margin-bottom: 1.25rem; }
+@media (max-width: 420px) { .plans { grid-template-columns: 1fr; } }
 
-  @media (max-width: 480px) {
-    .plans { grid-template-columns: 1fr; }
-  }
+.plan-card {
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: .85rem .65rem;
+  cursor: pointer;
+  position: relative;
+  transition: border-color .18s, box-shadow .18s;
+  text-align: center;
+  user-select: none;
+}
+.plan-card:hover { border-color: #93c5fd; }
+.plan-card.selected { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.14); background: #eff6ff; }
 
-  .plan-card {
-    border: 2px solid #e5e7eb;
-    border-radius: 12px;
-    padding: .9rem .75rem;
-    cursor: pointer;
-    position: relative;
-    transition: border-color .2s, box-shadow .2s;
-    text-align: center;
-    user-select: none;
-  }
+.plan-badge {
+  position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+  background: #16a34a; color: #fff; font-size: .62rem; font-weight: 800;
+  letter-spacing: .5px; text-transform: uppercase; padding: 2px 8px;
+  border-radius: 20px; white-space: nowrap;
+}
+.plan-badge.popular { background: #2563eb; }
 
-  .plan-card:hover {
-    border-color: #93c5fd;
-    box-shadow: 0 2px 8px rgba(59,130,246,.12);
-  }
+.plan-title { font-size: .75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: .3rem; }
+.plan-price { font-size: 1.4rem; font-weight: 800; color: #1e293b; line-height: 1; margin-bottom: .15rem; }
+.plan-price span { font-size: .8rem; font-weight: 600; color: #64748b; }
+.plan-per-month { font-size: .72rem; color: #16a34a; font-weight: 700; }
+.plan-duration { font-size: .68rem; color: #94a3b8; margin-top: .2rem; }
 
-  .plan-card.selected {
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37,99,235,.15);
-    background: #eff6ff;
-  }
+/* ── Payment method selector ── */
+.payment-methods { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .6rem; margin-bottom: 1.25rem; }
 
-  .plan-badge {
-    position: absolute;
-    top: -11px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #16a34a;
-    color: #fff;
-    font-size: .65rem;
-    font-weight: 800;
-    letter-spacing: .5px;
-    text-transform: uppercase;
-    padding: 2px 8px;
-    border-radius: 20px;
-    white-space: nowrap;
-  }
+.pm-card {
+  border: 2px solid #e5e7eb; border-radius: 10px; padding: .7rem .5rem;
+  cursor: pointer; text-align: center;
+  transition: border-color .18s, box-shadow .18s; user-select: none;
+}
+.pm-card:hover { border-color: #93c5fd; }
+.pm-card.selected { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.14); background: #eff6ff; }
+.pm-icon { font-size: 1.4rem; display: block; margin-bottom: .25rem; }
+.pm-name { font-size: .8rem; font-weight: 700; color: #374151; }
+.pm-desc { font-size: .67rem; color: #94a3b8; margin-top: .1rem; }
 
-  .plan-badge.popular {
-    background: #2563eb;
-  }
+/* ── Features ── */
+.features {
+  display: grid; grid-template-columns: 1fr 1fr; gap: .35rem;
+  margin-bottom: 1.25rem; padding: .9rem 1rem;
+  background: #f8fafc; border-radius: 10px;
+}
+.feature { font-size: .8rem; color: #374151; display: flex; align-items: center; gap: .3rem; }
+.feature::before { content: "✅"; font-size: .72rem; }
 
-  .plan-title {
-    font-size: .8rem;
-    font-weight: 700;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: .5px;
-    margin-bottom: .35rem;
-  }
+/* ── Divider ── */
+.divider { border: none; border-top: 1px solid #e5e7eb; margin: 1.1rem 0; }
 
-  .plan-price {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: #1e293b;
-    line-height: 1;
-    margin-bottom: .2rem;
-  }
+/* ── Form fields ── */
+.field-group { margin-bottom: .9rem; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 
-  .plan-price span {
-    font-size: .85rem;
-    font-weight: 600;
-    color: #64748b;
-  }
+label { display: block; font-size: .82rem; font-weight: 700; color: #374151; margin-bottom: .3rem; }
 
-  .plan-per-month {
-    font-size: .75rem;
-    color: #16a34a;
-    font-weight: 700;
-    margin-top: .15rem;
-  }
+input[type="text"], input[type="email"], input[type="tel"], input[type="password"] {
+  width: 100%; padding: .65rem .9rem;
+  border: 1.5px solid #d1d5db; border-radius: 8px;
+  font-size: .92rem; color: #1e293b;
+  transition: border-color .18s; outline: none;
+  font-family: inherit;
+}
+input:focus { border-color: #3b82f6; }
+input::placeholder { color: #9ca3af; }
 
-  .plan-duration {
-    font-size: .72rem;
-    color: #94a3b8;
-    margin-top: .25rem;
-  }
+/* ── Card section ── */
+#card-section {
+  display: none;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+#card-section.visible { display: block; }
 
-  /* ── Payment method selector ── */
-  .payment-label {
-    font-size: .82rem;
-    font-weight: 700;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: .5px;
-    margin-bottom: .6rem;
-  }
+.card-section-title {
+  font-size: .8rem; font-weight: 800; color: #64748b;
+  text-transform: uppercase; letter-spacing: .5px;
+  margin-bottom: .85rem;
+  display: flex; align-items: center; gap: .4rem;
+}
 
-  .payment-methods {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: .6rem;
-    margin-bottom: 1.5rem;
-  }
+/* ── Buttons ── */
+.btn-pay {
+  width: 100%; padding: .85rem;
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  color: #fff; font-size: 1rem; font-weight: 700;
+  border: none; border-radius: 10px; cursor: pointer;
+  transition: opacity .2s, transform .1s; font-family: inherit;
+}
+.btn-pay:hover { opacity: .92; transform: translateY(-1px); }
+.btn-pay:active { transform: translateY(0); }
+.btn-pay:disabled { opacity: .55; cursor: not-allowed; transform: none; }
 
-  .pm-card {
-    border: 2px solid #e5e7eb;
-    border-radius: 10px;
-    padding: .75rem .5rem;
-    cursor: pointer;
-    text-align: center;
-    transition: border-color .2s, box-shadow .2s;
-    user-select: none;
-  }
+/* ── Flash / error ── */
+.flash {
+  background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c;
+  border-radius: 8px; padding: .7rem 1rem; font-size: .85rem;
+  margin-bottom: 1rem;
+}
 
-  .pm-card:hover {
-    border-color: #93c5fd;
-    box-shadow: 0 2px 8px rgba(59,130,246,.12);
-  }
+/* ── Trust bar ── */
+.trust-bar {
+  display: flex; align-items: center; justify-content: center;
+  gap: .4rem; margin-top: .9rem; color: #6b7280; font-size: .75rem;
+}
+.trust-bar svg { flex-shrink: 0; color: #9ca3af; }
+.trust-bar .methods { display: flex; align-items: center; gap: .3rem; margin-left: .2rem; }
+.method-badge {
+  background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 4px;
+  padding: 1px 5px; font-size: .67rem; font-weight: 700; color: #374151;
+}
 
-  .pm-card.selected {
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37,99,235,.15);
-    background: #eff6ff;
-  }
+/* ── Footer links ── */
+.footer-links {
+  border-top: 1px solid #f1f5f9; margin-top: 1.1rem; padding-top: 1rem;
+  display: flex; flex-direction: column; gap: .5rem; align-items: center;
+}
+.link-recover { font-size: .82rem; color: #1d4ed8; text-decoration: none; font-weight: 600; }
+.link-recover:hover { text-decoration: underline; }
+.link-back { font-size: .78rem; color: #9ca3af; text-decoration: none; }
+.link-back:hover { color: #6b7280; }
 
-  .pm-icon {
-    font-size: 1.5rem;
-    display: block;
-    margin-bottom: .3rem;
-  }
+/* ═══════════════════════════════════════════════════════════
+   TELA DE RESULTADO DO PAGAMENTO
+   ═══════════════════════════════════════════════════════════ */
+#result-section { display: none; }
 
-  .pm-name {
-    font-size: .78rem;
-    font-weight: 700;
-    color: #374151;
-  }
+.result-icon { font-size: 3rem; text-align: center; margin-bottom: .75rem; }
+.result-title { font-size: 1.3rem; font-weight: 800; color: #1e293b; text-align: center; margin-bottom: .4rem; }
+.result-subtitle { font-size: .9rem; color: #64748b; text-align: center; margin-bottom: 1.25rem; line-height: 1.5; }
 
-  .pm-desc {
-    font-size: .68rem;
-    color: #94a3b8;
-    margin-top: .15rem;
-  }
+/* PIX */
+.pix-qr-wrap { text-align: center; margin-bottom: 1rem; }
+.pix-qr-wrap img { width: 180px; height: 180px; border-radius: 8px; border: 1px solid #e5e7eb; }
 
-  /* ── Features ── */
-  .features {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: .4rem;
-    margin-bottom: 1.5rem;
-  }
+.copy-box {
+  background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px;
+  padding: .7rem .9rem; margin-bottom: 1rem;
+  display: flex; align-items: center; gap: .6rem;
+}
+.copy-box .copy-text {
+  flex: 1; font-size: .72rem; color: #475569;
+  word-break: break-all; font-family: monospace; line-height: 1.4;
+}
+.btn-copy {
+  flex-shrink: 0; padding: .4rem .75rem;
+  background: #1d4ed8; color: #fff; font-size: .75rem; font-weight: 700;
+  border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  font-family: inherit; transition: opacity .18s;
+}
+.btn-copy:hover { opacity: .85; }
+.btn-copy.copied { background: #16a34a; }
 
-  .feature {
-    font-size: .83rem;
-    color: #374151;
-    display: flex;
-    align-items: center;
-    gap: .35rem;
-  }
+/* Boleto */
+.btn-boleto-pdf {
+  display: block; width: 100%; padding: .75rem;
+  background: #f1f5f9; color: #1e293b; font-size: .9rem; font-weight: 700;
+  border: 1.5px solid #e2e8f0; border-radius: 10px;
+  text-align: center; text-decoration: none; cursor: pointer;
+  margin-bottom: 1rem; font-family: inherit; transition: background .18s;
+}
+.btn-boleto-pdf:hover { background: #e2e8f0; }
 
-  .feature::before { content: "✅"; font-size: .75rem; }
+/* Status polling */
+.status-box {
+  border-radius: 10px; padding: .75rem 1rem;
+  font-size: .85rem; font-weight: 600; margin-bottom: 1rem;
+  display: flex; align-items: center; gap: .5rem;
+}
+.status-waiting { background: #fefce8; border: 1px solid #fde68a; color: #92400e; }
+.status-confirmed { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+.status-error { background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; }
 
-  .divider {
-    border: none;
-    border-top: 1px solid #e5e7eb;
-    margin: 1.25rem 0;
-  }
+.spinner {
+  width: 14px; height: 14px; border: 2px solid currentColor;
+  border-top-color: transparent; border-radius: 50%;
+  animation: spin .7s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-  label {
-    display: block;
-    font-size: .85rem;
-    font-weight: 600;
-    color: #374151;
-    margin-bottom: .35rem;
-  }
-
-  input[type="text"],
-  input[type="email"] {
-    width: 100%;
-    padding: .7rem 1rem;
-    border: 1.5px solid #d1d5db;
-    border-radius: 8px;
-    font-size: .95rem;
-    color: #1e293b;
-    margin-bottom: 1rem;
-    transition: border-color .2s;
-    outline: none;
-  }
-
-  input:focus { border-color: #3b82f6; }
-
-  .btn-pay {
-    width: 100%;
-    padding: .85rem;
-    background: linear-gradient(135deg, #1d4ed8, #2563eb);
-    color: #fff;
-    font-size: 1rem;
-    font-weight: 700;
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: opacity .2s, transform .1s;
-  }
-
-  .btn-pay:hover { opacity: .92; transform: translateY(-1px); }
-  .btn-pay:active { transform: translateY(0); }
-  .btn-pay:disabled { opacity: .6; cursor: not-allowed; transform: none; }
-
-  .flash {
-    background: #fef2f2;
-    border: 1px solid #fca5a5;
-    color: #b91c1c;
-    border-radius: 8px;
-    padding: .75rem 1rem;
-    font-size: .88rem;
-    margin-bottom: 1.25rem;
-  }
-
-  .trust-bar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: .5rem;
-    margin-top: 1rem;
-    color: #6b7280;
-    font-size: .78rem;
-  }
-
-  .trust-bar svg { flex-shrink: 0; color: #9ca3af; }
-
-  .trust-bar .methods {
-    display: flex;
-    align-items: center;
-    gap: .35rem;
-    margin-left: .25rem;
-  }
-
-  .method-badge {
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
-    border-radius: 4px;
-    padding: 2px 6px;
-    font-size: .7rem;
-    font-weight: 700;
-    color: #374151;
-    letter-spacing: .3px;
-  }
-
-  .footer-links {
-    border-top: 1px solid #f1f5f9;
-    margin-top: 1.25rem;
-    padding-top: 1.1rem;
-    display: flex;
-    flex-direction: column;
-    gap: .55rem;
-    align-items: center;
-  }
-
-  .link-recover {
-    font-size: .85rem;
-    color: #1d4ed8;
-    text-decoration: none;
-    font-weight: 600;
-  }
-  .link-recover:hover { text-decoration: underline; }
-
-  .link-back {
-    font-size: .8rem;
-    color: #9ca3af;
-    text-decoration: none;
-  }
-  .link-back:hover { color: #6b7280; }
+.note-small { font-size: .75rem; color: #94a3b8; text-align: center; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -366,188 +251,435 @@
 <div class="card">
   <div class="logo">
     <div class="logo-row">
-      <div class="logo-lines">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
+      <div class="logo-lines"><span></span><span></span><span></span></div>
       <span class="logo-wordmark">health</span>
     </div>
     <div class="logo-underline"></div>
   </div>
 
-  <h1>Escolha seu Plano</h1>
-  <p class="subtitle">Acesso ilimitado à plataforma de análise de exames por IA.</p>
+  <!-- ═══════════ TELA DE CHECKOUT ═══════════ -->
+  <div id="checkout-section">
 
-  <!-- Plan selector -->
-  <div class="plans" id="plan-selector">
+    <h1>Escolha seu Plano</h1>
+    <p class="subtitle">Acesso ilimitado à plataforma de análise de exames por IA.</p>
 
-    <div class="plan-card" data-plan="mensal" onclick="selectPlan('mensal')">
-      <div class="plan-title">Mensal</div>
-      <div class="plan-price">R$&nbsp;60<span>/mês</span></div>
-      <div class="plan-duration">Acesso por 30 dias</div>
+    <!-- Planos -->
+    <p class="sec-label">Plano</p>
+    <div class="plans" id="plan-selector">
+      <div class="plan-card" data-plan="mensal" onclick="selectPlan('mensal')">
+        <div class="plan-title">Mensal</div>
+        <div class="plan-price">R$&nbsp;60<span>/mês</span></div>
+        <div class="plan-duration">30 dias de acesso</div>
+      </div>
+      <div class="plan-card" data-plan="semestral" onclick="selectPlan('semestral')">
+        <div class="plan-badge popular">Mais popular</div>
+        <div class="plan-title">Semestral</div>
+        <div class="plan-price">R$&nbsp;300<span>/6 meses</span></div>
+        <div class="plan-per-month">R$ 50/mês</div>
+        <div class="plan-duration">6 meses de acesso</div>
+      </div>
+      <div class="plan-card" data-plan="anual" onclick="selectPlan('anual')">
+        <div class="plan-badge">Melhor valor</div>
+        <div class="plan-title">Anual</div>
+        <div class="plan-price">R$&nbsp;418<span>/ano</span></div>
+        <div class="plan-per-month">R$ 34,90/mês</div>
+        <div class="plan-duration">12 meses de acesso</div>
+      </div>
     </div>
 
-    <div class="plan-card" data-plan="semestral" onclick="selectPlan('semestral')">
-      <div class="plan-badge popular">Mais popular</div>
-      <div class="plan-title">Semestral</div>
-      <div class="plan-price">R$&nbsp;300<span>/6 meses</span></div>
-      <div class="plan-per-month">R$ 50/mês</div>
-      <div class="plan-duration">Acesso por 6 meses</div>
+    <!-- Forma de pagamento -->
+    <p class="sec-label">Forma de pagamento</p>
+    <div class="payment-methods" id="payment-selector">
+      <div class="pm-card" data-billing="PIX" onclick="selectBilling('PIX')">
+        <span class="pm-icon">⚡</span>
+        <div class="pm-name">PIX</div>
+        <div class="pm-desc">Aprovação imediata</div>
+      </div>
+      <div class="pm-card" data-billing="BOLETO" onclick="selectBilling('BOLETO')">
+        <span class="pm-icon">🏦</span>
+        <div class="pm-name">Boleto</div>
+        <div class="pm-desc">Até 3 dias úteis</div>
+      </div>
+      <div class="pm-card" data-billing="CREDIT_CARD" onclick="selectBilling('CREDIT_CARD')">
+        <span class="pm-icon">💳</span>
+        <div class="pm-name">Cartão</div>
+        <div class="pm-desc">Crédito ou débito</div>
+      </div>
     </div>
 
-    <div class="plan-card" data-plan="anual" onclick="selectPlan('anual')">
-      <div class="plan-badge">Melhor valor</div>
-      <div class="plan-title">Anual</div>
-      <div class="plan-price">R$&nbsp;418<span>/ano</span></div>
-      <div class="plan-per-month">R$ 34,90/mês</div>
-      <div class="plan-duration">Acesso por 12 meses</div>
+    <!-- O que está incluso -->
+    <div class="features">
+      <span class="feature">Análises ilimitadas</span>
+      <span class="feature">Múltiplas imagens</span>
+      <span class="feature">RM · Raio-X · TC</span>
+      <span class="feature">Laudos estruturados</span>
+      <span class="feature">Download em PDF</span>
+      <span class="feature">Referências anatômicas</span>
     </div>
 
-  </div>
+    <hr class="divider">
 
-  <!-- Payment method selector -->
-  <p class="payment-label">Forma de pagamento</p>
-  <div class="payment-methods" id="payment-selector">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="flash">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
 
-    <div class="pm-card" data-billing="PIX" onclick="selectBilling('PIX')">
-      <span class="pm-icon">⚡</span>
-      <div class="pm-name">PIX</div>
-      <div class="pm-desc">Aprovação imediata</div>
+    <div id="form-error" class="flash" style="display:none"></div>
+
+    <form id="pay-form" autocomplete="on">
+      <input type="hidden" name="plan" id="plan-input" value="{{ default_plan }}">
+      <input type="hidden" name="billing_type" id="billing-input" value="PIX">
+
+      <!-- Dados pessoais -->
+      <p class="sec-label">Seus dados</p>
+
+      <div class="field-group">
+        <label for="name">Nome completo</label>
+        <input type="text" id="name" name="name" placeholder="Seu nome completo" required autocomplete="name">
+      </div>
+
+      <div class="field-group">
+        <label for="email">E-mail</label>
+        <input type="email" id="email" name="email" placeholder="seu@email.com" required autocomplete="email">
+      </div>
+
+      <div class="field-group">
+        <label for="cpf_cnpj">CPF ou CNPJ</label>
+        <input type="text" id="cpf_cnpj" name="cpf_cnpj" placeholder="000.000.000-00"
+               required autocomplete="off" maxlength="18" inputmode="numeric">
+      </div>
+
+      <!-- Dados do cartão (visível só quando Cartão for selecionado) -->
+      <div id="card-section">
+        <div class="card-section-title">💳 Dados do cartão</div>
+
+        <div class="field-group">
+          <label for="card_number">Número do cartão</label>
+          <input type="text" id="card_number" name="card_number"
+                 placeholder="0000 0000 0000 0000" maxlength="19" inputmode="numeric" autocomplete="cc-number">
+        </div>
+
+        <div class="field-group">
+          <label for="card_holder">Nome no cartão</label>
+          <input type="text" id="card_holder" name="card_holder"
+                 placeholder="Como está no cartão" autocomplete="cc-name" style="text-transform:uppercase">
+        </div>
+
+        <div class="field-group field-row">
+          <div>
+            <label for="card_expiry">Validade (MM/AA)</label>
+            <input type="text" id="card_expiry" name="card_expiry"
+                   placeholder="MM/AA" maxlength="5" inputmode="numeric" autocomplete="cc-exp">
+          </div>
+          <div>
+            <label for="card_cvv">CVV</label>
+            <input type="text" id="card_cvv" name="card_cvv"
+                   placeholder="123" maxlength="4" inputmode="numeric" autocomplete="cc-csc">
+          </div>
+        </div>
+
+        <p class="sec-label" style="margin-top:.25rem">Endereço de cobrança</p>
+
+        <div class="field-group field-row">
+          <div>
+            <label for="card_postal_code">CEP</label>
+            <input type="text" id="card_postal_code" name="card_postal_code"
+                   placeholder="00000-000" maxlength="9" inputmode="numeric" autocomplete="postal-code">
+          </div>
+          <div>
+            <label for="card_address_number">Número</label>
+            <input type="text" id="card_address_number" name="card_address_number"
+                   placeholder="Ex: 100" autocomplete="address-line2">
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="card_phone">Telefone do titular</label>
+          <input type="tel" id="card_phone" name="card_phone"
+                 placeholder="(11) 99999-9999" maxlength="15" autocomplete="tel">
+        </div>
+      </div>
+
+      <button type="submit" class="btn-pay" id="btn-pay">
+        Contratar Plano
+      </button>
+    </form>
+
+    <div class="trust-bar">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      Pagamento seguro via Asaas
+      <div class="methods">
+        <span class="method-badge">PIX</span>
+        <span class="method-badge">Boleto</span>
+        <span class="method-badge">Cartão</span>
+      </div>
     </div>
 
-    <div class="pm-card" data-billing="BOLETO" onclick="selectBilling('BOLETO')">
-      <span class="pm-icon">🏦</span>
-      <div class="pm-name">Boleto</div>
-      <div class="pm-desc">Até 3 dias úteis</div>
+    <div class="footer-links">
+      <a href="/acesso" class="link-recover">Já tem acesso? Entrar em outro dispositivo</a>
+      <a href="/trial" class="link-back">Voltar ao teste gratuito</a>
+    </div>
+  </div><!-- /#checkout-section -->
+
+
+  <!-- ═══════════ TELA DE RESULTADO ═══════════ -->
+  <div id="result-section">
+
+    <!-- PIX -->
+    <div id="pix-result" style="display:none">
+      <div class="result-icon">⚡</div>
+      <div class="result-title">Pague via PIX</div>
+      <div class="result-subtitle">Escaneie o QR code ou copie o código abaixo.<br>A confirmação é <strong>imediata</strong> após o pagamento.</div>
+
+      <div class="pix-qr-wrap">
+        <img id="pix-qr-img" src="" alt="QR Code PIX">
+      </div>
+
+      <p class="sec-label" style="margin-bottom:.4rem">Código PIX copia e cola</p>
+      <div class="copy-box">
+        <span class="copy-text" id="pix-code"></span>
+        <button class="btn-copy" id="btn-copy-pix" onclick="copyText('pix-code','btn-copy-pix')">Copiar</button>
+      </div>
+
+      <div class="status-box status-waiting" id="pix-status">
+        <div class="spinner"></div>
+        <span>Aguardando confirmação do pagamento…</span>
+      </div>
+      <p class="note-small">Após pagar, a confirmação aparece automaticamente aqui.</p>
     </div>
 
-    <div class="pm-card" data-billing="CREDIT_CARD" onclick="selectBilling('CREDIT_CARD')">
-      <span class="pm-icon">💳</span>
-      <div class="pm-name">Cartão</div>
-      <div class="pm-desc">Crédito ou débito</div>
+    <!-- Boleto -->
+    <div id="boleto-result" style="display:none">
+      <div class="result-icon">🏦</div>
+      <div class="result-title">Boleto gerado!</div>
+      <div class="result-subtitle">Copie a linha digitável ou abra o boleto para imprimir/pagar pelo app do banco.</div>
+
+      <p class="sec-label" style="margin-bottom:.4rem">Linha digitável</p>
+      <div class="copy-box">
+        <span class="copy-text" id="boleto-barcode"></span>
+        <button class="btn-copy" id="btn-copy-boleto" onclick="copyText('boleto-barcode','btn-copy-boleto')">Copiar</button>
+      </div>
+
+      <a id="boleto-pdf-link" href="#" target="_blank" rel="noopener" class="btn-boleto-pdf">
+        🖨️ Abrir / Imprimir boleto
+      </a>
+
+      <div class="status-box status-waiting" id="boleto-status">
+        <div class="spinner"></div>
+        <span>Aguardando confirmação do pagamento…</span>
+      </div>
+      <p class="note-small">A confirmação do boleto pode levar até 3 dias úteis após o pagamento.</p>
     </div>
 
-  </div>
-
-  <div class="features">
-    <span class="feature">Análises ilimitadas</span>
-    <span class="feature">Múltiplas imagens</span>
-    <span class="feature">RM · Raio-X · TC</span>
-    <span class="feature">Laudos estruturados</span>
-    <span class="feature">Download em PDF</span>
-    <span class="feature">Referências anatômicas</span>
-    <span class="feature">Suporte especializado</span>
-  </div>
-
-  <hr class="divider">
-
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for cat, msg in messages %}
-      <div class="flash">{{ msg }}</div>
-    {% endfor %}
-  {% endwith %}
-
-  <form method="POST" action="/checkout/pay" id="pay-form">
-    <input type="hidden" name="plan" id="plan-input" value="{{ default_plan }}">
-    <input type="hidden" name="billing_type" id="billing-input" value="PIX">
-
-    <label for="name">Nome completo</label>
-    <input type="text" id="name" name="name" placeholder="Seu nome" required autocomplete="name">
-
-    <label for="email">E-mail</label>
-    <input type="email" id="email" name="email" placeholder="seu@email.com" required autocomplete="email">
-
-    <label for="cpf_cnpj">CPF ou CNPJ</label>
-    <input type="text" id="cpf_cnpj" name="cpf_cnpj" placeholder="000.000.000-00"
-           required autocomplete="off" maxlength="18" inputmode="numeric">
-
-    <button type="submit" class="btn-pay" id="btn-pay">
-      Ir para o pagamento
-    </button>
-  </form>
-
-  <div class="trust-bar">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-    </svg>
-    Pagamento processado por Asaas
-    <div class="methods">
-      <span class="method-badge">PIX</span>
-      <span class="method-badge">Boleto</span>
-      <span class="method-badge">Cartão</span>
+    <!-- Cartão: aguardando -->
+    <div id="card-result" style="display:none">
+      <div class="result-icon" id="card-icon">⏳</div>
+      <div class="result-title" id="card-title">Processando pagamento…</div>
+      <div class="result-subtitle" id="card-subtitle">Aguarde enquanto confirmamos seu cartão.</div>
     </div>
-  </div>
 
-  <div class="footer-links">
-    <a href="/acesso" class="link-recover">Já tem acesso? Entrar em outro dispositivo</a>
-    <a href="/trial" class="link-back">Voltar ao teste gratuito</a>
-  </div>
-</div>
+  </div><!-- /#result-section -->
+
+</div><!-- /.card -->
 
 <script>
-  // ── Plan selection ──
-  function selectPlan(key) {
-    document.querySelectorAll('.plan-card').forEach(function(card) {
-      card.classList.toggle('selected', card.dataset.plan === key);
-    });
-    document.getElementById('plan-input').value = key;
-  }
+// ── Estado ──────────────────────────────────────────────────────────────────
+let selectedPlan    = '{{ default_plan }}';
+let selectedBilling = 'PIX';
+let pollingTimer    = null;
 
-  // ── Billing type selection ──
-  function selectBilling(key) {
-    document.querySelectorAll('.pm-card').forEach(function(card) {
-      card.classList.toggle('selected', card.dataset.billing === key);
-    });
-    document.getElementById('billing-input').value = key;
-  }
+// ── Seletores de plano e forma de pagamento ──────────────────────────────────
+function selectPlan(key) {
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.toggle('selected', c.dataset.plan === key));
+  document.getElementById('plan-input').value = key;
+  selectedPlan = key;
+}
 
-  // Select defaults on load
-  selectPlan('{{ default_plan }}');
-  selectBilling('PIX');
+function selectBilling(key) {
+  document.querySelectorAll('.pm-card').forEach(c => c.classList.toggle('selected', c.dataset.billing === key));
+  document.getElementById('billing-input').value = key;
+  selectedBilling = key;
+  document.getElementById('card-section').classList.toggle('visible', key === 'CREDIT_CARD');
+}
 
-  // ── CPF/CNPJ mask ──
-  const cpfCnpjInput = document.getElementById('cpf_cnpj');
+selectPlan('{{ default_plan }}');
+selectBilling('PIX');
 
-  function maskCpfCnpj(value) {
-    const digits = value.replace(/\D/g, '').slice(0, 14);
-    if (digits.length <= 11) {
-      return digits
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-    } else {
-      return digits
-        .replace(/(\d{2})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d)/, '$1.$2')
-        .replace(/(\d{3})(\d)/, '$1/$2')
-        .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+// ── Máscaras ────────────────────────────────────────────────────────────────
+function maskCpfCnpj(v) {
+  const d = v.replace(/\D/g,'').slice(0,14);
+  if (d.length <= 11)
+    return d.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2');
+  return d.replace(/(\d{2})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2')
+           .replace(/(\d{3})(\d)/,'$1/$2').replace(/(\d{4})(\d{1,2})$/,'$1-$2');
+}
+
+const cpfEl = document.getElementById('cpf_cnpj');
+cpfEl.addEventListener('input', function() {
+  const pos = this.selectionStart;
+  this.value = maskCpfCnpj(this.value);
+  this.placeholder = this.value.replace(/\D/g,'').length <= 11 ? '000.000.000-00' : '00.000.000/0001-00';
+});
+
+const cardNumEl = document.getElementById('card_number');
+cardNumEl.addEventListener('input', function() {
+  let d = this.value.replace(/\D/g,'').slice(0,16);
+  this.value = d.replace(/(\d{4})(?=\d)/g,'$1 ');
+});
+
+const cardHolderEl = document.getElementById('card_holder');
+cardHolderEl.addEventListener('input', function() { this.value = this.value.toUpperCase(); });
+
+// Auto-fill holder name from name field
+document.getElementById('name').addEventListener('blur', function() {
+  if (!cardHolderEl.value) cardHolderEl.value = this.value.toUpperCase();
+});
+
+const expiryEl = document.getElementById('card_expiry');
+expiryEl.addEventListener('input', function() {
+  let d = this.value.replace(/\D/g,'').slice(0,4);
+  if (d.length > 2) d = d.slice(0,2) + '/' + d.slice(2);
+  this.value = d;
+});
+
+const cepEl = document.getElementById('card_postal_code');
+cepEl.addEventListener('input', function() {
+  let d = this.value.replace(/\D/g,'').slice(0,8);
+  if (d.length > 5) d = d.slice(0,5) + '-' + d.slice(5);
+  this.value = d;
+});
+
+const phoneEl = document.getElementById('card_phone');
+phoneEl.addEventListener('input', function() {
+  let d = this.value.replace(/\D/g,'').slice(0,11);
+  if (d.length > 6) d = '(' + d.slice(0,2) + ') ' + d.slice(2,7) + '-' + d.slice(7);
+  else if (d.length > 2) d = '(' + d.slice(0,2) + ') ' + d.slice(2);
+  this.value = d;
+});
+
+// ── Submissão via AJAX ───────────────────────────────────────────────────────
+document.getElementById('pay-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  hideError();
+
+  const btn = document.getElementById('btn-pay');
+  btn.disabled = true;
+  btn.textContent = 'Processando…';
+
+  const formData = new FormData(this);
+
+  try {
+    const resp = await fetch('/checkout/pay', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (!data.success) {
+      showError(data.error || 'Erro ao processar pagamento. Tente novamente.');
+      btn.disabled = false;
+      btn.textContent = 'Contratar Plano';
+      return;
     }
-  }
 
-  function updatePlaceholder(digits) {
-    cpfCnpjInput.placeholder = digits.length <= 11
-      ? '000.000.000-00'
-      : '00.000.000/0001-00';
-  }
+    // Oculta checkout, mostra resultado
+    document.getElementById('checkout-section').style.display = 'none';
+    document.getElementById('result-section').style.display = 'block';
 
-  cpfCnpjInput.addEventListener('input', function() {
-    const digits = this.value.replace(/\D/g, '');
-    this.value = maskCpfCnpj(this.value);
-    updatePlaceholder(digits);
-  });
-
-  cpfCnpjInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Backspace') {
-      updatePlaceholder(this.value.replace(/\D/g, ''));
+    if (data.billing_type === 'PIX') {
+      showPixResult(data);
+    } else if (data.billing_type === 'BOLETO') {
+      showBoletoResult(data);
+    } else if (data.billing_type === 'CREDIT_CARD') {
+      showCardResult(data);
     }
-  });
 
-  document.getElementById('pay-form').addEventListener('submit', function() {
-    const btn = document.getElementById('btn-pay');
-    btn.disabled = true;
-    btn.textContent = 'Aguarde...';
+  } catch (err) {
+    showError('Erro de conexão. Verifique sua internet e tente novamente.');
+    btn.disabled = false;
+    btn.textContent = 'Contratar Plano';
+  }
+});
+
+// ── Exibição de resultados ───────────────────────────────────────────────────
+function showPixResult(data) {
+  document.getElementById('pix-result').style.display = 'block';
+  if (data.pix_qr_image) {
+    document.getElementById('pix-qr-img').src = 'data:image/png;base64,' + data.pix_qr_image;
+  }
+  document.getElementById('pix-code').textContent = data.pix_copy_paste || '';
+  startPolling(data.payment_id, 'pix-status');
+}
+
+function showBoletoResult(data) {
+  document.getElementById('boleto-result').style.display = 'block';
+  document.getElementById('boleto-barcode').textContent = data.boleto_barcode || '';
+  const link = document.getElementById('boleto-pdf-link');
+  if (data.boleto_url) { link.href = data.boleto_url; } else { link.style.display = 'none'; }
+  startPolling(data.payment_id, 'boleto-status');
+}
+
+function showCardResult(data) {
+  document.getElementById('card-result').style.display = 'block';
+  if (data.confirmed) {
+    document.getElementById('card-icon').textContent = '🎉';
+    document.getElementById('card-title').textContent = 'Pagamento aprovado!';
+    document.getElementById('card-subtitle').textContent = 'Seu acesso foi liberado. Redirecionando…';
+    setTimeout(() => { window.location.href = '/'; }, 2000);
+  } else {
+    document.getElementById('card-icon').textContent = '❌';
+    document.getElementById('card-title').textContent = 'Pagamento não aprovado';
+    document.getElementById('card-subtitle').innerHTML =
+      'Verifique os dados do cartão e tente novamente.<br>' +
+      '<a href="/checkout" style="color:#1d4ed8;font-weight:700">← Voltar ao checkout</a>';
+  }
+}
+
+// ── Polling de confirmação ───────────────────────────────────────────────────
+function startPolling(paymentId, statusBoxId) {
+  pollingTimer = setInterval(async () => {
+    try {
+      const resp = await fetch('/api/payment/status?id=' + encodeURIComponent(paymentId));
+      const data = await resp.json();
+      if (data.confirmed) {
+        clearInterval(pollingTimer);
+        const box = document.getElementById(statusBoxId);
+        box.className = 'status-box status-confirmed';
+        box.innerHTML = '✅ Pagamento confirmado! Redirecionando…';
+        setTimeout(() => { window.location.href = '/'; }, 2000);
+      }
+    } catch (e) { /* ignora erros de polling */ }
+  }, 5000);
+}
+
+// ── Copiar texto ─────────────────────────────────────────────────────────────
+function copyText(textElId, btnId) {
+  const text = document.getElementById(textElId).textContent.trim();
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById(btnId);
+    btn.textContent = 'Copiado!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copiar'; btn.classList.remove('copied'); }, 2500);
+  }).catch(() => {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
   });
+}
+
+// ── Erro inline ──────────────────────────────────────────────────────────────
+function showError(msg) {
+  const el = document.getElementById('form-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function hideError() {
+  document.getElementById('form-error').style.display = 'none';
+}
 </script>
 
 </body>
