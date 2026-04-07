@@ -86,18 +86,29 @@ def create_customer(name: str, email: str, cpf_cnpj: str = "") -> dict:
     return resp.json()
 
 
-def create_payment(customer_id: str, value: float, description: str, external_reference: str = "") -> dict:
+BILLING_TYPES = {"PIX", "BOLETO", "CREDIT_CARD", "UNDEFINED"}
+
+
+def create_payment(
+    customer_id: str,
+    value: float,
+    description: str,
+    external_reference: str = "",
+    billing_type: str = "UNDEFINED",
+) -> dict:
     """
     Cria uma cobrança para o cliente.
-    billingType UNDEFINED permite que o cliente escolha PIX, boleto ou cartão.
+    billing_type: PIX | BOLETO | CREDIT_CARD | UNDEFINED (cliente escolhe no Asaas).
     Retorna o objeto de pagamento do Asaas (contém invoiceUrl).
     """
+    if billing_type not in BILLING_TYPES:
+        billing_type = "UNDEFINED"
     due_date = (date.today() + timedelta(days=3)).isoformat()
     resp = requests.post(
         f"{_base_url()}/payments",
         json={
             "customer": customer_id,
-            "billingType": "UNDEFINED",
+            "billingType": billing_type,
             "value": value,
             "dueDate": due_date,
             "description": description,
