@@ -1,76 +1,106 @@
-# MedAI Analyzer — Analisador de Exames Médicos com IA
+# MedAI Analyzer
 
-Aplicação web que utiliza a **API do Google Gemini** para analisar imagens de exames médicos (Ressonância Magnética, Raio-X, Tomografia, etc.), comparando com imagens de referência normais e gerando um laudo estruturado.
+> Analisador inteligente de exames médicos por imagem, com geração automatizada de laudos estruturados via Google Gemini.
 
-> **Aviso:** Esta ferramenta é um auxiliar para profissionais de saúde e **não substitui** o diagnóstico de um médico especialista.
+---
+
+## Visão Geral
+
+O **MedAI Analyzer** é uma aplicação web que utiliza a API multimodal do **Google Gemini** para analisar imagens de exames médicos (Ressonância Magnética, Raio-X, Tomografia, entre outros). O sistema detecta automaticamente o tipo de exame, busca imagens de referência normais para comparação e gera um laudo estruturado com achados clínicos, hipóteses diagnósticas e recomendações.
+
+> **Aviso clínico:** Esta ferramenta destina-se exclusivamente ao uso como auxiliar por profissionais de saúde habilitados. **Não substitui** o diagnóstico médico especializado.
+
+---
 
 ## Funcionalidades
 
-- Upload de imagens de exames (PNG, JPG, JPEG, WEBP)
-- Detecção automática do tipo de exame
-- Busca de imagens de referência normais para comparação
-- Análise comparativa via Google Gemini (modelo multimodal)
-- Laudo estruturado com achados, hipóteses diagnósticas e recomendações
-- Interface web responsiva
-- API REST para integração programática
+- Upload de imagens nos formatos PNG, JPG, JPEG e WEBP
+- Detecção automática do tipo de exame a partir da descrição
+- Busca de imagens de referência normais (Wikimedia Commons) para análise comparativa
+- Geração de laudo estruturado via Google Gemini (modelo multimodal)
+- Interface web responsiva, sem dependências de frameworks externos
+- API REST para integração programática com outros sistemas
+
+---
 
 ## Estrutura do Projeto
 
 ```
 analise-exame/
-├── app.py                    # Aplicação Flask principal
+├── app.py                    # Aplicação Flask — rotas e ponto de entrada
 ├── requirements.txt          # Dependências Python
-├── .env.example             # Template de variáveis de ambiente
+├── .env.example              # Template de variáveis de ambiente
 ├── core/
-│   ├── analyzer.py          # Lógica de análise com Gemini
-│   └── reference_images.py  # Gerenciamento de imagens de referência
+│   ├── analyzer.py           # Lógica de análise com a API do Gemini
+│   └── reference_images.py   # Busca e gerenciamento de imagens de referência
 ├── templates/
-│   ├── index.html           # Página de upload
-│   └── result.html          # Página com o laudo
+│   ├── index.html            # Página de upload de exame
+│   └── result.html           # Página de exibição do laudo
 └── static/
-    └── style.css            # Estilos CSS
+    └── style.css             # Estilos da interface
 ```
 
-## Como Usar
+---
 
-### 1. Configurar o ambiente
+## Instalação e Execução
+
+### Pré-requisitos
+
+- Python 3.9+
+- Chave de API do Google Gemini — obtenha em [aistudio.google.com](https://aistudio.google.com/app/apikey)
+
+### 1. Clonar o repositório
 
 ```bash
-# Clonar o repositório
 git clone <url-do-repositorio>
 cd analise-exame
+```
 
-# Criar e ativar ambiente virtual
+### 2. Criar e ativar o ambiente virtual
+
+```bash
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
 
-# Instalar dependências
+# Linux / macOS
+source venv/bin/activate
+
+# Windows
+venv\Scripts\activate
+```
+
+### 3. Instalar dependências
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configurar a API do Gemini
+### 4. Configurar variáveis de ambiente
 
 ```bash
-# Copiar o arquivo de exemplo
 cp .env.example .env
+```
 
-# Editar .env e adicionar sua chave
-# Obtenha sua chave em: https://aistudio.google.com/app/apikey
+Edite o arquivo `.env` e defina sua chave de API:
+
+```env
 GEMINI_API_KEY=sua_chave_aqui
 ```
 
-### 3. Executar a aplicação
+### 5. Iniciar a aplicação
 
 ```bash
 python app.py
 ```
 
-Acesse: `http://localhost:5000`
+Acesse a interface em: `http://localhost:5000`
+
+---
 
 ## API REST
 
-Para integração programática:
+A aplicação expõe um endpoint para integração programática.
+
+**Endpoint:** `POST /api/analyze`
 
 ```bash
 curl -X POST http://localhost:5000/api/analyze \
@@ -79,31 +109,43 @@ curl -X POST http://localhost:5000/api/analyze \
   -F "description=Ressonância magnética do joelho direito"
 ```
 
-**Resposta:**
+**Resposta de exemplo:**
 
 ```json
 {
   "success": true,
   "exam_type": "ressonancia_joelho",
-  "analysis": "## 1. IDENTIFICAÇÃO DO EXAME...",
+  "analysis": "## 1. IDENTIFICAÇÃO DO EXAME\n...",
   "references_used": 2,
-  "model_used": "GEMINI_MODEL=gemini-2.5-flash"
+  "model_used": "gemini-2.5-flash"
 }
 ```
 
+---
+
 ## Tipos de Exame Suportados
 
-| Tipo                 | Palavras-chave detectadas        |
-| -------------------- | -------------------------------- |
-| Ressonância Cerebral | cerebro, cranio, brain, mri head |
-| Ressonância Joelho   | joelho, knee, tibial, femoral    |
-| Raio-X Tórax         | torax, pulm, chest, xray         |
-| Ressonância Coluna   | coluna, lombar, cervical, spine  |
-| Tomografia Crânio    | tomografia, ct scan, tac         |
+| Tipo de Exame         | Palavras-chave detectadas             |
+|-----------------------|---------------------------------------|
+| Ressonância Cerebral  | `cerebro`, `cranio`, `brain`, `mri head` |
+| Ressonância Joelho    | `joelho`, `knee`, `tibial`, `femoral` |
+| Raio-X Tórax          | `torax`, `pulm`, `chest`, `xray`      |
+| Ressonância Coluna    | `coluna`, `lombar`, `cervical`, `spine` |
+| Tomografia Crânio     | `tomografia`, `ct scan`, `tac`        |
 
-## Tecnologias
+---
 
-- **Backend:** Python, Flask
-- **IA:** GEMINI_MODEL=gemini-2.5-flash
-- **Imagens de referência:** Wikipedia Commons (domínio público)
-- **Frontend:** HTML5, CSS3 (sem frameworks externos)
+## Stack Tecnológica
+
+| Camada     | Tecnologia                              |
+|------------|-----------------------------------------|
+| Backend    | Python 3, Flask                         |
+| IA         | Google Gemini 2.5 Flash (multimodal)    |
+| Referências | Wikimedia Commons (domínio público)    |
+| Frontend   | HTML5, CSS3 (sem frameworks externos)   |
+
+---
+
+## Licença
+
+Distribuído sob a licença MIT. Consulte o arquivo `LICENSE` para mais informações.
