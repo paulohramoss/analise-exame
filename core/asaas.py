@@ -95,25 +95,55 @@ def create_payment(
     description: str,
     external_reference: str = "",
     billing_type: str = "UNDEFINED",
+    credit_card: dict | None = None,
+    credit_card_holder_info: dict | None = None,
 ) -> dict:
     """
     Cria uma cobrança para o cliente.
-    billing_type: PIX | BOLETO | CREDIT_CARD | UNDEFINED (cliente escolhe no Asaas).
-    Retorna o objeto de pagamento do Asaas (contém invoiceUrl).
+    billing_type: PIX | BOLETO | CREDIT_CARD | UNDEFINED.
+    Para CREDIT_CARD, passe credit_card e credit_card_holder_info.
+    Retorna o objeto de pagamento do Asaas.
     """
     if billing_type not in BILLING_TYPES:
         billing_type = "UNDEFINED"
     due_date = (date.today() + timedelta(days=3)).isoformat()
+    payload: dict = {
+        "customer": customer_id,
+        "billingType": billing_type,
+        "value": value,
+        "dueDate": due_date,
+        "description": description,
+        "externalReference": external_reference,
+    }
+    if billing_type == "CREDIT_CARD" and credit_card:
+        payload["creditCard"] = credit_card
+    if billing_type == "CREDIT_CARD" and credit_card_holder_info:
+        payload["creditCardHolderInfo"] = credit_card_holder_info
     resp = requests.post(
         f"{_base_url()}/payments",
-        json={
-            "customer": customer_id,
-            "billingType": billing_type,
-            "value": value,
-            "dueDate": due_date,
-            "description": description,
-            "externalReference": external_reference,
-        },
+        json=payload,
+        headers=_headers(),
+        timeout=30,
+    )
+    _raise_for_status(resp)
+    return resp.json()
+
+
+def get_pix_qr_code(payment_id: str) -> dict:
+    """Retorna o QR code PIX (encodedImage em base64 e payload copia-e-cola)."""
+    resp = requests.get(
+        f"{_base_url()}/payments/{payment_id}/pixQrCode",
+        headers=_headers(),
+        timeout=10,
+    )
+    _raise_for_status(resp)
+    return resp.json()
+
+
+def get_boleto_identification(payment_id: str) -> dict:
+    """Retorna a linha digitável e nossoNumero de um boleto."""
+    resp = requests.get(
+        f"{_base_url()}/payments/{payment_id}/identificationField",
         headers=_headers(),
         timeout=10,
     )

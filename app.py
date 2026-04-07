@@ -521,35 +521,81 @@ def checkout():
 
 @app.route("/checkout/pay", methods=["POST"])
 def checkout_pay():
-    """Cria cliente + cobrança no Asaas e redireciona para a fatura."""
-    name = request.form.get("name", "").strip()
-    email = request.form.get("email", "").strip()
-    cpf_cnpj = request.form.get("cpf_cnpj", "").strip()
-    plan_key = request.form.get("plan", DEFAULT_PLAN)
-    billing_type = request.form.get("billing_type", "UNDEFINED").upper()
+    """Cria cliente + cobrança no Asaas. Retorna JSON com dados de pagamento inline."""
+    name         = request.form.get("name", "").strip()
+    email        = request.form.get("email", "").strip()
+    cpf_cnpj     = request.form.get("cpf_cnpj", "").strip()
+    plan_key     = request.form.get("plan", DEFAULT_PLAN)
+    billing_type = request.form.get("billing_type", "PIX").upper()
+
+    # Campos de cartão (só usados quando billing_type == CREDIT_CARD)
+    card_number       = request.form.get("card_number", "").replace(" ", "").strip()
+    card_holder       = request.form.get("card_holder", name).strip() or name
+    card_expiry       = request.form.get("card_expiry", "").strip()   # formato MM/AA
+    card_cvv          = request.form.get("card_cvv", "").strip()
+    card_postal_code  = request.form.get("card_postal_code", "").replace("-", "").strip()
+    card_address_num  = request.form.get("card_address_number", "").strip()
+    card_phone        = request.form.get("card_phone", "").strip()
 
     if plan_key not in PLANS:
         plan_key = DEFAULT_PLAN
     plan = PLANS[plan_key]
 
     if billing_type not in asaas.BILLING_TYPES:
-        billing_type = "UNDEFINED"
+        billing_type = "PIX"
 
+    # ── Validações básicas ────────────────────────────────────────────────────
     if not name or not email or "@" not in email:
-        flash("Preencha nome e e-mail válidos.", "error")
-        return redirect(url_for("checkout"))
+        return jsonify({"success": False, "error": "Preencha nome e e-mail válidos."}), 400
 
     if not cpf_cnpj:
-        flash("Preencha o CPF ou CNPJ.", "error")
-        return redirect(url_for("checkout"))
+        return jsonify({"success": False, "error": "Preencha o CPF ou CNPJ."}), 400
 
-    asaas_key = os.environ.get("ASAAS_API_KEY", "")
-    if not asaas_key:
-        flash("Serviço de pagamento temporariamente indisponível. Tente novamente mais tarde.", "error")
-        return redirect(url_for("checkout"))
+    if billing_type == "CREDIT_CARD":
+        if not card_number or len(card_number) < 13:
+            return jsonify({"success": False, "error": "Número do cartão inválido."}), 400
+        if not card_expiry or "/" not in card_expiry:
+            return jsonify({"success": False, "error": "Data de validade inválida (use MM/AA)."}), 400
+        if not card_cvv:
+            return jsonify({"success": False, "error": "CVV inválido."}), 400
+        if not card_postal_code:
+            return jsonify({"success": False, "error": "Informe o CEP do titular do cartão."}), 400
+        if not card_address_num:
+            return jsonify({"success": False, "error": "Informe o número do endereço do titular."}), 400
+
+    if not os.environ.get("ASAAS_API_KEY", ""):
+        return jsonify({"success": False, "error": "Serviço de pagamento indisponível. Tente mais tarde."}), 503
 
     external_reference = f"{email}|{plan_key}"
 
+    # Monta dados do cartão se necessário
+    credit_card = None
+    credit_card_holder_info = None
+    if billing_type == "CREDIT_CARD":
+        expiry_parts = card_expiry.split("/")
+        exp_month = expiry_parts[0].zfill(2)
+        exp_year_raw = expiry_parts[1].strip() if len(expiry_parts) > 1 else ""
+        exp_year = f"20{exp_year_raw}" if len(exp_year_raw) == 2 else exp_year_raw
+
+        credit_card = {
+            "holderName": card_holder,
+            "number": card_number,
+            "expiryMonth": exp_month,
+            "expiryYear": exp_year,
+            "ccv": card_cvv,
+        }
+        cpf_digits = "".join(c for c in cpf_cnpj if c.isdigit())
+        phone_digits = "".join(c for c in card_phone if c.isdigit())
+        credit_card_holder_info = {
+            "name": name,
+            "email": email,
+            "cpfCnpj": cpf_digits,
+            "postalCode": card_postal_code,
+            "addressNumber": card_address_num,
+            "phone": phone_digits or None,
+        }
+
+    # ── Criação no Asaas ──────────────────────────────────────────────────────
     try:
         customer = asaas.create_customer(name=name, email=email, cpf_cnpj=cpf_cnpj)
         payment = asaas.create_payment(
@@ -558,28 +604,29 @@ def checkout_pay():
             description=plan["name"],
             external_reference=external_reference,
             billing_type=billing_type,
+            credit_card=credit_card,
+            credit_card_holder_info=credit_card_holder_info,
         )
     except Exception as e:
         err_str = str(e)
         print(f"[ASAAS] Erro ao criar cobrança: {type(e).__name__}: {err_str}", file=sys.stderr)
         if "401" in err_str or "Unauthorized" in err_str or "unauthorized" in err_str.lower():
-            flash("Chave da API Asaas inválida ou não configurada. Verifique ASAAS_API_KEY no painel do Vercel.", "error")
+            msg = "Chave da API Asaas inválida. Verifique ASAAS_API_KEY."
         elif "403" in err_str:
-            flash("Sem permissão na API Asaas. Verifique se a chave tem as permissões corretas.", "error")
+            msg = "Sem permissão na API Asaas."
         elif "ConnectionError" in err_str or "Timeout" in err_str or "timeout" in err_str.lower():
-            flash("Não foi possível conectar ao Asaas. Tente novamente em instantes.", "error")
+            msg = "Não foi possível conectar ao Asaas. Tente novamente."
         else:
-            flash(f"Erro ao gerar cobrança: {err_str[:120]}", "error")
-        return redirect(url_for("checkout"))
+            msg = f"Erro ao gerar cobrança: {err_str[:200]}"
+        return jsonify({"success": False, "error": msg}), 502
 
+    payment_id  = payment.get("id", "")
     invoice_url = payment.get("invoiceUrl") or payment.get("bankSlipUrl") or ""
-    payment_id = payment.get("id", "")
 
-    if not invoice_url or not payment_id:
-        flash("Erro ao obter link de pagamento. Tente novamente.", "error")
-        return redirect(url_for("checkout"))
+    if not payment_id:
+        return jsonify({"success": False, "error": "Erro ao criar cobrança. Tente novamente."}), 502
 
-    # Persiste cliente e pagamento no banco
+    # ── Persistência ──────────────────────────────────────────────────────────
     cliente_id = db.upsert_cliente(name, email, cpf_cnpj, customer.get("id", ""))
     g.cliente_id = cliente_id
     db.salvar_pagamento(
@@ -594,8 +641,64 @@ def checkout_pay():
         forma_pagamento=billing_type,
     )
 
-    # Redireciona para página de espera antes de ir ao Asaas
-    return redirect(url_for("checkout_pending", payment_id=payment_id, invoice_url=invoice_url))
+    cookie_max_age = plan["cookie_max_age"]
+
+    # ── Resposta por tipo de pagamento ────────────────────────────────────────
+    if billing_type == "PIX":
+        try:
+            pix = asaas.get_pix_qr_code(payment_id)
+        except Exception as e:
+            print(f"[ASAAS] Erro QR PIX: {e}", file=sys.stderr)
+            pix = {}
+        return jsonify({
+            "success": True,
+            "billing_type": "PIX",
+            "payment_id": payment_id,
+            "pix_qr_image": pix.get("encodedImage", ""),
+            "pix_copy_paste": pix.get("payload", ""),
+        })
+
+    if billing_type == "BOLETO":
+        try:
+            boleto = asaas.get_boleto_identification(payment_id)
+        except Exception as e:
+            print(f"[ASAAS] Erro boleto ID: {e}", file=sys.stderr)
+            boleto = {}
+        return jsonify({
+            "success": True,
+            "billing_type": "BOLETO",
+            "payment_id": payment_id,
+            "boleto_barcode": boleto.get("identificationField", ""),
+            "boleto_url": invoice_url,
+        })
+
+    if billing_type == "CREDIT_CARD":
+        status = payment.get("status", "")
+        confirmed = status in asaas.CONFIRMED_STATUSES
+        resp = jsonify({
+            "success": True,
+            "billing_type": "CREDIT_CARD",
+            "payment_id": payment_id,
+            "confirmed": confirmed,
+        })
+        if confirmed:
+            db.atualizar_status_pagamento(payment_id, status)
+            pagamento_db_id = db.buscar_pagamento_id(payment_id)
+            db.salvar_sessao(
+                cliente_id=cliente_id,
+                pagamento_id=pagamento_db_id,
+                ip_address=_get_ip(),
+                user_agent=request.headers.get("User-Agent"),
+            )
+            token = generate_premium_token(payment_id, email, cookie_max_age)
+            resp.set_cookie(
+                PREMIUM_COOKIE, token, max_age=cookie_max_age,
+                httponly=True, samesite="Lax", secure=not app.debug,
+            )
+        return resp
+
+    # Fallback genérico
+    return jsonify({"success": True, "billing_type": billing_type, "payment_id": payment_id})
 
 
 @app.route("/checkout/pending")
