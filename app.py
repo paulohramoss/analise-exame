@@ -26,27 +26,57 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key-change-in-prod")
 
-# ── Produto / preço ──────────────────────────────────────────────────────────
-PRODUCT_NAME = "Three Health – Plano Completo"
-PRODUCT_PRICE = float(os.environ.get("PRODUCT_PRICE", "97.00"))
+# ── Planos disponíveis ────────────────────────────────────────────────────────
+PLANS = {
+    "mensal": {
+        "name": "Three Health – Plano Mensal",
+        "price": 60.00,
+        "months": 1,
+        "cookie_max_age": 30 * 24 * 3600,
+    },
+    "semestral": {
+        "name": "Three Health – Plano Semestral",
+        "price": 300.00,
+        "months": 6,
+        "cookie_max_age": 183 * 24 * 3600,
+    },
+    "anual": {
+        "name": "Three Health – Plano Anual",
+        "price": 418.00,
+        "months": 12,
+        "cookie_max_age": 365 * 24 * 3600,
+    },
+}
+DEFAULT_PLAN = "anual"
 PREMIUM_COOKIE = "threehealth_premium"
 _COOKIE_SALT = "premium-access-v1"
-_COOKIE_MAX_AGE = 365 * 24 * 3600  # 1 ano
 
 
 def _serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(app.secret_key)
 
 
-def generate_premium_token(payment_id: str, email: str) -> str:
-    return _serializer().dumps({"pid": payment_id, "email": email}, salt=_COOKIE_SALT)
+def generate_premium_token(payment_id: str, email: str, cookie_max_age: int = 365 * 24 * 3600) -> str:
+    expires_at = int(time.time()) + cookie_max_age
+    return _serializer().dumps({"pid": payment_id, "email": email, "exp": expires_at}, salt=_COOKIE_SALT)
 
 
 def verify_premium_token(token: str) -> dict | None:
     try:
-        return _serializer().loads(token, salt=_COOKIE_SALT, max_age=_COOKIE_MAX_AGE)
+        # Use a generous max_age; actual expiry is enforced via embedded 'exp' field
+        data = _serializer().loads(token, salt=_COOKIE_SALT, max_age=10 * 365 * 24 * 3600)
     except (BadSignature, SignatureExpired):
         return None
+    if "exp" in data:
+        if data["exp"] < time.time():
+            return None
+    else:
+        # Legacy tokens (no exp field): enforce original 1-year limit
+        try:
+            _serializer().loads(token, salt=_COOKIE_SALT, max_age=365 * 24 * 3600)
+        except (BadSignature, SignatureExpired):
+            return None
+    return data
 
 
 def is_premium(req) -> bool:
@@ -486,7 +516,7 @@ def checkout():
     """Página de contratação com formulário de nome + e-mail."""
     if is_premium(request):
         return redirect(url_for("index"))
-    return render_template("checkout.html", price=PRODUCT_PRICE, product=PRODUCT_NAME)
+    return render_template("checkout.html", plans=PLANS, default_plan=DEFAULT_PLAN)
 
 
 @app.route("/checkout/pay", methods=["POST"])
@@ -495,6 +525,15 @@ def checkout_pay():
     name = request.form.get("name", "").strip()
     email = request.form.get("email", "").strip()
     cpf_cnpj = request.form.get("cpf_cnpj", "").strip()
+    plan_key = request.form.get("plan", DEFAULT_PLAN)
+    billing_type = request.form.get("billing_type", "UNDEFINED").upper()
+
+    if plan_key not in PLANS:
+        plan_key = DEFAULT_PLAN
+    plan = PLANS[plan_key]
+
+    if billing_type not in asaas.BILLING_TYPES:
+        billing_type = "UNDEFINED"
 
     if not name or not email or "@" not in email:
         flash("Preencha nome e e-mail válidos.", "error")
@@ -509,13 +548,16 @@ def checkout_pay():
         flash("Serviço de pagamento temporariamente indisponível. Tente novamente mais tarde.", "error")
         return redirect(url_for("checkout"))
 
+    external_reference = f"{email}|{plan_key}"
+
     try:
         customer = asaas.create_customer(name=name, email=email, cpf_cnpj=cpf_cnpj)
         payment = asaas.create_payment(
             customer_id=customer["id"],
-            value=PRODUCT_PRICE,
-            description=PRODUCT_NAME,
-            external_reference=email,
+            value=plan["price"],
+            description=plan["name"],
+            external_reference=external_reference,
+            billing_type=billing_type,
         )
     except Exception as e:
         err_str = str(e)
@@ -542,12 +584,14 @@ def checkout_pay():
     g.cliente_id = cliente_id
     db.salvar_pagamento(
         asaas_payment_id=payment_id,
-        valor=PRODUCT_PRICE,
-        descricao=PRODUCT_NAME,
+        valor=plan["price"],
+        descricao=plan["name"],
         invoice_url=invoice_url,
-        external_reference=email,
+        external_reference=external_reference,
         cliente_id=cliente_id,
         payload=payment,
+        plano=plan_key,
+        forma_pagamento=billing_type,
     )
 
     # Redireciona para página de espera antes de ir ao Asaas
@@ -578,19 +622,27 @@ def payment_status():
         return jsonify({"confirmed": False, "error": "Erro ao consultar pagamento"}), 502
 
     if confirmed:
-        # Busca e-mail via externalReference para emitir o cookie
+        # Busca externalReference para extrair e-mail e plano
         try:
             payment = asaas.get_payment(payment_id)
-            email = payment.get("externalReference", "")
+            ext_ref = payment.get("externalReference", "")
+            if "|" in ext_ref:
+                email, plan_key = ext_ref.split("|", 1)
+            else:
+                email, plan_key = ext_ref, DEFAULT_PLAN
         except Exception:
-            email = ""
+            email, plan_key = "", DEFAULT_PLAN
 
-        token = generate_premium_token(payment_id, email)
+        if plan_key not in PLANS:
+            plan_key = DEFAULT_PLAN
+        cookie_max_age = PLANS[plan_key]["cookie_max_age"]
+
+        token = generate_premium_token(payment_id, email, cookie_max_age)
         resp = jsonify({"confirmed": True})
         resp.set_cookie(
             PREMIUM_COOKIE,
             token,
-            max_age=_COOKIE_MAX_AGE,
+            max_age=cookie_max_age,
             httponly=True,
             samesite="Lax",
             secure=not app.debug,
@@ -663,17 +715,26 @@ def acesso_verificar():
         flash("Informe um e-mail válido.", "error")
         return redirect(url_for("acesso"))
 
-    payment_id = db.buscar_pagamento_confirmado_por_email(email)
-    if not payment_id:
+    result = db.buscar_pagamento_confirmado_por_email(email)
+    if not result:
         flash("Nenhum pagamento confirmado encontrado para este e-mail.", "error")
         return redirect(url_for("acesso"))
 
-    token = generate_premium_token(payment_id, email)
+    payment_id, ext_ref = result
+    if ext_ref and "|" in ext_ref:
+        _, plan_key = ext_ref.split("|", 1)
+    else:
+        plan_key = DEFAULT_PLAN
+    if plan_key not in PLANS:
+        plan_key = DEFAULT_PLAN
+    cookie_max_age = PLANS[plan_key]["cookie_max_age"]
+
+    token = generate_premium_token(payment_id, email, cookie_max_age)
     resp = make_response(redirect(url_for("index")))
     resp.set_cookie(
         PREMIUM_COOKIE,
         token,
-        max_age=_COOKIE_MAX_AGE,
+        max_age=cookie_max_age,
         httponly=True,
         samesite="Lax",
         secure=not app.debug,

@@ -74,6 +74,8 @@ def salvar_pagamento(
     external_reference: str = "",
     cliente_id: str | None = None,
     payload: dict | None = None,
+    plano: str | None = None,
+    forma_pagamento: str | None = None,
 ) -> str | None:
     """Insere ou atualiza pagamento pelo ID Asaas. Retorna UUID ou None."""
     db = _get_client()
@@ -88,6 +90,8 @@ def salvar_pagamento(
             "external_reference": external_reference or None,
             "cliente_id": cliente_id,
             "payload_asaas": payload,
+            "plano": plano or None,
+            "forma_pagamento": forma_pagamento or None,
         }
         res = db.table("pagamentos").upsert(data, on_conflict="asaas_payment_id").execute()
         return res.data[0]["id"] if res.data else None
@@ -96,22 +100,27 @@ def salvar_pagamento(
         return None
 
 
-def buscar_pagamento_confirmado_por_email(email: str) -> str | None:
-    """Retorna o asaas_payment_id mais recente com status confirmado para o e-mail, ou None."""
+def buscar_pagamento_confirmado_por_email(email: str) -> tuple[str, str] | None:
+    """Retorna (asaas_payment_id, external_reference) mais recente confirmado para o e-mail, ou None.
+    Suporta external_reference no formato 'email' (legado) ou 'email|plano' (atual).
+    """
     db = _get_client()
     if not db or not email:
         return None
     try:
         res = (
             db.table("pagamentos")
-            .select("asaas_payment_id")
-            .eq("external_reference", email)
+            .select("asaas_payment_id, external_reference")
+            .ilike("external_reference", f"{email}%")
             .in_("status", ["CONFIRMED", "RECEIVED"])
             .order("created_at", desc=True)
             .limit(1)
             .execute()
         )
-        return res.data[0]["asaas_payment_id"] if res.data else None
+        if res.data:
+            row = res.data[0]
+            return row["asaas_payment_id"], row.get("external_reference", "")
+        return None
     except Exception as e:
         print(f"[DB] buscar_pagamento_confirmado_por_email: {e}")
         return None

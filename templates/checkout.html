@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Three Health – Contratar Plano Completo</title>
+<title>Three Health – Escolha seu Plano</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap">
@@ -24,7 +24,7 @@
     background: #fff;
     border-radius: 16px;
     box-shadow: 0 4px 24px rgba(0,0,0,.10);
-    max-width: 480px;
+    max-width: 520px;
     width: 100%;
     padding: 2.5rem 2rem;
   }
@@ -76,58 +76,183 @@
     font-size: 1.5rem;
     font-weight: 800;
     color: #1e293b;
-    margin-bottom: .5rem;
+    margin-bottom: .35rem;
   }
 
   .subtitle {
     color: #64748b;
     font-size: .95rem;
-    margin-bottom: 1.75rem;
-  }
-
-  .price-box {
-    background: #f0fdf4;
-    border: 1.5px solid #86efac;
-    border-radius: 12px;
-    padding: 1rem 1.25rem;
-    display: flex;
-    align-items: baseline;
-    gap: .5rem;
     margin-bottom: 1.5rem;
   }
 
-  .price-value {
-    font-size: 2rem;
+  /* ── Plan selector ── */
+  .plans {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: .65rem;
+    margin-bottom: 1.25rem;
+  }
+
+  @media (max-width: 480px) {
+    .plans { grid-template-columns: 1fr; }
+  }
+
+  .plan-card {
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    padding: .9rem .75rem;
+    cursor: pointer;
+    position: relative;
+    transition: border-color .2s, box-shadow .2s;
+    text-align: center;
+    user-select: none;
+  }
+
+  .plan-card:hover {
+    border-color: #93c5fd;
+    box-shadow: 0 2px 8px rgba(59,130,246,.12);
+  }
+
+  .plan-card.selected {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+    background: #eff6ff;
+  }
+
+  .plan-badge {
+    position: absolute;
+    top: -11px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #16a34a;
+    color: #fff;
+    font-size: .65rem;
     font-weight: 800;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  .plan-badge.popular {
+    background: #2563eb;
+  }
+
+  .plan-title {
+    font-size: .8rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: .35rem;
+  }
+
+  .plan-price {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #1e293b;
+    line-height: 1;
+    margin-bottom: .2rem;
+  }
+
+  .plan-price span {
+    font-size: .85rem;
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  .plan-per-month {
+    font-size: .75rem;
     color: #16a34a;
+    font-weight: 700;
+    margin-top: .15rem;
   }
 
-  .price-label {
-    color: #4b7a5e;
-    font-size: .9rem;
+  .plan-duration {
+    font-size: .72rem;
+    color: #94a3b8;
+    margin-top: .25rem;
   }
 
+  /* ── Payment method selector ── */
+  .payment-label {
+    font-size: .82rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: .6rem;
+  }
+
+  .payment-methods {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: .6rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .pm-card {
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    padding: .75rem .5rem;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .2s, box-shadow .2s;
+    user-select: none;
+  }
+
+  .pm-card:hover {
+    border-color: #93c5fd;
+    box-shadow: 0 2px 8px rgba(59,130,246,.12);
+  }
+
+  .pm-card.selected {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+    background: #eff6ff;
+  }
+
+  .pm-icon {
+    font-size: 1.5rem;
+    display: block;
+    margin-bottom: .3rem;
+  }
+
+  .pm-name {
+    font-size: .78rem;
+    font-weight: 700;
+    color: #374151;
+  }
+
+  .pm-desc {
+    font-size: .68rem;
+    color: #94a3b8;
+    margin-top: .15rem;
+  }
+
+  /* ── Features ── */
   .features {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: .45rem;
-    margin-bottom: 1.75rem;
+    gap: .4rem;
+    margin-bottom: 1.5rem;
   }
 
   .feature {
-    font-size: .85rem;
+    font-size: .83rem;
     color: #374151;
     display: flex;
     align-items: center;
     gap: .35rem;
   }
 
-  .feature::before { content: "✅"; font-size: .8rem; }
+  .feature::before { content: "✅"; font-size: .75rem; }
 
   .divider {
     border: none;
     border-top: 1px solid #e5e7eb;
-    margin: 1.5rem 0;
+    margin: 1.25rem 0;
   }
 
   label {
@@ -190,10 +315,7 @@
     font-size: .78rem;
   }
 
-  .trust-bar svg {
-    flex-shrink: 0;
-    color: #9ca3af;
-  }
+  .trust-bar svg { flex-shrink: 0; color: #9ca3af; }
 
   .trust-bar .methods {
     display: flex;
@@ -229,7 +351,6 @@
     text-decoration: none;
     font-weight: 600;
   }
-
   .link-recover:hover { text-decoration: underline; }
 
   .link-back {
@@ -237,7 +358,6 @@
     color: #9ca3af;
     text-decoration: none;
   }
-
   .link-back:hover { color: #6b7280; }
 </style>
 </head>
@@ -256,12 +376,58 @@
     <div class="logo-underline"></div>
   </div>
 
-  <h1>Plano Completo</h1>
+  <h1>Escolha seu Plano</h1>
   <p class="subtitle">Acesso ilimitado à plataforma de análise de exames por IA.</p>
 
-  <div class="price-box">
-    <span class="price-value">R$ {{ "%.2f"|format(price) }}</span>
-    <span class="price-label">pagamento único · acesso por 1 ano</span>
+  <!-- Plan selector -->
+  <div class="plans" id="plan-selector">
+
+    <div class="plan-card" data-plan="mensal" onclick="selectPlan('mensal')">
+      <div class="plan-title">Mensal</div>
+      <div class="plan-price">R$&nbsp;60<span>/mês</span></div>
+      <div class="plan-duration">Acesso por 30 dias</div>
+    </div>
+
+    <div class="plan-card" data-plan="semestral" onclick="selectPlan('semestral')">
+      <div class="plan-badge popular">Mais popular</div>
+      <div class="plan-title">Semestral</div>
+      <div class="plan-price">R$&nbsp;300<span>/6 meses</span></div>
+      <div class="plan-per-month">R$ 50/mês</div>
+      <div class="plan-duration">Acesso por 6 meses</div>
+    </div>
+
+    <div class="plan-card" data-plan="anual" onclick="selectPlan('anual')">
+      <div class="plan-badge">Melhor valor</div>
+      <div class="plan-title">Anual</div>
+      <div class="plan-price">R$&nbsp;418<span>/ano</span></div>
+      <div class="plan-per-month">R$ 34,90/mês</div>
+      <div class="plan-duration">Acesso por 12 meses</div>
+    </div>
+
+  </div>
+
+  <!-- Payment method selector -->
+  <p class="payment-label">Forma de pagamento</p>
+  <div class="payment-methods" id="payment-selector">
+
+    <div class="pm-card" data-billing="PIX" onclick="selectBilling('PIX')">
+      <span class="pm-icon">⚡</span>
+      <div class="pm-name">PIX</div>
+      <div class="pm-desc">Aprovação imediata</div>
+    </div>
+
+    <div class="pm-card" data-billing="BOLETO" onclick="selectBilling('BOLETO')">
+      <span class="pm-icon">🏦</span>
+      <div class="pm-name">Boleto</div>
+      <div class="pm-desc">Até 3 dias úteis</div>
+    </div>
+
+    <div class="pm-card" data-billing="CREDIT_CARD" onclick="selectBilling('CREDIT_CARD')">
+      <span class="pm-icon">💳</span>
+      <div class="pm-name">Cartão</div>
+      <div class="pm-desc">Crédito ou débito</div>
+    </div>
+
   </div>
 
   <div class="features">
@@ -283,6 +449,9 @@
   {% endwith %}
 
   <form method="POST" action="/checkout/pay" id="pay-form">
+    <input type="hidden" name="plan" id="plan-input" value="{{ default_plan }}">
+    <input type="hidden" name="billing_type" id="billing-input" value="PIX">
+
     <label for="name">Nome completo</label>
     <input type="text" id="name" name="name" placeholder="Seu nome" required autocomplete="name">
 
@@ -317,19 +486,37 @@
 </div>
 
 <script>
-  // Máscara CPF/CNPJ automática
+  // ── Plan selection ──
+  function selectPlan(key) {
+    document.querySelectorAll('.plan-card').forEach(function(card) {
+      card.classList.toggle('selected', card.dataset.plan === key);
+    });
+    document.getElementById('plan-input').value = key;
+  }
+
+  // ── Billing type selection ──
+  function selectBilling(key) {
+    document.querySelectorAll('.pm-card').forEach(function(card) {
+      card.classList.toggle('selected', card.dataset.billing === key);
+    });
+    document.getElementById('billing-input').value = key;
+  }
+
+  // Select defaults on load
+  selectPlan('{{ default_plan }}');
+  selectBilling('PIX');
+
+  // ── CPF/CNPJ mask ──
   const cpfCnpjInput = document.getElementById('cpf_cnpj');
 
   function maskCpfCnpj(value) {
     const digits = value.replace(/\D/g, '').slice(0, 14);
     if (digits.length <= 11) {
-      // CPF: 000.000.000-00
       return digits
         .replace(/(\d{3})(\d)/, '$1.$2')
         .replace(/(\d{3})(\d)/, '$1.$2')
         .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
     } else {
-      // CNPJ: 00.000.000/0001-00
       return digits
         .replace(/(\d{2})(\d)/, '$1.$2')
         .replace(/(\d{3})(\d)/, '$1.$2')
@@ -351,10 +538,8 @@
   });
 
   cpfCnpjInput.addEventListener('keydown', function(e) {
-    // Permite backspace apagar máscara corretamente
     if (e.key === 'Backspace') {
-      const digits = this.value.replace(/\D/g, '');
-      updatePlaceholder(digits);
+      updatePlaceholder(this.value.replace(/\D/g, ''));
     }
   });
 
