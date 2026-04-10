@@ -126,6 +126,42 @@ input[type="text"], input[type="email"], input[type="tel"], input[type="password
 input:focus { border-color: #3b82f6; }
 input::placeholder { color: #9ca3af; }
 
+/* ── Seção de senha ── */
+.senha-section {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.senha-hint {
+  font-size: .78rem;
+  color: #64748b;
+  margin-bottom: .85rem;
+  line-height: 1.45;
+}
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 2.8rem; }
+.pw-toggle-co {
+  position: absolute; right: .75rem; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: #94a3b8;
+  font-size: .88rem; padding: 0; line-height: 1;
+}
+.pw-toggle-co:hover { color: #64748b; }
+.strength-bar-co {
+  height: 3px; border-radius: 2px; margin-top: .35rem;
+  background: #e5e7eb; overflow: hidden;
+}
+.strength-fill-co {
+  height: 100%; border-radius: 2px;
+  transition: width .3s, background .3s;
+  width: 0%;
+}
+.strength-label-co { font-size: .7rem; color: #94a3b8; margin-top: .2rem; display: block; }
+.match-hint-co { font-size: .7rem; margin-top: .2rem; display: block; min-height: .9rem; }
+.match-ok-co  { color: #16a34a; }
+.match-err-co { color: #dc2626; }
+
 /* ── Card section ── */
 #card-section {
   display: none;
@@ -350,6 +386,37 @@ input::placeholder { color: #9ca3af; }
                required autocomplete="off" maxlength="18" inputmode="numeric">
       </div>
 
+      <!-- Senha de acesso -->
+      <div class="senha-section">
+        <p class="sec-label" style="margin-bottom:.6rem">🔑 Sua senha de acesso</p>
+        <p class="senha-hint">Crie uma senha para entrar na plataforma sempre que quiser, sem precisar do e-mail de compra.</p>
+
+        <div class="field-group">
+          <label for="senha_acesso">Senha</label>
+          <div class="pw-wrap">
+            <input type="password" id="senha_acesso" name="senha_acesso"
+                   placeholder="Mínimo 8 caracteres"
+                   minlength="8" required autocomplete="new-password"
+                   oninput="updateStrengthCO(this.value); checkMatchCO()">
+            <button type="button" class="pw-toggle-co" onclick="togglePwCO('senha_acesso', this)" tabindex="-1">👁</button>
+          </div>
+          <div class="strength-bar-co"><div class="strength-fill-co" id="co-strength-fill"></div></div>
+          <span class="strength-label-co" id="co-strength-label"></span>
+        </div>
+
+        <div class="field-group" style="margin-bottom:0">
+          <label for="senha_confirmar">Confirmar senha</label>
+          <div class="pw-wrap">
+            <input type="password" id="senha_confirmar" name="senha_confirmar"
+                   placeholder="Repita a senha"
+                   minlength="8" required autocomplete="new-password"
+                   oninput="checkMatchCO()">
+            <button type="button" class="pw-toggle-co" onclick="togglePwCO('senha_confirmar', this)" tabindex="-1">👁</button>
+          </div>
+          <span class="match-hint-co" id="co-match-hint"></span>
+        </div>
+      </div>
+
       <!-- Dados do cartão (visível só quando Cartão for selecionado) -->
       <div id="card-section">
         <div class="card-section-title">💳 Dados do cartão</div>
@@ -566,6 +633,20 @@ document.getElementById('pay-form').addEventListener('submit', async function(e)
   e.preventDefault();
   hideError();
 
+  // Valida senha antes de enviar
+  const senha    = document.getElementById('senha_acesso').value;
+  const confirmar = document.getElementById('senha_confirmar').value;
+  if (senha.length < 8) {
+    showError('A senha deve ter pelo menos 8 caracteres.');
+    document.getElementById('senha_acesso').focus();
+    return;
+  }
+  if (senha !== confirmar) {
+    showError('As senhas não coincidem.');
+    document.getElementById('senha_confirmar').focus();
+    return;
+  }
+
   const btn = document.getElementById('btn-pay');
   btn.disabled = true;
   btn.textContent = 'Processando…';
@@ -674,6 +755,52 @@ function copyText(textElId, btnId) {
     document.execCommand('copy');
     document.body.removeChild(ta);
   });
+}
+
+// ── Senha de acesso ──────────────────────────────────────────────────────────
+function togglePwCO(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+  else { inp.type = 'password'; btn.textContent = '👁'; }
+}
+
+function updateStrengthCO(val) {
+  const fill  = document.getElementById('co-strength-fill');
+  const label = document.getElementById('co-strength-label');
+  if (!fill) return;
+  let score = 0;
+  if (val.length >= 8)  score++;
+  if (val.length >= 12) score++;
+  if (/[A-Z]/.test(val)) score++;
+  if (/[0-9]/.test(val)) score++;
+  if (/[^A-Za-z0-9]/.test(val)) score++;
+  const levels = [
+    { pct: '0%',   color: '#e5e7eb', text: '' },
+    { pct: '25%',  color: '#ef4444', text: 'Muito fraca' },
+    { pct: '50%',  color: '#f97316', text: 'Fraca' },
+    { pct: '70%',  color: '#eab308', text: 'Moderada' },
+    { pct: '88%',  color: '#22c55e', text: 'Forte' },
+    { pct: '100%', color: '#16a34a', text: 'Muito forte' },
+  ];
+  const lvl = levels[Math.min(score, 5)];
+  fill.style.width = lvl.pct;
+  fill.style.background = lvl.color;
+  label.textContent = lvl.text;
+  label.style.color = lvl.color;
+}
+
+function checkMatchCO() {
+  const senha    = document.getElementById('senha_acesso').value;
+  const confirmar = document.getElementById('senha_confirmar').value;
+  const hint     = document.getElementById('co-match-hint');
+  if (!hint || !confirmar) { if (hint) hint.textContent = ''; return; }
+  if (senha === confirmar) {
+    hint.textContent = 'Senhas coincidem ✓';
+    hint.className = 'match-hint-co match-ok-co';
+  } else {
+    hint.textContent = 'As senhas não coincidem';
+    hint.className = 'match-hint-co match-err-co';
+  }
 }
 
 // ── Erro inline ──────────────────────────────────────────────────────────────

@@ -554,6 +554,10 @@ def checkout_pay():
     plan_key     = request.form.get("plan", DEFAULT_PLAN)
     billing_type = request.form.get("billing_type", "PIX").upper()
 
+    # Senha de acesso definida no checkout
+    senha_acesso   = request.form.get("senha_acesso", "").strip()
+    senha_confirmar = request.form.get("senha_confirmar", "").strip()
+
     # Campos de cartão (só usados quando billing_type == CREDIT_CARD)
     card_number       = request.form.get("card_number", "").replace(" ", "").strip()
     card_holder       = request.form.get("card_holder", name).strip() or name
@@ -576,6 +580,12 @@ def checkout_pay():
 
     if not cpf_cnpj:
         return jsonify({"success": False, "error": "Preencha o CPF ou CNPJ."}), 400
+
+    if not senha_acesso or len(senha_acesso) < 8:
+        return jsonify({"success": False, "error": "A senha deve ter pelo menos 8 caracteres."}), 400
+
+    if senha_acesso != senha_confirmar:
+        return jsonify({"success": False, "error": "As senhas não coincidem."}), 400
 
     if billing_type == "CREDIT_CARD":
         if not card_number or len(card_number) < 13:
@@ -655,6 +665,10 @@ def checkout_pay():
     # ── Persistência ──────────────────────────────────────────────────────────
     cliente_id = db.upsert_cliente(name, email, cpf_cnpj, customer.get("id", ""))
     g.cliente_id = cliente_id
+
+    # Salva a senha de acesso definida durante o checkout
+    db.salvar_senha_cliente(email, generate_password_hash(senha_acesso))
+
     db.salvar_pagamento(
         asaas_payment_id=payment_id,
         valor=plan["price"],
@@ -707,8 +721,11 @@ def checkout_pay():
             "payment_id": payment_id,
             "confirmed": confirmed,
         }
+        # setup_token só necessário se a senha ainda não foi definida (checkout sempre define)
         if confirmed:
-            payload["setup_token"] = generate_setup_token(email)
+            senha_hash_atual = db.buscar_senha_hash_cliente(email)
+            if not senha_hash_atual:
+                payload["setup_token"] = generate_setup_token(email)
         resp = jsonify(payload)
         if confirmed:
             db.atualizar_status_pagamento(payment_id, status)
@@ -770,7 +787,9 @@ def payment_status():
         cookie_max_age = PLANS[plan_key]["cookie_max_age"]
 
         token = generate_premium_token(payment_id, email, cookie_max_age)
-        setup_token = generate_setup_token(email) if email else ""
+        # setup_token só é necessário se o cliente ainda não tem senha (fluxo legado /acesso)
+        senha_hash_atual = db.buscar_senha_hash_cliente(email) if email else None
+        setup_token = "" if senha_hash_atual else (generate_setup_token(email) if email else "")
         resp = jsonify({"confirmed": True, "setup_token": setup_token})
         resp.set_cookie(
             PREMIUM_COOKIE,
