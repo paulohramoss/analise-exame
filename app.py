@@ -520,7 +520,10 @@ def checkout():
     """Página de contratação com formulário de nome + e-mail."""
     if is_premium(request):
         return redirect(url_for("index"))
-    return render_template("checkout.html", plans=PLANS, default_plan=DEFAULT_PLAN)
+    plan = request.args.get("plan", DEFAULT_PLAN)
+    if plan not in PLANS:
+        plan = DEFAULT_PLAN
+    return render_template("checkout.html", plans=PLANS, default_plan=plan)
 
 
 @app.route("/checkout/pay", methods=["POST"])
