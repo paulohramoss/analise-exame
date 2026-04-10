@@ -532,6 +532,14 @@ def api_analyze():
                 pass
 
 
+# ── Planos ───────────────────────────────────────────────────────────────────
+
+@app.route("/planos")
+def planos():
+    """Página pública de comparação de planos — usada na LP e no site."""
+    return render_template("planos.html", plans=PLANS)
+
+
 # ── Checkout / Pagamento ──────────────────────────────────────────────────────
 
 @app.route("/checkout")

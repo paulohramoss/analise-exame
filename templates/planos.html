@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Three Health – Planos e Preços</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f0f4f8;
+  min-height: 100vh;
+  padding: 2.5rem 1rem 4rem;
+  color: #1e293b;
+}
+
+/* ── Header ── */
+.page-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.logo {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+  text-decoration: none;
+}
+.logo-row { display: flex; align-items: center; gap: 10px; }
+.logo-lines { display: flex; flex-direction: column; gap: 5px; padding-bottom: 2px; }
+.logo-lines span { display: block; height: 5px; border-radius: 3px; background: #22C97A; }
+.logo-lines span:nth-child(1) { width: 34px; }
+.logo-lines span:nth-child(2) { width: 27px; }
+.logo-lines span:nth-child(3) { width: 20px; }
+.logo-wordmark { font-size: 2rem; font-weight: 800; color: #1B72E8; letter-spacing: -0.5px; line-height: 1; }
+.logo-underline { width: 100%; height: 2px; background: #1B72E8; border-radius: 1px; margin-top: 5px; }
+
+.page-title {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #1e293b;
+  margin-bottom: .5rem;
+}
+.page-subtitle {
+  font-size: 1.05rem;
+  color: #64748b;
+  max-width: 480px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* ── Grid de planos ── */
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  max-width: 900px;
+  margin: 0 auto 2.5rem;
+}
+
+@media (max-width: 720px) {
+  .plans-grid { grid-template-columns: 1fr; max-width: 420px; }
+}
+
+.plan-card {
+  background: #fff;
+  border-radius: 16px;
+  border: 2px solid #e2e8f0;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  transition: border-color .2s, box-shadow .2s, transform .15s;
+  position: relative;
+}
+
+.plan-card:hover {
+  border-color: #1B72E8;
+  box-shadow: 0 8px 32px rgba(27, 114, 232, .12);
+  transform: translateY(-3px);
+}
+
+.plan-card.featured {
+  border-color: #1B72E8;
+  box-shadow: 0 6px 28px rgba(27, 114, 232, .15);
+}
+
+.badge {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #1B72E8, #22C97A);
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  padding: .28rem .85rem;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.plan-name {
+  font-size: .8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .7px;
+  color: #1B72E8;
+}
+
+.plan-price {
+  display: flex;
+  align-items: baseline;
+  gap: .25rem;
+}
+.plan-price .currency { font-size: 1.1rem; font-weight: 700; color: #475569; }
+.plan-price .amount   { font-size: 2.5rem; font-weight: 800; color: #1e293b; line-height: 1; }
+.plan-price .period   { font-size: .85rem; color: #64748b; }
+
+.plan-desc {
+  font-size: .85rem;
+  color: #64748b;
+  line-height: 1.5;
+  border-top: 1px solid #f1f5f9;
+  padding-top: .75rem;
+}
+
+.plan-features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  flex: 1;
+}
+
+.plan-features li {
+  font-size: .88rem;
+  color: #334155;
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  line-height: 1.4;
+}
+
+.plan-features li::before {
+  content: "✓";
+  color: #22C97A;
+  font-weight: 800;
+  flex-shrink: 0;
+  margin-top: .05rem;
+}
+
+.btn-assinar {
+  display: block;
+  width: 100%;
+  padding: .85rem 1rem;
+  background: linear-gradient(135deg, #1B72E8, #155FC4);
+  color: #fff;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 800;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  transition: opacity .2s, transform .15s;
+  margin-top: auto;
+}
+
+.btn-assinar:hover { opacity: .9; transform: translateY(-1px); }
+.btn-assinar.featured-btn {
+  background: linear-gradient(135deg, #22C97A, #16a34a);
+}
+
+/* ── Rodapé informativo ── */
+.footer-info {
+  text-align: center;
+  color: #94a3b8;
+  font-size: .82rem;
+  line-height: 1.6;
+}
+
+.footer-info a { color: #1B72E8; text-decoration: none; }
+.footer-info a:hover { text-decoration: underline; }
+
+/* ── Seção "Já tem conta" ── */
+.already-have {
+  text-align: center;
+  margin-top: 1.5rem;
+  font-size: .9rem;
+  color: #64748b;
+}
+.already-have a { color: #1B72E8; font-weight: 700; text-decoration: none; }
+.already-have a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <a href="/" class="logo">
+    <div class="logo-row">
+      <div class="logo-lines">
+        <span></span><span></span><span></span>
+      </div>
+      <span class="logo-wordmark">health</span>
+    </div>
+    <div class="logo-underline"></div>
+  </a>
+
+  <h1 class="page-title">Escolha seu Plano</h1>
+  <p class="page-subtitle">Acesso completo à análise de exames ortopédicos por IA — laudos estruturados em segundos.</p>
+</div>
+
+<div class="plans-grid">
+
+  <!-- Mensal -->
+  <div class="plan-card">
+    <div class="plan-name">Mensal</div>
+    <div class="plan-price">
+      <span class="currency">R$</span>
+      <span class="amount">60</span>
+      <span class="period">/ mês</span>
+    </div>
+    <p class="plan-desc">Ideal para começar e testar sem compromisso.</p>
+    <ul class="plan-features">
+      <li>Análise ilimitada de exames</li>
+      <li>RM, Raio-X, TC e US</li>
+      <li>Até 5 imagens por análise</li>
+      <li>Laudo estruturado em PDF</li>
+      <li>Comparação com atlas anatômico</li>
+      <li>Acesso por {{ plans.mensal.months }} mês</li>
+    </ul>
+    <a href="/checkout?plan=mensal" class="btn-assinar">Assinar Mensal</a>
+  </div>
+
+  <!-- Semestral — destaque -->
+  <div class="plan-card featured">
+    <div class="badge">Mais Popular</div>
+    <div class="plan-name">Semestral</div>
+    <div class="plan-price">
+      <span class="currency">R$</span>
+      <span class="amount">300</span>
+      <span class="period">/ 6 meses</span>
+    </div>
+    <p class="plan-desc">Economia de R$ 60 em relação ao mensal. Acesso por 6 meses.</p>
+    <ul class="plan-features">
+      <li>Tudo do plano mensal</li>
+      <li>Análise ilimitada de exames</li>
+      <li>RM, Raio-X, TC e US</li>
+      <li>Até 5 imagens por análise</li>
+      <li>Laudo estruturado em PDF</li>
+      <li>Acesso por {{ plans.semestral.months }} meses</li>
+    </ul>
+    <a href="/checkout?plan=semestral" class="btn-assinar featured-btn">Assinar Semestral</a>
+  </div>
+
+  <!-- Anual -->
+  <div class="plan-card">
+    <div class="plan-name">Anual</div>
+    <div class="plan-price">
+      <span class="currency">R$</span>
+      <span class="amount">418</span>
+      <span class="period">/ ano</span>
+    </div>
+    <p class="plan-desc">Melhor custo-benefício — equivale a R$ 34,83/mês.</p>
+    <ul class="plan-features">
+      <li>Tudo do plano semestral</li>
+      <li>Análise ilimitada de exames</li>
+      <li>RM, Raio-X, TC e US</li>
+      <li>Até 5 imagens por análise</li>
+      <li>Laudo estruturado em PDF</li>
+      <li>Acesso por {{ plans.anual.months }} meses</li>
+    </ul>
+    <a href="/checkout?plan=anual" class="btn-assinar">Assinar Anual</a>
+  </div>
+
+</div>
+
+<div class="footer-info">
+  Pagamento via PIX, Boleto ou Cartão de Crédito · Acesso liberado imediatamente após confirmação<br>
+  <a href="/trial">Testar gratuitamente →</a>
+</div>
+
+<div class="already-have">
+  Já tem uma conta? <a href="/login">Fazer login →</a>
+</div>
+
+</body>
+</html>
