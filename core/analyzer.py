@@ -17,6 +17,61 @@ from google import genai
 from google.genai import types
 from PIL import Image
 
+# Modelos de fallback em ordem de preferência
+_FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"]
+
+# Erros que justificam retry (sobrecarga / indisponibilidade temporária)
+_RETRYABLE_CODES = {503, 429, 500}
+_MAX_RETRIES = 3
+_RETRY_DELAY = 2.0  # segundos (dobra a cada tentativa)
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """Retorna True se a exceção indica sobrecarga temporária e merece retry."""
+    msg = str(exc).lower()
+    return (
+        "503" in msg
+        or "unavailable" in msg
+        or "429" in msg
+        or "rate limit" in msg
+        or "resource_exhausted" in msg
+        or "overloaded" in msg
+        or "quota" in msg
+        or "500" in msg
+    )
+
+
+def _generate_with_retry(client: genai.Client, model_name: str, contents) -> object:
+    """
+    Chama generate_content com retry exponencial.
+    Se o modelo principal falhar por 503/sobrecarga, tenta modelos de fallback.
+    """
+    models_to_try = [model_name] + [m for m in _FALLBACK_MODELS if m != model_name]
+    last_exc = None
+
+    for model in models_to_try:
+        delay = _RETRY_DELAY
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                response = client.models.generate_content(model=model, contents=contents)
+                if model != model_name:
+                    print(f"[retry] Resposta obtida com modelo de fallback: {model}")
+                return response
+            except Exception as exc:
+                last_exc = exc
+                if _is_retryable(exc):
+                    if attempt < _MAX_RETRIES:
+                        print(f"[retry] Tentativa {attempt}/{_MAX_RETRIES} falhou ({exc}). Aguardando {delay:.1f}s...")
+                        time.sleep(delay)
+                        delay *= 2
+                    else:
+                        print(f"[retry] Modelo {model} esgotou {_MAX_RETRIES} tentativas. Tentando fallback...")
+                        break  # tenta próximo modelo
+                else:
+                    raise  # erro não recuperável (auth, payload inválido, etc.)
+
+    raise last_exc
+
 from core.reference_images import (
     detect_exam_type,
     get_reference_images_as_bytes,
@@ -248,8 +303,9 @@ def detect_exam_type_from_image(
         "Responda APENAS com uma das palavras-chave acima (ex: joelho), sem mais nenhum texto."
     )
     try:
-        response = client.models.generate_content(
-            model=model_name,
+        response = _generate_with_retry(
+            client,
+            model_name,
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 types.Part.from_text(text=prompt),
@@ -386,14 +442,15 @@ def analyze_exam(
         reference_pdfs, reference_images,
     )
 
-    response = client.models.generate_content(model=model_name, contents=content_parts)
+    response = _generate_with_retry(client, model_name, contents=content_parts)
+    model_used = model_name  # pode ter mudado para fallback, mas não há como saber aqui
 
     return {
         "success": True,
         "exam_type": exam_type,
         "analysis": response.text,
         "references_used": refs_used,
-        "model_used": model_name,
+        "model_used": model_used,
         "num_images": len(exam_images),
     }
 
@@ -443,7 +500,7 @@ def analyze_exam_from_bytes(
         reference_pdfs, reference_images,
     )
 
-    response = client.models.generate_content(model=model_name, contents=content_parts)
+    response = _generate_with_retry(client, model_name, contents=content_parts)
 
     return {
         "success": True,
