@@ -419,7 +419,7 @@ input::placeholder { color: #9ca3af; }
     </div>
 
     <div class="footer-links">
-      <a href="/acesso" class="link-recover">Já tem acesso? Entrar em outro dispositivo</a>
+      <a href="/login" class="link-recover">Já tem acesso? Fazer login</a>
       <a href="/trial" class="link-back">Voltar ao teste gratuito</a>
     </div>
   </div><!-- /#checkout-section -->
@@ -490,6 +490,7 @@ input::placeholder { color: #9ca3af; }
 let selectedPlan    = '{{ default_plan }}';
 let selectedBilling = 'PIX';
 let pollingTimer    = null;
+let _setupToken     = '';
 
 // ── Seletores de plano e forma de pagamento ──────────────────────────────────
 function selectPlan(key) {
@@ -586,6 +587,8 @@ document.getElementById('pay-form').addEventListener('submit', async function(e)
     document.getElementById('checkout-section').style.display = 'none';
     document.getElementById('result-section').style.display = 'block';
 
+    if (data.setup_token) _setupToken = data.setup_token;
+
     if (data.billing_type === 'PIX') {
       showPixResult(data);
     } else if (data.billing_type === 'BOLETO') {
@@ -625,7 +628,8 @@ function showCardResult(data) {
     document.getElementById('card-icon').textContent = '🎉';
     document.getElementById('card-title').textContent = 'Pagamento aprovado!';
     document.getElementById('card-subtitle').textContent = 'Seu acesso foi liberado. Redirecionando…';
-    setTimeout(() => { window.location.href = '/'; }, 2000);
+    const dest = _setupToken ? '/login/definir-senha?t=' + encodeURIComponent(_setupToken) : '/';
+    setTimeout(() => { window.location.href = dest; }, 2000);
   } else {
     document.getElementById('card-icon').textContent = '❌';
     document.getElementById('card-title').textContent = 'Pagamento não aprovado';
@@ -643,10 +647,12 @@ function startPolling(paymentId, statusBoxId) {
       const data = await resp.json();
       if (data.confirmed) {
         clearInterval(pollingTimer);
+        if (data.setup_token) _setupToken = data.setup_token;
         const box = document.getElementById(statusBoxId);
         box.className = 'status-box status-confirmed';
         box.innerHTML = '✅ Pagamento confirmado! Redirecionando…';
-        setTimeout(() => { window.location.href = '/'; }, 2000);
+        const dest = _setupToken ? '/login/definir-senha?t=' + encodeURIComponent(_setupToken) : '/';
+        setTimeout(() => { window.location.href = dest; }, 2000);
       }
     } catch (e) { /* ignora erros de polling */ }
   }, 5000);

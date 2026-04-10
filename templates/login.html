@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Three Health – Login</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f0f4f8;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,.10);
+  max-width: 420px;
+  width: 100%;
+  padding: 2.5rem 2rem;
+}
+
+/* ── Logo ── */
+.logo { display: inline-flex; flex-direction: column; align-items: flex-start; margin-bottom: 1.75rem; text-decoration: none; }
+.logo-row { display: flex; align-items: center; gap: 10px; }
+.logo-lines { display: flex; flex-direction: column; gap: 5px; padding-bottom: 2px; }
+.logo-lines span { display: block; height: 5px; border-radius: 3px; background: #22C97A; }
+.logo-lines span:nth-child(1) { width: 34px; }
+.logo-lines span:nth-child(2) { width: 27px; }
+.logo-lines span:nth-child(3) { width: 20px; }
+.logo-wordmark { font-size: 2rem; font-weight: 800; color: #1B72E8; letter-spacing: -0.5px; line-height: 1; }
+.logo-underline { width: 100%; height: 2px; background: #1B72E8; border-radius: 1px; margin-top: 5px; }
+
+h1 { font-size: 1.4rem; font-weight: 800; color: #1e293b; margin-bottom: .3rem; }
+.subtitle { color: #64748b; font-size: .92rem; margin-bottom: 1.75rem; line-height: 1.5; }
+
+.field-group { margin-bottom: 1rem; }
+
+label { display: block; font-size: .85rem; font-weight: 700; color: #374151; margin-bottom: .3rem; }
+
+input[type="email"],
+input[type="password"] {
+  width: 100%;
+  padding: .7rem 1rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: .95rem;
+  color: #1e293b;
+  transition: border-color .18s;
+  outline: none;
+  font-family: inherit;
+}
+input:focus { border-color: #3b82f6; }
+input::placeholder { color: #9ca3af; }
+
+/* Password wrapper for show/hide toggle */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 2.8rem; }
+.pw-toggle {
+  position: absolute; right: .75rem; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: #94a3b8;
+  font-size: .9rem; padding: 0; line-height: 1;
+}
+.pw-toggle:hover { color: #64748b; }
+
+.btn-login {
+  width: 100%; padding: .85rem;
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  color: #fff; font-size: 1rem; font-weight: 700;
+  border: none; border-radius: 10px; cursor: pointer;
+  transition: opacity .2s, transform .1s;
+  font-family: inherit; margin-top: .25rem;
+}
+.btn-login:hover { opacity: .92; transform: translateY(-1px); }
+.btn-login:active { transform: translateY(0); }
+.btn-login:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+
+/* Flash messages */
+.flash {
+  border-radius: 8px; padding: .7rem 1rem; font-size: .85rem; margin-bottom: 1rem;
+}
+.flash-error { background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; }
+.flash-info  { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+.flash-success { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+
+.divider {
+  border: none; border-top: 1px solid #f1f5f9;
+  margin: 1.5rem 0 1.1rem;
+}
+
+.links {
+  display: flex; flex-direction: column; gap: .55rem; align-items: center;
+}
+.links a { font-size: .85rem; color: #1d4ed8; text-decoration: none; font-weight: 600; }
+.links a:hover { text-decoration: underline; }
+.links .link-muted { color: #9ca3af; font-weight: 400; font-size: .8rem; }
+.links .link-muted:hover { color: #64748b; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <a href="/" class="logo">
+    <div class="logo-row">
+      <div class="logo-lines"><span></span><span></span><span></span></div>
+      <span class="logo-wordmark">health</span>
+    </div>
+    <div class="logo-underline"></div>
+  </a>
+
+  <h1>Entrar na plataforma</h1>
+  <p class="subtitle">Acesse sua conta com o e-mail e senha cadastrados.</p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="flash flash-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST" action="/login" id="login-form" autocomplete="on">
+    <div class="field-group">
+      <label for="email">E-mail</label>
+      <input type="email" id="email" name="email"
+             placeholder="seu@email.com"
+             value="{{ email | default('') }}"
+             required autofocus autocomplete="email">
+    </div>
+
+    <div class="field-group">
+      <label for="senha">Senha</label>
+      <div class="pw-wrap">
+        <input type="password" id="senha" name="senha"
+               placeholder="Sua senha"
+               required autocomplete="current-password">
+        <button type="button" class="pw-toggle" id="pw-toggle" title="Mostrar/ocultar senha">👁</button>
+      </div>
+    </div>
+
+    <button type="submit" class="btn-login" id="btn-login">Entrar</button>
+  </form>
+
+  <hr class="divider">
+
+  <div class="links">
+    <a href="/acesso">Esqueceu a senha ou primeiro acesso?</a>
+    <a href="/checkout" class="link-muted">Ainda não tem plano? Contratar agora</a>
+    <a href="/trial" class="link-muted">Voltar ao teste gratuito</a>
+  </div>
+</div>
+
+<script>
+document.getElementById('login-form').addEventListener('submit', function() {
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true;
+  btn.textContent = 'Entrando…';
+});
+
+// Mostrar/ocultar senha
+document.getElementById('pw-toggle').addEventListener('click', function() {
+  const inp = document.getElementById('senha');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    this.textContent = '🙈';
+  } else {
+    inp.type = 'password';
+    this.textContent = '👁';
+  }
+});
+</script>
+
+</body>
+</html>

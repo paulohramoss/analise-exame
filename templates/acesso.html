@@ -179,10 +179,10 @@
   </div>
 
   <h1>Recuperar Acesso</h1>
-  <p class="subtitle">Já comprou o plano e quer acessar em outro dispositivo? Informe o e-mail usado na compra.</p>
+  <p class="subtitle">Informe o e-mail usado na compra para verificar seu plano. Se você ainda não tem senha definida, poderá criar uma após a verificação.</p>
 
   <div class="info-box">
-    Usamos o e-mail para confirmar seu pagamento e liberar o acesso neste dispositivo.
+    Tem senha cadastrada? <a href="/login" style="color:#1d4ed8; font-weight:700;">Fazer login diretamente →</a>
   </div>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -202,6 +202,7 @@
   </form>
 
   <div class="links">
+    <a href="/login">← Voltar ao login</a>
     <a href="/checkout">Ainda não comprou? Contratar plano</a>
     <a href="/trial">← Voltar ao teste gratuito</a>
   </div>
