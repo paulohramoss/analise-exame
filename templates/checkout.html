@@ -3,7 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Three Health – Escolha seu Plano</title>
+<title>Three Health –
+  {%- if default_plan == 'mensal' %} Plano Mensal
+  {%- elif default_plan == 'semestral' %} Plano Semestral
+  {%- else %} Plano Anual
+  {%- endif %}</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap">
@@ -296,30 +300,83 @@ input::placeholder { color: #9ca3af; }
   <!-- ═══════════ TELA DE CHECKOUT ═══════════ -->
   <div id="checkout-section">
 
-    <h1>Escolha seu Plano</h1>
-    <p class="subtitle">Acesso ilimitado à plataforma de análise de exames por IA.</p>
+    <!-- Título muda conforme o plano -->
+    {% if default_plan == 'mensal' %}
+      <h1>Plano Mensal</h1>
+      <p class="subtitle">Acesso completo por 30 dias — análises ilimitadas por IA.</p>
+    {% elif default_plan == 'semestral' %}
+      <h1>Plano Semestral</h1>
+      <p class="subtitle">6 meses de acesso completo — o plano mais popular.</p>
+    {% else %}
+      <h1>Plano Anual</h1>
+      <p class="subtitle">12 meses de acesso completo — melhor custo-benefício.</p>
+    {% endif %}
 
-    <!-- Planos -->
-    <p class="sec-label">Plano</p>
-    <div class="plans" id="plan-selector">
-      <div class="plan-card" data-plan="mensal" onclick="selectPlan('mensal')">
-        <div class="plan-title">Mensal</div>
-        <div class="plan-price">R$&nbsp;60<span>/mês</span></div>
-        <div class="plan-duration">30 dias de acesso</div>
+    <!-- Resumo fixo do plano (sem seletor quando veio de link direto) -->
+    {% set from_link = default_plan in ['mensal', 'semestral', 'anual'] %}
+    <div id="plan-summary" style="
+      border-radius: 12px;
+      padding: .9rem 1rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .75rem;
+      {% if default_plan == 'semestral' %}
+        background: #eff6ff; border: 2px solid #2563eb;
+      {% elif default_plan == 'anual' %}
+        background: #f0fdf4; border: 2px solid #16a34a;
+      {% else %}
+        background: #f8fafc; border: 2px solid #e2e8f0;
+      {% endif %}
+    ">
+      <div>
+        <div style="font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.6px; color:#94a3b8; margin-bottom:.2rem;">
+          {% if default_plan == 'mensal' %}Mensal
+          {% elif default_plan == 'semestral' %}Semestral · Mais popular
+          {% else %}Anual · Melhor valor
+          {% endif %}
+        </div>
+        <div style="font-size:1.5rem; font-weight:800; color:#1e293b; line-height:1;">
+          {% if default_plan == 'mensal' %}R$&nbsp;60 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/mês</span>
+          {% elif default_plan == 'semestral' %}R$&nbsp;300 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/6 meses</span>
+          {% else %}R$&nbsp;418 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/ano</span>
+          {% endif %}
+        </div>
+        {% if default_plan == 'semestral' %}
+          <div style="font-size:.75rem; color:#16a34a; font-weight:700; margin-top:.15rem;">R$ 50/mês</div>
+        {% elif default_plan == 'anual' %}
+          <div style="font-size:.75rem; color:#16a34a; font-weight:700; margin-top:.15rem;">R$ 34,90/mês</div>
+        {% endif %}
       </div>
-      <div class="plan-card" data-plan="semestral" onclick="selectPlan('semestral')">
-        <div class="plan-badge popular">Mais popular</div>
-        <div class="plan-title">Semestral</div>
-        <div class="plan-price">R$&nbsp;300<span>/6 meses</span></div>
-        <div class="plan-per-month">R$ 50/mês</div>
-        <div class="plan-duration">6 meses de acesso</div>
-      </div>
-      <div class="plan-card" data-plan="anual" onclick="selectPlan('anual')">
-        <div class="plan-badge">Melhor valor</div>
-        <div class="plan-title">Anual</div>
-        <div class="plan-price">R$&nbsp;418<span>/ano</span></div>
-        <div class="plan-per-month">R$ 34,90/mês</div>
-        <div class="plan-duration">12 meses de acesso</div>
+      <a href="/planos" style="font-size:.78rem; color:#6b7280; text-decoration:none; white-space:nowrap; flex-shrink:0;">
+        Trocar plano →
+      </a>
+    </div>
+
+    <!-- Seletor completo (oculto quando veio de link direto) -->
+    <div id="plan-selector" style="display:none;">
+      <p class="sec-label">Plano</p>
+      <div class="plans">
+        <div class="plan-card" data-plan="mensal" onclick="selectPlan('mensal')">
+          <div class="plan-title">Mensal</div>
+          <div class="plan-price">R$&nbsp;60<span>/mês</span></div>
+          <div class="plan-duration">30 dias de acesso</div>
+        </div>
+        <div class="plan-card" data-plan="semestral" onclick="selectPlan('semestral')">
+          <div class="plan-badge popular">Mais popular</div>
+          <div class="plan-title">Semestral</div>
+          <div class="plan-price">R$&nbsp;300<span>/6 meses</span></div>
+          <div class="plan-per-month">R$ 50/mês</div>
+          <div class="plan-duration">6 meses de acesso</div>
+        </div>
+        <div class="plan-card" data-plan="anual" onclick="selectPlan('anual')">
+          <div class="plan-badge">Melhor valor</div>
+          <div class="plan-title">Anual</div>
+          <div class="plan-price">R$&nbsp;418<span>/ano</span></div>
+          <div class="plan-per-month">R$ 34,90/mês</div>
+          <div class="plan-duration">12 meses de acesso</div>
+        </div>
       </div>
     </div>
 
