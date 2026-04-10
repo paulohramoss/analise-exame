@@ -18,6 +18,8 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
+from werkzeug.security import generate_password_hash, check_password_hash
+
 from core.analyzer import analyze_exam
 from core import asaas, db
 
@@ -54,6 +56,23 @@ _COOKIE_SALT = "premium-access-v1"
 
 def _serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(app.secret_key)
+
+
+# ── Token de setup de senha (válido por 24h) ──────────────────────────────────
+_SETUP_SALT = "password-setup-v1"
+
+
+def generate_setup_token(email: str) -> str:
+    return _serializer().dumps({"email": email}, salt=_SETUP_SALT)
+
+
+def verify_setup_token(token: str) -> str | None:
+    """Retorna o e-mail contido no token ou None se inválido/expirado."""
+    try:
+        data = _serializer().loads(token, salt=_SETUP_SALT, max_age=24 * 3600)
+        return data.get("email")
+    except (BadSignature, SignatureExpired):
+        return None
 
 
 def generate_premium_token(payment_id: str, email: str, cookie_max_age: int = 365 * 24 * 3600) -> str:
@@ -331,6 +350,8 @@ def analyze():
             flash("Erro de autenticação: GEMINI_API_KEY inválida. Verifique a chave no painel do Vercel.", "error")
         elif "quota" in error_lower or "rate limit" in error_lower or "resource_exhausted" in error_lower:
             flash("Cota da API excedida. Tente novamente mais tarde.", "error")
+        elif "503" in error_lower or "unavailable" in error_lower or "overloaded" in error_lower:
+            flash("O serviço de IA está temporariamente sobrecarregado. Aguarde alguns segundos e tente novamente.", "error")
         else:
             flash(f"Erro durante a análise: {error_msg}", "error")
         return redirect(url_for("index"))
@@ -426,6 +447,8 @@ def trial_analyze():
             return jsonify({"error": "Serviço temporariamente indisponível."}), 503
         elif "quota" in error_lower or "rate limit" in error_lower or "resource_exhausted" in error_lower:
             return jsonify({"error": "Muitas solicitações. Tente novamente em alguns instantes."}), 429
+        elif "503" in error_lower or "unavailable" in error_lower or "overloaded" in error_lower:
+            return jsonify({"error": "O serviço de IA está temporariamente sobrecarregado. Aguarde alguns segundos e tente novamente."}), 503
         return jsonify({"error": f"Erro durante a análise: {error_msg}"}), 500
 
     finally:
@@ -516,7 +539,10 @@ def checkout():
     """Página de contratação com formulário de nome + e-mail."""
     if is_premium(request):
         return redirect(url_for("index"))
-    return render_template("checkout.html", plans=PLANS, default_plan=DEFAULT_PLAN)
+    plan = request.args.get("plan", DEFAULT_PLAN)
+    if plan not in PLANS:
+        plan = DEFAULT_PLAN
+    return render_template("checkout.html", plans=PLANS, default_plan=plan)
 
 
 @app.route("/checkout/pay", methods=["POST"])
@@ -675,12 +701,15 @@ def checkout_pay():
     if billing_type == "CREDIT_CARD":
         status = payment.get("status", "")
         confirmed = status in asaas.CONFIRMED_STATUSES
-        resp = jsonify({
+        payload: dict = {
             "success": True,
             "billing_type": "CREDIT_CARD",
             "payment_id": payment_id,
             "confirmed": confirmed,
-        })
+        }
+        if confirmed:
+            payload["setup_token"] = generate_setup_token(email)
+        resp = jsonify(payload)
         if confirmed:
             db.atualizar_status_pagamento(payment_id, status)
             pagamento_db_id = db.buscar_pagamento_id(payment_id)
@@ -741,7 +770,8 @@ def payment_status():
         cookie_max_age = PLANS[plan_key]["cookie_max_age"]
 
         token = generate_premium_token(payment_id, email, cookie_max_age)
-        resp = jsonify({"confirmed": True})
+        setup_token = generate_setup_token(email) if email else ""
+        resp = jsonify({"confirmed": True, "setup_token": setup_token})
         resp.set_cookie(
             PREMIUM_COOKIE,
             token,
@@ -832,11 +862,19 @@ def acesso_verificar():
         plan_key = DEFAULT_PLAN
     cookie_max_age = PLANS[plan_key]["cookie_max_age"]
 
-    token = generate_premium_token(payment_id, email, cookie_max_age)
-    resp = make_response(redirect(url_for("index")))
+    premium_token = generate_premium_token(payment_id, email, cookie_max_age)
+
+    # Se o cliente ainda não tem senha, redireciona para criar uma
+    senha_hash = db.buscar_senha_hash_cliente(email)
+    if not senha_hash:
+        setup_token = generate_setup_token(email)
+        resp = make_response(redirect(url_for("login_definir_senha", t=setup_token)))
+    else:
+        resp = make_response(redirect(url_for("index")))
+
     resp.set_cookie(
         PREMIUM_COOKIE,
-        token,
+        premium_token,
         max_age=cookie_max_age,
         httponly=True,
         samesite="Lax",
@@ -859,8 +897,146 @@ def acesso_verificar():
 @app.route("/premium/logout")
 def premium_logout():
     """Remove o cookie premium (logout)."""
-    resp = make_response(redirect(url_for("trial")))
+    resp = make_response(redirect(url_for("login")))
     resp.delete_cookie(PREMIUM_COOKIE)
+    return resp
+
+
+# ── Login com e-mail e senha ───────────────────────────────────────────────────
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """Tela de login para clientes com senha cadastrada."""
+    if is_premium(request):
+        return redirect(url_for("index"))
+
+    if request.method == "GET":
+        return render_template("login.html")
+
+    email = request.form.get("email", "").strip().lower()
+    senha = request.form.get("senha", "")
+
+    if not email or not senha:
+        flash("Preencha e-mail e senha.", "error")
+        return render_template("login.html", email=email)
+
+    # 1. Verifica se há plano ativo para o e-mail
+    result = db.buscar_pagamento_confirmado_por_email(email)
+    if not result:
+        flash("E-mail não encontrado ou sem plano ativo.", "error")
+        return render_template("login.html", email=email)
+
+    payment_id, ext_ref = result
+
+    # 2. Verifica se senha foi definida
+    senha_hash = db.buscar_senha_hash_cliente(email)
+    if not senha_hash:
+        # Sem senha: oferece fluxo de criação
+        setup_token = generate_setup_token(email)
+        flash("Você ainda não criou uma senha. Defina uma agora para acessar por aqui.", "info")
+        return redirect(url_for("login_definir_senha", t=setup_token))
+
+    # 3. Verifica a senha
+    if not check_password_hash(senha_hash, senha):
+        flash("Senha incorreta. Tente novamente.", "error")
+        return render_template("login.html", email=email)
+
+    # 4. Tudo certo — emite cookie premium
+    if ext_ref and "|" in ext_ref:
+        _, plan_key = ext_ref.split("|", 1)
+    else:
+        plan_key = DEFAULT_PLAN
+    if plan_key not in PLANS:
+        plan_key = DEFAULT_PLAN
+    cookie_max_age = PLANS[plan_key]["cookie_max_age"]
+
+    premium_token = generate_premium_token(payment_id, email, cookie_max_age)
+    resp = make_response(redirect(url_for("index")))
+    resp.set_cookie(
+        PREMIUM_COOKIE,
+        premium_token,
+        max_age=cookie_max_age,
+        httponly=True,
+        samesite="Lax",
+        secure=not app.debug,
+    )
+
+    cliente_id = db.buscar_cliente_id_por_email(email)
+    pagamento_db_id = db.buscar_pagamento_id(payment_id)
+    db.salvar_sessao(
+        cliente_id=cliente_id,
+        pagamento_id=pagamento_db_id,
+        ip_address=_get_ip(),
+        user_agent=request.headers.get("User-Agent"),
+    )
+    g.cliente_id = cliente_id
+
+    return resp
+
+
+@app.route("/login/definir-senha", methods=["GET", "POST"])
+def login_definir_senha():
+    """Define ou redefine a senha de acesso de um cliente autenticado por token."""
+    token = request.args.get("t", "") or request.form.get("t", "")
+    email = verify_setup_token(token)
+
+    if not email:
+        flash("Link inválido ou expirado. Faça login ou recupere o acesso para tentar novamente.", "error")
+        return redirect(url_for("login"))
+
+    if request.method == "GET":
+        return render_template("definir_senha.html", token=token, email=email)
+
+    senha = request.form.get("senha", "")
+    confirmar = request.form.get("confirmar", "")
+
+    if len(senha) < 8:
+        flash("A senha deve ter pelo menos 8 caracteres.", "error")
+        return render_template("definir_senha.html", token=token, email=email)
+
+    if senha != confirmar:
+        flash("As senhas não coincidem.", "error")
+        return render_template("definir_senha.html", token=token, email=email)
+
+    senha_hash = generate_password_hash(senha)
+    ok = db.salvar_senha_cliente(email, senha_hash)
+    if not ok:
+        flash("Erro ao salvar a senha. Tente novamente.", "error")
+        return render_template("definir_senha.html", token=token, email=email)
+
+    # Emite cookie premium se o cliente tiver plano ativo
+    result = db.buscar_pagamento_confirmado_por_email(email)
+    if result:
+        payment_id, ext_ref = result
+        if ext_ref and "|" in ext_ref:
+            _, plan_key = ext_ref.split("|", 1)
+        else:
+            plan_key = DEFAULT_PLAN
+        if plan_key not in PLANS:
+            plan_key = DEFAULT_PLAN
+        cookie_max_age = PLANS[plan_key]["cookie_max_age"]
+        premium_token = generate_premium_token(payment_id, email, cookie_max_age)
+        resp = make_response(redirect(url_for("index")))
+        resp.set_cookie(
+            PREMIUM_COOKIE,
+            premium_token,
+            max_age=cookie_max_age,
+            httponly=True,
+            samesite="Lax",
+            secure=not app.debug,
+        )
+        cliente_id = db.buscar_cliente_id_por_email(email)
+        db.salvar_sessao(
+            cliente_id=cliente_id,
+            pagamento_id=db.buscar_pagamento_id(payment_id),
+            ip_address=_get_ip(),
+            user_agent=request.headers.get("User-Agent"),
+        )
+        g.cliente_id = cliente_id
+    else:
+        resp = make_response(redirect(url_for("login")))
+        flash("Senha criada! Faça login para acessar.", "success")
+
     return resp
 
 

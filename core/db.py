@@ -62,6 +62,40 @@ def buscar_cliente_id_por_email(email: str) -> str | None:
         return None
 
 
+def salvar_senha_cliente(email: str, senha_hash: str) -> bool:
+    """Salva o hash bcrypt da senha de acesso do cliente. Retorna True se bem-sucedido."""
+    db = _get_client()
+    if not db or not email:
+        return False
+    try:
+        db.table("clientes").update({"senha_hash": senha_hash}).eq("email", email).execute()
+        return True
+    except Exception as e:
+        print(f"[DB] salvar_senha_cliente: {e}")
+        return False
+
+
+def buscar_senha_hash_cliente(email: str) -> str | None:
+    """Retorna o hash bcrypt da senha do cliente, ou None se não definida."""
+    db = _get_client()
+    if not db or not email:
+        return None
+    try:
+        res = (
+            db.table("clientes")
+            .select("senha_hash")
+            .eq("email", email)
+            .limit(1)
+            .execute()
+        )
+        if res.data:
+            return res.data[0].get("senha_hash")
+        return None
+    except Exception as e:
+        print(f"[DB] buscar_senha_hash_cliente: {e}")
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGAMENTOS
 # ─────────────────────────────────────────────────────────────────────────────

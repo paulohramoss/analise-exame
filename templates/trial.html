@@ -443,6 +443,102 @@
             margin-top: 1rem;
         }
 
+        /* ── Upgrade plan cards ── */
+        .upgrade-plans {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 0.75rem;
+            margin: 1.25rem 0 0.5rem;
+            width: 100%;
+        }
+        @media (max-width: 480px) {
+            .upgrade-plans { grid-template-columns: 1fr; }
+        }
+
+        .upgrade-plan-card {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(255,255,255,0.08);
+            border: 2px solid rgba(255,255,255,0.25);
+            border-radius: 14px;
+            padding: 1.1rem 0.75rem 0.85rem;
+            text-decoration: none;
+            color: #fff;
+            transition: border-color .18s, background .18s, transform .15s;
+            cursor: pointer;
+            text-align: center;
+        }
+        .upgrade-plan-card:hover {
+            border-color: rgba(255,255,255,0.7);
+            background: rgba(255,255,255,0.15);
+            transform: translateY(-2px);
+        }
+        .upgrade-plan-popular {
+            border-color: #fff;
+            background: rgba(255,255,255,0.15);
+        }
+
+        .upc-badge {
+            position: absolute;
+            top: -11px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            color: #1d4ed8;
+            font-size: 0.62rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            padding: 2px 9px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+        .upc-badge-green { color: #15803d; }
+
+        .upc-title {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            opacity: 0.75;
+            margin-bottom: 0.3rem;
+        }
+        .upc-price {
+            font-size: 1.35rem;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 0.15rem;
+        }
+        .upc-price span {
+            font-size: 0.75rem;
+            font-weight: 600;
+            opacity: 0.75;
+        }
+        .upc-per-month {
+            font-size: 0.7rem;
+            color: #86efac;
+            font-weight: 700;
+            margin-bottom: 0.1rem;
+        }
+        .upc-duration {
+            font-size: 0.67rem;
+            opacity: 0.6;
+            margin-bottom: 0.65rem;
+        }
+        .upc-btn {
+            background: #fff;
+            color: #1d4ed8;
+            font-size: 0.8rem;
+            font-weight: 800;
+            padding: 0.35rem 1.1rem;
+            border-radius: 20px;
+            margin-top: auto;
+            transition: opacity .18s;
+        }
+        .upgrade-plan-card:hover .upc-btn { opacity: 0.88; }
+
         /* ── Disclaimer ── */
         .disclaimer {
             background: #fef3c7;
@@ -561,16 +657,21 @@
             <div class="logo-underline"></div>
         </div>
 
-        <div class="trial-badge">
-            <span>Teste gratuito</span>
-            <div class="trial-dots">
-                <div class="trial-dot" id="dot-1"></div>
-                <div class="trial-dot" id="dot-2"></div>
-                <div class="trial-dot" id="dot-3"></div>
-                <div class="trial-dot" id="dot-4"></div>
-                <div class="trial-dot" id="dot-5"></div>
+        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+            <div class="trial-badge">
+                <span>Teste gratuito</span>
+                <div class="trial-dots">
+                    <div class="trial-dot" id="dot-1"></div>
+                    <div class="trial-dot" id="dot-2"></div>
+                    <div class="trial-dot" id="dot-3"></div>
+                    <div class="trial-dot" id="dot-4"></div>
+                    <div class="trial-dot" id="dot-5"></div>
+                </div>
+                <span id="trial-counter-text">0/5 usados</span>
             </div>
-            <span id="trial-counter-text">0/5 usados</span>
+            <a href="/login" style="font-size:0.82rem; font-weight:700; color:var(--primary); text-decoration:none; background:var(--primary-light); border:1.5px solid var(--primary); border-radius:20px; padding:0.3rem 0.85rem; white-space:nowrap;">
+                Já sou cliente →
+            </a>
         </div>
     </header>
 
@@ -600,7 +701,7 @@
                     <span>
                         <strong>Upload de múltiplas imagens</strong> disponível apenas no plano completo —
                         analise diferentes planos e incidências do mesmo exame.
-                        <a href="/checkout"
+                        <a href="/checkout?plan=semestral"
                            style="color:#92400e; font-weight:700; text-decoration:underline;">
                             Contratar agora →
                         </a>
@@ -743,11 +844,27 @@
             <div id="last-analysis-warning" style="display:none; margin-top:1rem">
                 <div class="alert alert-warning">
                     <span>⚠️</span>
-                    <span>Você utilizou suas <strong>5 análises gratuitas</strong>. Para continuar usando o sistema, conheça nossos planos.</span>
+                    <span>Você utilizou suas <strong>5 análises gratuitas</strong>. Escolha um plano para continuar.</span>
                 </div>
-                <div style="display:flex; justify-content:center; margin-top:0.75rem">
-                    <a href="/checkout" class="btn-cta" id="btn-upgrade-from-result">
-                        🚀 Contratar a Plataforma
+                <div class="upgrade-plans" style="margin-top:0.75rem">
+                    <a href="/checkout?plan=mensal" class="upgrade-plan-card">
+                        <div class="upc-title">Mensal</div>
+                        <div class="upc-price">R$ 60<span>/mês</span></div>
+                        <div class="upc-btn">Assinar</div>
+                    </a>
+                    <a href="/checkout?plan=semestral" class="upgrade-plan-card upgrade-plan-popular">
+                        <div class="upc-badge">Mais popular</div>
+                        <div class="upc-title">Semestral</div>
+                        <div class="upc-price">R$ 300<span>/6 meses</span></div>
+                        <div class="upc-per-month">R$ 50/mês</div>
+                        <div class="upc-btn">Assinar</div>
+                    </a>
+                    <a href="/checkout?plan=anual" class="upgrade-plan-card">
+                        <div class="upc-badge upc-badge-green">Melhor valor</div>
+                        <div class="upc-title">Anual</div>
+                        <div class="upc-price">R$ 418<span>/ano</span></div>
+                        <div class="upc-per-month">R$ 34,90/mês</div>
+                        <div class="upc-btn">Assinar</div>
                     </a>
                 </div>
             </div>
@@ -760,7 +877,7 @@
                 <h2>Suas análises gratuitas foram utilizadas!</h2>
                 <p>
                     Você experimentou o poder da análise ortopédica por IA da <strong>Three Health</strong>.
-                    Contrate a plataforma e tenha acesso ilimitado a laudos precisos gerados com IA de última geração.
+                    Escolha o plano ideal e tenha acesso ilimitado a laudos precisos gerados com IA de última geração.
                 </p>
 
                 <div class="upgrade-features">
@@ -774,9 +891,31 @@
                     <span class="upgrade-feature">✅ Integração via API</span>
                 </div>
 
-                <a href="/checkout" class="btn-cta">
-                    🚀 Contratar Agora
-                </a>
+                <!-- Cards de plano com links diretos -->
+                <div class="upgrade-plans">
+                    <a href="/checkout?plan=mensal" class="upgrade-plan-card">
+                        <div class="upc-title">Mensal</div>
+                        <div class="upc-price">R$ 60<span>/mês</span></div>
+                        <div class="upc-duration">30 dias de acesso</div>
+                        <div class="upc-btn">Assinar</div>
+                    </a>
+                    <a href="/checkout?plan=semestral" class="upgrade-plan-card upgrade-plan-popular">
+                        <div class="upc-badge">Mais popular</div>
+                        <div class="upc-title">Semestral</div>
+                        <div class="upc-price">R$ 300<span>/6 meses</span></div>
+                        <div class="upc-per-month">R$ 50/mês</div>
+                        <div class="upc-duration">6 meses de acesso</div>
+                        <div class="upc-btn">Assinar</div>
+                    </a>
+                    <a href="/checkout?plan=anual" class="upgrade-plan-card">
+                        <div class="upc-badge upc-badge-green">Melhor valor</div>
+                        <div class="upc-title">Anual</div>
+                        <div class="upc-price">R$ 418<span>/ano</span></div>
+                        <div class="upc-per-month">R$ 34,90/mês</div>
+                        <div class="upc-duration">12 meses de acesso</div>
+                        <div class="upc-btn">Assinar</div>
+                    </a>
+                </div>
 
                 <p class="trial-exhausted-note">
                     Dúvidas? Entre em contato: <strong>renan_carlos_berte@hotmail.com</strong>

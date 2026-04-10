@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Three Health – Criar Senha de Acesso</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f0f4f8;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,.10);
+  max-width: 420px;
+  width: 100%;
+  padding: 2.5rem 2rem;
+}
+
+/* ── Logo ── */
+.logo { display: inline-flex; flex-direction: column; align-items: flex-start; margin-bottom: 1.75rem; text-decoration: none; }
+.logo-row { display: flex; align-items: center; gap: 10px; }
+.logo-lines { display: flex; flex-direction: column; gap: 5px; padding-bottom: 2px; }
+.logo-lines span { display: block; height: 5px; border-radius: 3px; background: #22C97A; }
+.logo-lines span:nth-child(1) { width: 34px; }
+.logo-lines span:nth-child(2) { width: 27px; }
+.logo-lines span:nth-child(3) { width: 20px; }
+.logo-wordmark { font-size: 2rem; font-weight: 800; color: #1B72E8; letter-spacing: -0.5px; line-height: 1; }
+.logo-underline { width: 100%; height: 2px; background: #1B72E8; border-radius: 1px; margin-top: 5px; }
+
+.welcome-badge {
+  display: flex; align-items: center; gap: .5rem;
+  background: #f0fdf4; border: 1.5px solid #86efac;
+  border-radius: 10px; padding: .65rem 1rem;
+  font-size: .85rem; color: #166534; font-weight: 700;
+  margin-bottom: 1.25rem;
+}
+
+h1 { font-size: 1.35rem; font-weight: 800; color: #1e293b; margin-bottom: .3rem; }
+.subtitle { color: #64748b; font-size: .92rem; margin-bottom: 1.5rem; line-height: 1.5; }
+
+.email-display {
+  background: #f8fafc; border: 1.5px solid #e2e8f0;
+  border-radius: 8px; padding: .55rem 1rem;
+  font-size: .88rem; color: #475569; margin-bottom: 1.25rem;
+  display: flex; align-items: center; gap: .5rem;
+}
+
+.field-group { margin-bottom: 1rem; }
+
+label { display: block; font-size: .85rem; font-weight: 700; color: #374151; margin-bottom: .3rem; }
+
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 2.8rem; }
+
+input[type="password"],
+input[type="text"] {
+  width: 100%;
+  padding: .7rem 1rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: .95rem;
+  color: #1e293b;
+  transition: border-color .18s;
+  outline: none;
+  font-family: inherit;
+}
+input:focus { border-color: #3b82f6; }
+input::placeholder { color: #9ca3af; }
+
+.pw-toggle {
+  position: absolute; right: .75rem; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: #94a3b8;
+  font-size: .9rem; padding: 0; line-height: 1;
+}
+.pw-toggle:hover { color: #64748b; }
+
+/* Strength bar */
+.strength-bar {
+  height: 4px; border-radius: 2px; margin-top: .4rem;
+  background: #e5e7eb; overflow: hidden;
+}
+.strength-fill {
+  height: 100%; border-radius: 2px;
+  transition: width .3s, background .3s;
+  width: 0%;
+}
+.strength-label {
+  font-size: .73rem; color: #94a3b8; margin-top: .25rem; display: block;
+}
+
+/* Match indicator */
+.match-hint {
+  font-size: .73rem; margin-top: .25rem; display: block; min-height: 1rem;
+}
+.match-ok  { color: #16a34a; }
+.match-err { color: #dc2626; }
+
+.btn-criar {
+  width: 100%; padding: .85rem;
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  color: #fff; font-size: 1rem; font-weight: 700;
+  border: none; border-radius: 10px; cursor: pointer;
+  transition: opacity .2s, transform .1s;
+  font-family: inherit; margin-top: .4rem;
+}
+.btn-criar:hover { opacity: .92; transform: translateY(-1px); }
+.btn-criar:active { transform: translateY(0); }
+.btn-criar:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+
+.flash {
+  border-radius: 8px; padding: .7rem 1rem; font-size: .85rem; margin-bottom: 1rem;
+}
+.flash-error   { background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; }
+.flash-info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+.flash-success { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+
+.note { font-size: .78rem; color: #94a3b8; text-align: center; margin-top: 1rem; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">
+    <div class="logo-row">
+      <div class="logo-lines"><span></span><span></span><span></span></div>
+      <span class="logo-wordmark">health</span>
+    </div>
+    <div class="logo-underline"></div>
+  </div>
+
+  <div class="welcome-badge">
+    ✅ Acesso liberado! Crie uma senha para entrar da próxima vez.
+  </div>
+
+  <h1>Criar senha de acesso</h1>
+  <p class="subtitle">Defina uma senha para fazer login com seu e-mail sempre que precisar.</p>
+
+  <div class="email-display">
+    <span>📧</span>
+    <span>{{ email }}</span>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="flash flash-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST" action="/login/definir-senha" id="setup-form" autocomplete="off">
+    <input type="hidden" name="t" value="{{ token }}">
+
+    <div class="field-group">
+      <label for="senha">Nova senha</label>
+      <div class="pw-wrap">
+        <input type="password" id="senha" name="senha"
+               placeholder="Mínimo 8 caracteres"
+               required autocomplete="new-password"
+               oninput="updateStrength(this.value); checkMatch()">
+        <button type="button" class="pw-toggle" onclick="togglePw('senha', this)">👁</button>
+      </div>
+      <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
+      <span class="strength-label" id="strength-label"></span>
+    </div>
+
+    <div class="field-group">
+      <label for="confirmar">Confirmar senha</label>
+      <div class="pw-wrap">
+        <input type="password" id="confirmar" name="confirmar"
+               placeholder="Repita a senha"
+               required autocomplete="new-password"
+               oninput="checkMatch()">
+        <button type="button" class="pw-toggle" onclick="togglePw('confirmar', this)">👁</button>
+      </div>
+      <span class="match-hint" id="match-hint"></span>
+    </div>
+
+    <button type="submit" class="btn-criar" id="btn-criar">Criar senha e acessar</button>
+  </form>
+
+  <p class="note">Esta senha será usada para acessar a plataforma em qualquer dispositivo.</p>
+</div>
+
+<script>
+document.getElementById('setup-form').addEventListener('submit', function(e) {
+  const senha    = document.getElementById('senha').value;
+  const confirmar = document.getElementById('confirmar').value;
+
+  if (senha !== confirmar) {
+    e.preventDefault();
+    document.getElementById('match-hint').textContent = 'As senhas não coincidem.';
+    document.getElementById('match-hint').className = 'match-hint match-err';
+    return;
+  }
+  const btn = document.getElementById('btn-criar');
+  btn.disabled = true;
+  btn.textContent = 'Salvando…';
+});
+
+function togglePw(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+  else { inp.type = 'password'; btn.textContent = '👁'; }
+}
+
+function updateStrength(val) {
+  const fill  = document.getElementById('strength-fill');
+  const label = document.getElementById('strength-label');
+  let score = 0;
+  if (val.length >= 8)  score++;
+  if (val.length >= 12) score++;
+  if (/[A-Z]/.test(val)) score++;
+  if (/[0-9]/.test(val)) score++;
+  if (/[^A-Za-z0-9]/.test(val)) score++;
+
+  const levels = [
+    { pct: '0%',   color: '#e5e7eb', text: '' },
+    { pct: '25%',  color: '#ef4444', text: 'Muito fraca' },
+    { pct: '50%',  color: '#f97316', text: 'Fraca' },
+    { pct: '70%',  color: '#eab308', text: 'Moderada' },
+    { pct: '88%',  color: '#22c55e', text: 'Forte' },
+    { pct: '100%', color: '#16a34a', text: 'Muito forte' },
+  ];
+  const lvl = levels[Math.min(score, 5)];
+  fill.style.width = lvl.pct;
+  fill.style.background = lvl.color;
+  label.textContent = lvl.text;
+  label.style.color = lvl.color;
+}
+
+function checkMatch() {
+  const senha    = document.getElementById('senha').value;
+  const confirmar = document.getElementById('confirmar').value;
+  const hint     = document.getElementById('match-hint');
+  if (!confirmar) { hint.textContent = ''; return; }
+  if (senha === confirmar) {
+    hint.textContent = 'Senhas coincidem ✓';
+    hint.className = 'match-hint match-ok';
+  } else {
+    hint.textContent = 'As senhas não coincidem';
+    hint.className = 'match-hint match-err';
+  }
+}
+</script>
+
+</body>
+</html>
