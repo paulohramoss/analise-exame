@@ -52,6 +52,8 @@ PLANS = {
 DEFAULT_PLAN = "anual"
 PREMIUM_COOKIE = "threehealth_premium"
 _COOKIE_SALT = "premium-access-v1"
+_ADMIN_COOKIE = "threehealth_admin"
+_ADMIN_SALT = "admin-access-v1"
 
 
 def _serializer() -> URLSafeTimedSerializer:
@@ -98,7 +100,22 @@ def verify_premium_token(token: str) -> dict | None:
     return data
 
 
+def _is_admin(req) -> bool:
+    """Verifica cookie de acesso admin (para testes internos)."""
+    token = req.cookies.get(_ADMIN_COOKIE)
+    if not token:
+        return False
+    try:
+        _serializer().loads(token, salt=_ADMIN_SALT, max_age=30 * 24 * 3600)
+        return True
+    except (BadSignature, SignatureExpired):
+        return False
+
+
 def is_premium(req) -> bool:
+    # Acesso admin também passa pela verificação de premium
+    if _is_admin(req):
+        return True
     token = req.cookies.get(PREMIUM_COOKIE)
     if not token:
         return False
@@ -250,6 +267,45 @@ def save_upload_file(file) -> tuple[Path, str, str] | None:
         image_b64 = base64.b64encode(f.read()).decode("utf-8")
 
     return filepath, image_b64, image_mime
+
+
+# ── Acesso admin (testes internos) ───────────────────────────────────────────
+
+@app.route("/admin/entrar")
+def admin_entrar():
+    """
+    Concede acesso de teste via cookie admin.
+    Protegido pela variável de ambiente ADMIN_KEY.
+    Uso: /admin/entrar?key=SUA_ADMIN_KEY
+    Para revogar: /admin/sair
+    """
+    admin_key = os.environ.get("ADMIN_KEY", "").strip()
+    if not admin_key:
+        return "ADMIN_KEY não configurada no servidor.", 403
+
+    provided = request.args.get("key", "").strip()
+    if not provided or provided != admin_key:
+        return "Chave inválida.", 403
+
+    token = _serializer().dumps({"admin": True}, salt=_ADMIN_SALT)
+    resp = make_response(redirect(url_for("index")))
+    resp.set_cookie(
+        _ADMIN_COOKIE,
+        token,
+        max_age=30 * 24 * 3600,   # 30 dias
+        httponly=True,
+        samesite="Lax",
+        secure=not app.debug,
+    )
+    return resp
+
+
+@app.route("/admin/sair")
+def admin_sair():
+    """Remove o cookie de acesso admin."""
+    resp = make_response(redirect(url_for("index")))
+    resp.delete_cookie(_ADMIN_COOKIE)
+    return resp
 
 
 # ── Rotas principais ──────────────────────────────────────────────────────────
