@@ -17,8 +17,8 @@ from google import genai
 from google.genai import types
 from PIL import Image
 
-# Modelos de fallback em ordem de preferência
-_FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"]
+# Modelos de fallback em ordem de preferência (apenas modelos disponíveis na v1beta)
+_FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
 
 # Erros que justificam retry (sobrecarga / indisponibilidade temporária)
 _RETRYABLE_CODES = {503, 429, 500}
