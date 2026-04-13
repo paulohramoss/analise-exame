@@ -106,11 +106,22 @@ def is_premium(req) -> bool:
 
 
 def premium_required(f):
-    """Decorator: redireciona para /trial se não for usuário premium."""
+    """Decorator: redireciona para / se não for usuário premium."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not is_premium(request):
-            return redirect(url_for("trial"))
+            # Requisições de streaming retornam erro SSE
+            if request.headers.get("Accept") == "text/event-stream":
+                return Response(
+                    'data: {"type":"error","message":"Acesso não autorizado. Contrate um plano para continuar."}\n\n',
+                    content_type="text/event-stream",
+                )
+            # Demais requisições: flash + redireciona para a homepage
+            from markupsafe import Markup
+            flash(Markup(
+                'Para analisar exames, <a href="/planos" style="color:#1d4ed8;font-weight:700;">contrate um plano</a>.'
+            ), "error")
+            return redirect(url_for("index"))
         return f(*args, **kwargs)
     return decorated
 
@@ -366,8 +377,8 @@ def analyze():
 
 @app.route("/trial")
 def trial():
-    """Página de teste gratuito para embed via iframe."""
-    return render_template("trial.html")
+    """Redireciona para a página principal."""
+    return redirect(url_for("index"), 301)
 
 
 @app.route("/trial/analyze", methods=["POST"])
