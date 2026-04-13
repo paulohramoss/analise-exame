@@ -26,8 +26,21 @@ _MAX_RETRIES = 3
 _RETRY_DELAY = 2.0  # segundos (dobra a cada tentativa)
 
 
+def _is_quota_exhausted(exc: Exception) -> bool:
+    """Cota diária/mensal esgotada — retry não resolve, deve falhar imediatamente."""
+    msg = str(exc).lower()
+    return (
+        ("resource_exhausted" in msg or "quota" in msg)
+        and "rate" not in msg          # rate limit ainda é temporário
+        and "per_minute" not in msg    # RPM é temporário
+        and "per_second" not in msg
+    )
+
+
 def _is_retryable(exc: Exception) -> bool:
     """Retorna True se a exceção indica sobrecarga temporária e merece retry."""
+    if _is_quota_exhausted(exc):
+        return False  # cota esgotada: não adianta tentar de novo
     msg = str(exc).lower()
     return (
         "503" in msg
@@ -36,7 +49,6 @@ def _is_retryable(exc: Exception) -> bool:
         or "rate limit" in msg
         or "resource_exhausted" in msg
         or "overloaded" in msg
-        or "quota" in msg
         or "500" in msg
     )
 

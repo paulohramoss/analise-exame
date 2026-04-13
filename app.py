@@ -416,11 +416,14 @@ def analyze():
         if "api key not valid" in error_lower or "invalid api key" in error_lower or "api_key_invalid" in error_lower:
             flash("Erro de autenticação: GEMINI_API_KEY inválida. Verifique a chave no painel do Vercel.", "error")
         elif "quota" in error_lower or "rate limit" in error_lower or "resource_exhausted" in error_lower:
-            flash("Cota da API excedida. Tente novamente mais tarde.", "error")
+            flash("Limite de requisições atingido. Aguarde alguns instantes e tente novamente.", "error")
         elif "503" in error_lower or "unavailable" in error_lower or "overloaded" in error_lower:
             flash("O serviço de IA está temporariamente sobrecarregado. Aguarde alguns segundos e tente novamente.", "error")
+        elif "404" in error_lower or "not found" in error_lower:
+            flash("Modelo de IA temporariamente indisponível. Tente novamente em instantes.", "error")
         else:
-            flash(f"Erro durante a análise: {error_msg}", "error")
+            print(f"[ERRO INESPERADO] {error_msg}", file=sys.stderr)
+            flash("Não foi possível processar o exame. Tente novamente.", "error")
         return redirect(url_for("index"))
 
     finally:
@@ -513,10 +516,12 @@ def trial_analyze():
         if "api key not valid" in error_lower or "invalid api key" in error_lower:
             return jsonify({"error": "Serviço temporariamente indisponível."}), 503
         elif "quota" in error_lower or "rate limit" in error_lower or "resource_exhausted" in error_lower:
-            return jsonify({"error": "Muitas solicitações. Tente novamente em alguns instantes."}), 429
+            return jsonify({"error": "Limite de requisições atingido. Tente novamente em alguns instantes."}), 429
         elif "503" in error_lower or "unavailable" in error_lower or "overloaded" in error_lower:
-            return jsonify({"error": "O serviço de IA está temporariamente sobrecarregado. Aguarde alguns segundos e tente novamente."}), 503
-        return jsonify({"error": f"Erro durante a análise: {error_msg}"}), 500
+            return jsonify({"error": "Serviço de IA sobrecarregado. Aguarde alguns segundos e tente novamente."}), 503
+        elif "404" in error_lower or "not found" in error_lower:
+            return jsonify({"error": "Serviço de IA temporariamente indisponível. Tente novamente."}), 503
+        return jsonify({"error": "Não foi possível processar o exame. Tente novamente."}), 500
 
     finally:
         try:
