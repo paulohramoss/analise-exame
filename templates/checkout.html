@@ -338,15 +338,15 @@ input::placeholder { color: #9ca3af; }
           {% endif %}
         </div>
         <div style="font-size:1.5rem; font-weight:800; color:#1e293b; line-height:1;">
-          {% if default_plan == 'mensal' %}R$&nbsp;60 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/mês</span>
-          {% elif default_plan == 'semestral' %}R$&nbsp;300 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/6 meses</span>
-          {% else %}R$&nbsp;418 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/ano</span>
+          {% if default_plan == 'mensal' %}R$&nbsp;60,00 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/mês</span>
+          {% elif default_plan == 'semestral' %}R$&nbsp;50,00 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/mês</span>
+          {% else %}R$&nbsp;34,90 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/mês</span>
           {% endif %}
         </div>
         {% if default_plan == 'semestral' %}
-          <div style="font-size:.75rem; color:#16a34a; font-weight:700; margin-top:.15rem;">R$ 50/mês</div>
+          <div style="font-size:.75rem; color:#94a3b8; font-weight:600; margin-top:.15rem; text-decoration:line-through;">R$ 300,00 / 6 meses</div>
         {% elif default_plan == 'anual' %}
-          <div style="font-size:.75rem; color:#16a34a; font-weight:700; margin-top:.15rem;">R$ 34,90/mês</div>
+          <div style="font-size:.75rem; color:#94a3b8; font-weight:600; margin-top:.15rem; text-decoration:line-through;">R$ 418,00 / ano</div>
         {% endif %}
       </div>
       <a href="/planos" style="font-size:.78rem; color:#6b7280; text-decoration:none; white-space:nowrap; flex-shrink:0;">
@@ -366,16 +366,16 @@ input::placeholder { color: #9ca3af; }
         <div class="plan-card" data-plan="semestral" onclick="selectPlan('semestral')">
           <div class="plan-badge popular">Mais popular</div>
           <div class="plan-title">Semestral</div>
-          <div class="plan-price">R$&nbsp;300<span>/6 meses</span></div>
-          <div class="plan-per-month">R$ 50/mês</div>
-          <div class="plan-duration">6 meses de acesso</div>
+          <div class="plan-price">R$&nbsp;50<span>/mês</span></div>
+          <div class="plan-per-month" style="color:#94a3b8;text-decoration:line-through;font-weight:600;">R$ 300/6 meses</div>
+          <div class="plan-duration">6 meses · economia 17%</div>
         </div>
         <div class="plan-card" data-plan="anual" onclick="selectPlan('anual')">
           <div class="plan-badge">Melhor valor</div>
           <div class="plan-title">Anual</div>
-          <div class="plan-price">R$&nbsp;418<span>/ano</span></div>
-          <div class="plan-per-month">R$ 34,90/mês</div>
-          <div class="plan-duration">12 meses de acesso</div>
+          <div class="plan-price">R$&nbsp;34,90<span>/mês</span></div>
+          <div class="plan-per-month" style="color:#94a3b8;text-decoration:line-through;font-weight:600;">R$ 418/ano</div>
+          <div class="plan-duration">12 meses · economia 42%</div>
         </div>
       </div>
     </div>
