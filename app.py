@@ -239,6 +239,10 @@ def get_api_key() -> str:
     return os.environ.get("GEMINI_API_KEY", "")
 
 
+def get_anthropic_api_key() -> str:
+    return os.environ.get("ANTHROPIC_API_KEY", "")
+
+
 def get_model_name() -> str:
     return os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
@@ -369,6 +373,7 @@ def analyze():
             api_key=api_key,
             user_description=user_description,
             model_name=get_model_name(),
+            anthropic_api_key=get_anthropic_api_key(),
         )
 
         # Persiste análise e imagens no banco
@@ -474,6 +479,7 @@ def trial_analyze():
             api_key=api_key,
             user_description=user_description,
             model_name=get_model_name(),
+            anthropic_api_key=get_anthropic_api_key(),
         )
 
         # Persiste análise no banco
@@ -572,6 +578,7 @@ def api_analyze():
             api_key=api_key,
             user_description=user_description,
             model_name=get_model_name(),
+            anthropic_api_key=get_anthropic_api_key(),
         )
 
         # Persiste análise no banco

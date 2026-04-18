@@ -1,5 +1,6 @@
 flask==3.0.3
 google-genai>=1.0.0
+anthropic>=0.40.0
 python-dotenv==1.0.1
 Pillow
 requests==2.32.3
