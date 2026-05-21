@@ -1047,6 +1047,36 @@
                 isOpen ? '➖ Histórico Clínico' : '➕ Adicionar Histórico Clínico';
         });
 
+        // ── Compressão de imagem via Canvas (evita 413 no Vercel) ──
+        async function compressImage(file, maxWidth = 1600, quality = 0.82) {
+            const supportedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+            if (!supportedTypes.includes(file.type) || file.size < 300_000) return file;
+            return new Promise((resolve) => {
+                const img = new Image();
+                const url = URL.createObjectURL(file);
+                img.onload = () => {
+                    URL.revokeObjectURL(url);
+                    let { width, height } = img;
+                    if (width > maxWidth) {
+                        height = Math.round(height * maxWidth / width);
+                        width = maxWidth;
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    canvas.toBlob(
+                        blob => resolve(blob
+                            ? new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' })
+                            : file),
+                        'image/jpeg', quality
+                    );
+                };
+                img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+                img.src = url;
+            });
+        }
+
         // ── Form submit ──
         document.getElementById('trial-form').addEventListener('submit', async function (e) {
             e.preventDefault();
@@ -1076,8 +1106,9 @@
             if (duration)   parts.push(`Tempo de evolução: ${duration}`);
             if (mechanism)  parts.push(`Mecanismo de lesão: ${mechanism}`);
 
+            const compressed = await compressImage(file);
             const formData = new FormData();
-            formData.append('exam_image', file);
+            formData.append('exam_image', compressed, compressed.name || 'exam.jpg');
             formData.append('description', parts.join(' | '));
 
             try {
