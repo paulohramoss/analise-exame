@@ -76,6 +76,31 @@
             background: #f0f7ff;
         }
 
+        .responsible-section {
+            border: 1px solid #bfdbfe;
+            border-radius: 10px;
+            padding: 1rem 1.1rem;
+            margin: 0.85rem 0 1rem;
+            background: #f8fafc;
+        }
+
+        .responsible-section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            color: #155FC4;
+            font-size: 0.95rem;
+            font-weight: 800;
+            margin-bottom: 0.25rem;
+        }
+
+        .responsible-section-hint {
+            display: block;
+            color: #64748b;
+            font-size: 0.78rem;
+            margin-bottom: 0.85rem;
+        }
+
         .clinical-toggle {
             display: flex;
             align-items: center;
@@ -147,10 +172,12 @@
             min-width: 0;
         }
 
+        .responsible-section .form-group,
         .clinical-section .form-group {
             margin-bottom: 0.75rem;
         }
 
+        .responsible-section label,
         .clinical-section label {
             display: block;
             font-weight: 600;
@@ -159,6 +186,8 @@
             color: #334155;
         }
 
+        .responsible-section input[type="text"],
+        .responsible-section select,
         .clinical-section input[type="text"],
         .clinical-section input[type="number"],
         .clinical-section select,
@@ -174,6 +203,8 @@
             transition: border-color 0.2s;
         }
 
+        .responsible-section input:focus,
+        .responsible-section select:focus,
         .clinical-section input:focus,
         .clinical-section select:focus,
         .clinical-section textarea:focus {
@@ -245,6 +276,42 @@
             </div>
 
             <form action="/analyze" method="POST" enctype="multipart/form-data" id="upload-form">
+                <div class="responsible-section">
+                    <div class="responsible-section-title">
+                        <span>👤</span>
+                        <span>Responsável pelo laudo</span>
+                    </div>
+                    <small class="responsible-section-hint">Essas informações aparecerão no cabeçalho do laudo e do PDF.</small>
+
+                    <div class="form-row">
+                        <div class="form-group form-group-half">
+                            <label for="responsible_name">Nome do responsável</label>
+                            <input type="text" name="responsible_name" id="responsible_name" placeholder="Ex: Dra. Ana Souza" required>
+                        </div>
+                        <div class="form-group form-group-half">
+                            <label for="responsible_role">Perfil profissional</label>
+                            <select name="responsible_role" id="responsible_role" required>
+                                <option value="">— Selecione —</option>
+                                <option value="Médico">Médico</option>
+                                <option value="Laudista">Laudista</option>
+                                <option value="Fisioterapeuta">Fisioterapeuta</option>
+                                <option value="Outro profissional de saúde">Outro profissional de saúde</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group form-group-half">
+                            <label for="responsible_register">Registro profissional</label>
+                            <input type="text" name="responsible_register" id="responsible_register" placeholder="Ex: CRM-SP 000000, CREFITO-3 000000-F">
+                        </div>
+                        <div class="form-group form-group-half">
+                            <label for="responsible_organization">Clínica ou instituição</label>
+                            <input type="text" name="responsible_organization" id="responsible_organization" placeholder="Ex: Clínica Movimento">
+                        </div>
+                    </div>
+                </div>
+
                 <div class="upload-area" id="upload-area">
                     <input
                         type="file"
@@ -571,6 +638,14 @@
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
             if (selectedFiles.length === 0) return;
+
+            const responsibleName = document.getElementById('responsible_name');
+            const responsibleRole = document.getElementById('responsible_role');
+            if (!responsibleName.value.trim() || !responsibleRole.value) {
+                (responsibleName.value.trim() ? responsibleRole : responsibleName).focus();
+                alert('Informe o nome e o perfil profissional do responsável pela análise.');
+                return;
+            }
 
             const privacyConsent = document.getElementById('privacy_consent');
             if (!privacyConsent.checked) {

@@ -243,6 +243,20 @@ def _has_privacy_consent() -> bool:
     return value in {"accepted", "on", "true", "1", "yes"}
 
 
+def _form_text(name: str, max_length: int = 120) -> str:
+    value = (request.form.get(name) or "").strip()
+    return " ".join(value.split())[:max_length]
+
+
+def _responsible_info_from_form() -> dict[str, str]:
+    return {
+        "name": _form_text("responsible_name"),
+        "role": _form_text("responsible_role", 80),
+        "register": _form_text("responsible_register", 80),
+        "organization": _form_text("responsible_organization", 120),
+    }
+
+
 def _detect_modalidade(user_description: str) -> str | None:
     """Detecta a modalidade de imagem pela descrição do usuário."""
     desc = (user_description or "").lower()
@@ -404,6 +418,11 @@ def analyze():
         flash("Confirme o consentimento LGPD e a ciência de que a IA é ferramenta de apoio antes de enviar o exame.", "error")
         return redirect(url_for("index"))
 
+    responsible_info = _responsible_info_from_form()
+    if not responsible_info["name"] or not responsible_info["role"]:
+        flash("Informe o nome e o perfil profissional do responsável pela análise.", "error")
+        return redirect(url_for("index"))
+
     api_key = get_api_key()
     if not api_key:
         flash("Erro: GEMINI_API_KEY não configurada. Adicione a variável de ambiente no painel do Vercel (Settings → Environment Variables).", "error")
@@ -490,6 +509,7 @@ def analyze():
             images=images_data,
             num_images=result["num_images"],
             user_description=user_description,
+            responsible=responsible_info,
         )
 
     except Exception as e:

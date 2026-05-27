@@ -47,6 +47,70 @@
         }
 
         .btn-pdf:hover { background: #15803d; }
+
+        .professional-summary {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+
+        .professional-eyebrow {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 0.3rem;
+        }
+
+        .professional-name {
+            color: #0f172a;
+            font-size: 1.35rem;
+            line-height: 1.2;
+            margin: 0;
+        }
+
+        .professional-details {
+            color: #475569;
+            font-size: 0.94rem;
+            margin-top: 0.35rem;
+        }
+
+        .professional-status {
+            text-align: right;
+            min-width: 150px;
+        }
+
+        .analysis-technical-strip {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.75rem;
+            border-top: 1px solid #e2e8f0;
+            margin-top: 1.1rem;
+            padding-top: 1rem;
+        }
+
+        .analysis-technical-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.18rem;
+        }
+
+        @media (max-width: 720px) {
+            .professional-summary {
+                flex-direction: column;
+            }
+
+            .professional-status {
+                text-align: left;
+            }
+
+            .analysis-technical-strip {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -68,6 +132,11 @@
     </header>
 
     <main class="container">
+        {% set responsible = responsible|default({}) %}
+        {% set responsible_name = responsible.name|default('', true) %}
+        {% set responsible_role = responsible.role|default('', true) %}
+        {% set responsible_register = responsible.register|default('', true) %}
+        {% set responsible_organization = responsible.organization|default('', true) %}
         <!-- Aviso médico -->
         <div class="disclaimer-banner">
             <span class="disclaimer-icon">⚕️</span>
@@ -78,15 +147,36 @@
             </p>
         </div>
 
-        <!-- Metadados da análise -->
+        <!-- Cabeçalho profissional da análise -->
         <div class="result-meta card">
-            <div class="meta-grid">
-                <div class="meta-item">
-                    <span class="meta-label">Tipo de Exame Detectado</span>
+            <div class="professional-summary">
+                <div>
+                    <span class="professional-eyebrow">Responsável pela análise</span>
+                    <h1 class="professional-name">
+                        {{ responsible_name or 'Responsável não informado' }}
+                    </h1>
+                    <p class="professional-details">
+                        {% if responsible_role %}<span>{{ responsible_role }}</span>{% endif %}
+                        {% if responsible_register %}<span>{% if responsible_role %} · {% endif %}{{ responsible_register }}</span>{% endif %}
+                        {% if responsible_organization %}<span>{% if responsible_role or responsible_register %} · {% endif %}{{ responsible_organization }}</span>{% endif %}
+                        {% if not responsible_role and not responsible_register and not responsible_organization %}
+                            <span>Dados profissionais não informados</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="professional-status">
+                    <span class="meta-label">Status</span>
+                    <span class="meta-value status-ok">✅ Análise Concluída</span>
+                </div>
+            </div>
+
+            <div class="analysis-technical-strip">
+                <div class="analysis-technical-item">
+                    <span class="meta-label">Tipo de exame</span>
                     <span class="meta-value">{{ exam_type }}</span>
                 </div>
-                <div class="meta-item">
-                    <span class="meta-label">Imagens Analisadas</span>
+                <div class="analysis-technical-item">
+                    <span class="meta-label">Imagens analisadas</span>
                     <span class="meta-value">
                         {% if num_images|int == 1 %}
                             1 imagem
@@ -95,8 +185,8 @@
                         {% endif %}
                     </span>
                 </div>
-                <div class="meta-item">
-                    <span class="meta-label">Imagens de Referência</span>
+                <div class="analysis-technical-item">
+                    <span class="meta-label">Imagens de referência</span>
                     <span class="meta-value">
                         {% if references_used|int > 0 %}
                             {% if references_used|int == 1 %}
@@ -108,10 +198,6 @@
                             Análise sem referência externa
                         {% endif %}
                     </span>
-                </div>
-                <div class="meta-item">
-                    <span class="meta-label">Status</span>
-                    <span class="meta-value status-ok">✅ Análise Concluída</span>
                 </div>
             </div>
 
@@ -244,9 +330,19 @@
             const examType = `{{ exam_type }}`;
             const refsUsed = Number(`{{ references_used }}`);
             const numImages = Number(`{{ num_images }}`);
+            const responsible = {{ responsible|tojson }};
+            const responsibleName = responsible.name || 'Responsável não informado';
+            const responsibleDetails = [responsible.role, responsible.register, responsible.organization].filter(Boolean).join(' · ') || 'Dados profissionais não informados';
             const imageCountLabel = numImages === 1 ? `${numImages} imagem` : `${numImages} imagens`;
             const referenceCountLabel = refsUsed === 1 ? '1 imagem normal' : `${refsUsed} imagens normais`;
             const examImagesTitle = examImages.length === 1 ? 'Imagem do Exame' : 'Imagens do Exame';
+            const escapeHtml = value => String(value || '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
 
             const pdfContent = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -273,6 +369,11 @@
     .pdf-title-block { text-align: right; }
     .pdf-title { font-size: 15px; font-weight: 800; color: #1B72E8; }
     .pdf-subtitle { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+    .pdf-professional { background: #eff6ff; border-left: 4px solid #1B72E8; border-radius: 0 8px 8px 0; padding: 12px 14px; margin-bottom: 14px; }
+    .pdf-professional-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #1B72E8; font-weight: 800; margin-bottom: 3px; }
+    .pdf-professional-name { font-size: 17px; font-weight: 800; color: #0f172a; line-height: 1.25; }
+    .pdf-professional-details { font-size: 11.5px; color: #475569; margin-top: 2px; }
 
     /* Meta */
     .pdf-meta { background: #f4f7fb; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -328,6 +429,12 @@
             <div class="pdf-title">LAUDO DE ANÁLISE POR INTELIGÊNCIA ARTIFICIAL</div>
             <div class="pdf-subtitle">Data: ${dateStr} · Hora: ${timeStr} · Three Health Platform</div>
         </div>
+    </div>
+
+    <div class="pdf-professional">
+        <div class="pdf-professional-label">Responsável pela análise</div>
+        <div class="pdf-professional-name">${escapeHtml(responsibleName)}</div>
+        <div class="pdf-professional-details">${escapeHtml(responsibleDetails)}</div>
     </div>
 
     <div class="pdf-meta">
