@@ -473,7 +473,9 @@
             });
 
             const count = selectedFiles.length;
-            thumbCount.textContent = `${count} imagem${count > 1 ? 'ns' : ''} selecionada${count > 1 ? 's' : ''}`;
+            const imageWord = count === 1 ? 'imagem' : 'imagens';
+            const selectedWord = count === 1 ? 'selecionada' : 'selecionadas';
+            thumbCount.textContent = `${count} ${imageWord} ${selectedWord}`;
         }
 
         function syncFilesInput() {

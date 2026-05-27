@@ -1127,8 +1127,11 @@
 
                 // Populate result section
                 document.getElementById('r-exam-type').textContent = data.exam_type || '—';
+                const referencesUsed = Number(data.references_used || 0);
                 document.getElementById('r-refs').textContent =
-                    data.references_used > 0 ? `${data.references_used} imagem(ns)` : 'Análise sem referência';
+                    referencesUsed > 0
+                        ? `${referencesUsed} ${referencesUsed === 1 ? 'imagem' : 'imagens'}`
+                        : 'Análise sem referência';
                 document.getElementById('r-image').src = `data:${data.image_mime};base64,${data.image_b64}`;
 
                 const reportEl = document.getElementById('report-content');

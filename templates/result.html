@@ -87,13 +87,23 @@
                 </div>
                 <div class="meta-item">
                     <span class="meta-label">Imagens Analisadas</span>
-                    <span class="meta-value">{{ num_images }} imagem{% if num_images > 1 %}ns{% endif %}</span>
+                    <span class="meta-value">
+                        {% if num_images|int == 1 %}
+                            1 imagem
+                        {% else %}
+                            {{ num_images }} imagens
+                        {% endif %}
+                    </span>
                 </div>
                 <div class="meta-item">
                     <span class="meta-label">Imagens de Referência</span>
                     <span class="meta-value">
-                        {% if references_used > 0 %}
-                            {{ references_used }} imagem(ns) normal(is) usada(s)
+                        {% if references_used|int > 0 %}
+                            {% if references_used|int == 1 %}
+                                1 imagem normal usada
+                            {% else %}
+                                {{ references_used }} imagens normais usadas
+                            {% endif %}
                         {% else %}
                             Análise sem referência externa
                         {% endif %}
@@ -118,7 +128,7 @@
 
             <!-- Imagens do exame -->
             <div class="card exam-image-card">
-                <h2>🔬 Exame{% if num_images > 1 %}s{% endif %} Analisado{% if num_images > 1 %}s{% endif %}</h2>
+                <h2>🔬 Exame{% if num_images|int > 1 %}s{% endif %} Analisado{% if num_images|int > 1 %}s{% endif %}</h2>
                 <div class="exam-images-gallery">
                     {% for img in images %}
                     <div>
@@ -127,7 +137,7 @@
                                  alt="Imagem {{ loop.index }} do exame"
                                  class="exam-image" />
                         </div>
-                        {% if num_images > 1 %}
+                        {% if num_images|int > 1 %}
                         <div class="exam-image-label">Imagem {{ loop.index }}</div>
                         {% endif %}
                     </div>
@@ -232,8 +242,11 @@
             {% endif %}
 
             const examType = `{{ exam_type }}`;
-            const refsUsed = `{{ references_used }}`;
-            const numImages = `{{ num_images }}`;
+            const refsUsed = Number(`{{ references_used }}`);
+            const numImages = Number(`{{ num_images }}`);
+            const imageCountLabel = numImages === 1 ? `${numImages} imagem` : `${numImages} imagens`;
+            const referenceCountLabel = refsUsed === 1 ? '1 imagem normal' : `${refsUsed} imagens normais`;
+            const examImagesTitle = examImages.length === 1 ? 'Imagem do Exame' : 'Imagens do Exame';
 
             const pdfContent = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -324,18 +337,18 @@
         </div>
         <div class="pdf-meta-item">
             <span class="pdf-meta-label">Imagens Analisadas</span>
-            <span class="pdf-meta-value">${numImages} imagem${numImages > 1 ? 'ns' : ''}</span>
+            <span class="pdf-meta-value">${imageCountLabel}</span>
         </div>
         <div class="pdf-meta-item">
             <span class="pdf-meta-label">Referências Usadas</span>
-            <span class="pdf-meta-value">${refsUsed > 0 ? refsUsed + ' imagem(ns) normal(is)' : 'Sem referência'}</span>
+            <span class="pdf-meta-value">${refsUsed > 0 ? referenceCountLabel : 'Sem referência'}</span>
         </div>
     </div>
 
     ${userDesc ? `<div class="pdf-clinical"><strong>Informações Clínicas Fornecidas</strong>${userDesc}</div>` : ''}
 
     <div class="pdf-images-section">
-        <h3>Imagem${examImages.length > 1 ? 'ns' : ''} do Exame</h3>
+        <h3>${examImagesTitle}</h3>
         <div class="pdf-images-grid">${imagesHTML}</div>
     </div>
 

@@ -167,7 +167,7 @@ Região detectada: **{region_label}**
 Você recebeu (nesta ordem):
 1. Atlas de referência em PDF (se fornecido) — base anatômica
 2. Imagem(ns) de referência normal — padrão de comparação
-3. Exame do paciente (última(s) imagem(ns)) — objeto da análise
+3. Exame do paciente (imagem ou imagens finais) — objeto da análise
 
 ---
 
