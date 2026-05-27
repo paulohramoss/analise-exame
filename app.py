@@ -4,6 +4,7 @@ Permite upload de uma ou múltiplas imagens de exames e gera laudos comparativos
 """
 
 import base64
+import hmac
 import hashlib
 import importlib
 import os
@@ -36,6 +37,7 @@ from core import asaas, db
 load_dotenv()
 
 DEFAULT_FLASK_SECRET_KEY = "dev-secret-key-change-in-prod"
+DEFAULT_LOCAL_ADMIN_KEY = "pauloramosteste"
 
 
 def _is_production_like() -> bool:
@@ -46,6 +48,19 @@ def _is_production_like() -> bool:
         os.environ.get("APP_ENV", ""),
     }
     return any(value.lower() in {"production", "prod"} for value in env_values)
+
+
+def _is_local_runtime() -> bool:
+    return not os.environ.get("VERCEL") and not _is_production_like()
+
+
+def _get_admin_key() -> str:
+    admin_key = os.environ.get("ADMIN_KEY", "").strip()
+    if admin_key:
+        return admin_key
+    if _is_local_runtime():
+        return DEFAULT_LOCAL_ADMIN_KEY
+    return ""
 
 
 flask_secret_key = os.environ.get("FLASK_SECRET_KEY", DEFAULT_FLASK_SECRET_KEY)
@@ -368,15 +383,16 @@ def admin_entrar():
     """
     Concede acesso de teste via cookie admin.
     Protegido pela variável de ambiente ADMIN_KEY.
+    Em ambiente local, usa DEFAULT_LOCAL_ADMIN_KEY se ADMIN_KEY não estiver definida.
     Uso: /admin/entrar?key=SUA_ADMIN_KEY
     Para revogar: /admin/sair
     """
-    admin_key = os.environ.get("ADMIN_KEY", "").strip()
+    admin_key = _get_admin_key()
     if not admin_key:
-        return "ADMIN_KEY não configurada no servidor.", 403
+        return "ADMIN_KEY não configurada no servidor. Defina ADMIN_KEY nas variáveis de ambiente.", 403
 
     provided = request.args.get("key", "").strip()
-    if not provided or provided != admin_key:
+    if not provided or not hmac.compare_digest(provided, admin_key):
         return "Chave inválida.", 403
 
     token = _serializer().dumps({"admin": True}, salt=_ADMIN_SALT)
