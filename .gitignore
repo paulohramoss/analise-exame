@@ -14,6 +14,9 @@ dist/
 build/
 .pytest_cache/
 
+# Resíduos comuns de comandos pip digitados com redirecionamento/sinal errado
+=[0-9]*
+
 # IDE
 .vscode/
 .idea/

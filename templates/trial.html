@@ -554,6 +554,28 @@
             color: #78350f;
         }
 
+        .consent-check {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.6rem;
+            margin: 0.2rem 0 1rem;
+            padding: 0.75rem 0.9rem;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            background: #eff6ff;
+            color: #1e3a8a;
+            font-size: 0.8rem;
+            line-height: 1.45;
+            cursor: pointer;
+        }
+
+        .consent-check input {
+            width: 1rem;
+            height: 1rem;
+            margin-top: 0.1rem;
+            flex-shrink: 0;
+        }
+
         /* ── Loading ── */
         .loading-overlay {
             position: fixed;
@@ -682,7 +704,7 @@
 
             <div class="disclaimer">
                 <span style="font-size:1.2rem;flex-shrink:0">⚕️</span>
-                <p><strong>Aviso:</strong> Ferramenta de apoio para profissionais de saúde. <strong>Não substitui</strong> o diagnóstico médico.</p>
+                <p><strong>Aviso CFM/LGPD:</strong> Ferramenta de apoio para profissionais de saúde. <strong>Não substitui</strong> diagnóstico, prognóstico, conduta ou laudo médico, e deve ser usada com ciência do paciente e revisão profissional.</p>
             </div>
 
             <div id="error-container"></div>
@@ -723,6 +745,14 @@
                             <button type="button" class="remove-btn" id="remove-btn">✕ Remover</button>
                         </div>
                     </div>
+
+                    <label class="consent-check" for="trial_privacy_consent">
+                        <input type="checkbox" id="trial_privacy_consent" value="accepted" required>
+                        <span>
+                            Confirmo que tenho autorização/base legal para processar esta imagem,
+                            que o paciente foi informado sobre o uso de IA como apoio, e que o resultado será revisado por médico responsável.
+                        </span>
+                    </label>
 
                     <!-- Histórico Clínico (colapsável) -->
                     <button type="button" class="clinical-toggle" id="trial-clinical-toggle">
@@ -1087,6 +1117,13 @@
             const file = fileInput.files[0];
             if (!file) { showError('Selecione uma imagem antes de continuar.'); return; }
 
+            const privacyConsent = document.getElementById('trial_privacy_consent');
+            if (!privacyConsent.checked) {
+                privacyConsent.focus();
+                showError('Confirme o consentimento LGPD e a ciência de que a IA é ferramenta de apoio.');
+                return;
+            }
+
             const submitBtn = document.getElementById('submit-btn');
             submitBtn.disabled = true;
             document.getElementById('loading-overlay').style.display = 'flex';
@@ -1110,6 +1147,7 @@
             const formData = new FormData();
             formData.append('exam_image', compressed, compressed.name || 'exam.jpg');
             formData.append('description', parts.join(' | '));
+            formData.append('privacy_consent', 'accepted');
 
             try {
                 const resp = await fetch('/trial/analyze', { method: 'POST', body: formData });
@@ -1286,9 +1324,9 @@
             <span>Gerado automaticamente por IA · ${dateStr}</span>
         </div>
         <div class="pdf-disclaimer">
-            ⚕️ <strong>AVISO:</strong> Este laudo foi gerado por Inteligência Artificial como ferramenta de apoio educacional.
-            <strong>Não substitui</strong> o diagnóstico de um médico especialista qualificado.
-            Os achados devem ser validados por profissional de saúde habilitado.
+            ⚕️ <strong>AVISO CFM/LGPD:</strong> Este laudo foi gerado por Inteligência Artificial como ferramenta de apoio à decisão clínica.
+            <strong>Não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
+            O uso da IA deve ser informado ao paciente, os dados devem ser tratados conforme a LGPD e a decisão final deve ser registrada pelo profissional habilitado.
         </div>
     </div>
 </div>

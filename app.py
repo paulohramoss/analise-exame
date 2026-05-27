@@ -5,6 +5,7 @@ Permite upload de uma ou múltiplas imagens de exames e gera laudos comparativos
 
 import base64
 import hashlib
+import importlib
 import os
 import sys
 import tempfile
@@ -20,13 +21,39 @@ from dotenv import load_dotenv
 
 from werkzeug.security import generate_password_hash, check_password_hash
 
+try:
+    _flask_limiter = importlib.import_module("flask_limiter")
+    _flask_limiter_errors = importlib.import_module("flask_limiter.errors")
+    Limiter = getattr(_flask_limiter, "Limiter")
+    RateLimitExceeded = getattr(_flask_limiter_errors, "RateLimitExceeded")
+except ImportError:  # pragma: no cover - dependency is installed in production via requirements.txt
+    Limiter = None
+    RateLimitExceeded = None
+
 from core.analyzer import analyze_exam
 from core import asaas, db
 
 load_dotenv()
 
+DEFAULT_FLASK_SECRET_KEY = "dev-secret-key-change-in-prod"
+
+
+def _is_production_like() -> bool:
+    env_values = {
+        os.environ.get("VERCEL_ENV", ""),
+        os.environ.get("FLASK_ENV", ""),
+        os.environ.get("ENV", ""),
+        os.environ.get("APP_ENV", ""),
+    }
+    return any(value.lower() in {"production", "prod"} for value in env_values)
+
+
+flask_secret_key = os.environ.get("FLASK_SECRET_KEY", DEFAULT_FLASK_SECRET_KEY)
+if _is_production_like() and flask_secret_key == DEFAULT_FLASK_SECRET_KEY:
+    raise RuntimeError("FLASK_SECRET_KEY deve ser definido com valor seguro em produção.")
+
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key-change-in-prod")
+app.secret_key = flask_secret_key
 
 # ── Planos disponíveis ────────────────────────────────────────────────────────
 PLANS = {
@@ -167,6 +194,53 @@ def _get_ip() -> str | None:
     if forwarded:
         return forwarded.split(",")[0].strip() or None
     return request.remote_addr or None
+
+
+def _rate_limit_key() -> str:
+    return _get_ip() or "anonymous"
+
+
+limiter = None
+if Limiter is not None:
+    limiter = Limiter(
+        key_func=_rate_limit_key,
+        app=app,
+        storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
+        default_limits=[],
+    )
+
+
+def rate_limit(env_name: str, default: str):
+    def decorator(fn):
+        if limiter is None:
+            return fn
+        return limiter.limit(os.environ.get(env_name, default))(fn)
+    return decorator
+
+
+if RateLimitExceeded is not None:
+    @app.errorhandler(RateLimitExceeded)
+    def _handle_rate_limit(error):
+        message = "Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente."
+        retry_after = getattr(error, "retry_after", None)
+
+        if request.path.startswith(("/trial", "/api")):
+            response = jsonify({"error": message})
+            response.status_code = 429
+            if retry_after:
+                response.headers["Retry-After"] = str(retry_after)
+            return response
+
+        flash(message, "error")
+        response = make_response(redirect(url_for("index")), 429)
+        if retry_after:
+            response.headers["Retry-After"] = str(retry_after)
+        return response
+
+
+def _has_privacy_consent() -> bool:
+    value = (request.form.get("privacy_consent") or "").strip().lower()
+    return value in {"accepted", "on", "true", "1", "yes"}
 
 
 def _detect_modalidade(user_description: str) -> str | None:
@@ -326,6 +400,10 @@ def analyze():
     g.modo = "premium"
     t0 = time.time()
 
+    if not _has_privacy_consent():
+        flash("Confirme o consentimento LGPD e a ciência de que a IA é ferramenta de apoio antes de enviar o exame.", "error")
+        return redirect(url_for("index"))
+
     api_key = get_api_key()
     if not api_key:
         flash("Erro: GEMINI_API_KEY não configurada. Adicione a variável de ambiente no painel do Vercel (Settings → Environment Variables).", "error")
@@ -446,10 +524,14 @@ def trial():
 
 
 @app.route("/trial/analyze", methods=["POST"])
+@rate_limit("TRIAL_RATE_LIMIT", "10 per hour")
 def trial_analyze():
     """Endpoint para análise no modo de teste gratuito (retorna JSON, aceita apenas 1 imagem)."""
     g.modo = "trial"
     t0 = time.time()
+
+    if not _has_privacy_consent():
+        return jsonify({"error": "Confirme o consentimento LGPD e a ciência de que a IA é ferramenta de apoio."}), 400
 
     api_key = get_api_key()
     if not api_key:
@@ -537,6 +619,7 @@ def trial_analyze():
 
 
 @app.route("/api/analyze", methods=["POST"])
+@rate_limit("API_RATE_LIMIT", "60 per hour")
 def api_analyze():
     """Endpoint REST para integração programática. Suporta múltiplas imagens."""
     g.modo = "api"

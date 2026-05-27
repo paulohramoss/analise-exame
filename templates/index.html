@@ -213,9 +213,9 @@
         <div class="disclaimer-banner">
             <span class="disclaimer-icon">⚕️</span>
             <p>
-                <strong>Aviso Médico:</strong> Esta ferramenta é um auxiliar para profissionais de saúde.
-                O resultado gerado por IA <strong>não substitui</strong> o diagnóstico de um médico especialista.
-                Sempre consulte um profissional qualificado.
+                <strong>Aviso CFM/LGPD:</strong> Esta ferramenta usa IA apenas como apoio à decisão clínica.
+                O resultado <strong>não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
+                Use somente com ciência do paciente e base legal adequada para o tratamento dos dados de saúde.
             </p>
         </div>
 
@@ -355,6 +355,14 @@
                     ></textarea>
                     <small>Região anatômica, lateralidade e contexto clínico melhoram a precisão da análise.</small>
                 </div>
+
+                <label class="consent-check" for="privacy_consent">
+                    <input type="checkbox" name="privacy_consent" id="privacy_consent" value="accepted" required>
+                    <span>
+                        Confirmo que tenho autorização/base legal para processar as imagens e informações clínicas,
+                        que o paciente foi informado sobre o uso de IA como apoio, e que o resultado será revisado por médico responsável.
+                    </span>
+                </label>
 
                 <button type="submit" class="btn-primary" id="submit-btn">
                     <span class="btn-icon">🦴</span>
@@ -563,6 +571,13 @@
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
             if (selectedFiles.length === 0) return;
+
+            const privacyConsent = document.getElementById('privacy_consent');
+            if (!privacyConsent.checked) {
+                privacyConsent.focus();
+                alert('Confirme o consentimento LGPD e a ciência de que a IA é ferramenta de apoio antes de enviar o exame.');
+                return;
+            }
 
             // Comprime todas as imagens antes de enviar
             selectedFiles = await Promise.all(selectedFiles.map(f => compressImage(f)));
