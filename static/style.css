@@ -364,6 +364,149 @@ header {
     font-size: 1.1rem;
 }
 
+/* ===== Validação Clínica Formal ===== */
+.formal-validation-card {
+    border: 1px solid #bfdbfe;
+    padding: 1.4rem;
+}
+
+.formal-validation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.formal-validation-header h2 {
+    margin-bottom: 0.25rem;
+}
+
+.formal-validation-badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    border-radius: 999px;
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.formal-validation-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.formal-field {
+    grid-column: span 6;
+    min-width: 0;
+}
+
+.formal-field-compact {
+    grid-column: span 6;
+}
+
+.formal-validation-card textarea,
+.formal-validation-card input,
+.formal-validation-card select {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.7rem 0.8rem;
+    font: inherit;
+    font-size: 0.92rem;
+    line-height: 1.35;
+    background: #fff;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.formal-validation-card input,
+.formal-validation-card select {
+    min-height: 42px;
+}
+
+.formal-validation-card textarea:focus,
+.formal-validation-card input:focus,
+.formal-validation-card select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(27, 114, 232, 0.12);
+}
+
+.formal-validation-card textarea {
+    min-height: 96px;
+    resize: vertical;
+}
+
+.formal-validation-card .textarea-short {
+    min-height: 82px;
+}
+
+.formal-validation-card .textarea-tall {
+    min-height: 118px;
+}
+
+.formal-validation-card label {
+    display: block;
+    color: var(--text);
+    font-size: 0.84rem;
+    font-weight: 800;
+    margin-bottom: 0.3rem;
+}
+
+.formal-validation-card small {
+    color: var(--text-muted);
+    display: block;
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+.formal-validation-full {
+    grid-column: 1 / -1;
+}
+
+.formal-validation-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+@media (max-width: 720px) {
+    .formal-validation-header {
+        flex-direction: column;
+    }
+
+    .formal-validation-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .formal-field,
+    .formal-field-compact,
+    .formal-validation-full {
+        grid-column: 1 / -1;
+    }
+
+    .formal-validation-actions,
+    .formal-validation-actions .btn-primary {
+        width: 100%;
+    }
+
+    .formal-validation-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
 /* ===== How It Works ===== */
 .how-it-works {
     margin-bottom: 1.5rem;

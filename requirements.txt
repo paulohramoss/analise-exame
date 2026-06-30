@@ -4,8 +4,10 @@ google-genai>=1.0.0
 anthropic>=0.40.0
 python-dotenv==1.0.1
 Pillow
+pydicom>=2.4.4
+numpy>=1.26.0
 requests==2.32.3
 Werkzeug==3.0.4
-supabase>=2.15.0
+supabase==2.15.0
 httpx>=0.28.1
 redis>=5.0.0

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three Health — Dashboard da Clínica</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            flex-wrap: wrap;
+        }
+
+        .dashboard-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .dashboard-title {
+            color: #0f172a;
+            font-size: 1.65rem;
+            line-height: 1.2;
+            margin: 0;
+        }
+
+        .dashboard-subtitle {
+            color: #64748b;
+            margin-top: 0.35rem;
+            font-size: 0.94rem;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.85rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .metric-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 1rem;
+            box-shadow: var(--shadow);
+        }
+
+        .metric-label {
+            color: #64748b;
+            font-size: 0.74rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            display: block;
+            color: #0f172a;
+            font-size: 1.9rem;
+            font-weight: 800;
+            margin-top: 0.2rem;
+            line-height: 1;
+        }
+
+        .metric-note {
+            color: #475569;
+            font-size: 0.82rem;
+            margin-top: 0.45rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .bar-list {
+            display: grid;
+            gap: 0.7rem;
+            margin-top: 1rem;
+        }
+
+        .bar-row {
+            display: grid;
+            grid-template-columns: minmax(120px, 0.65fr) 1fr auto;
+            align-items: center;
+            gap: 0.7rem;
+            color: #475569;
+            font-size: 0.86rem;
+            font-weight: 700;
+        }
+
+        .bar-track {
+            height: 9px;
+            background: #e2e8f0;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            min-width: 8px;
+            background: #1B72E8;
+            border-radius: inherit;
+        }
+
+        .compact-list {
+            display: grid;
+            gap: 0.7rem;
+            margin-top: 1rem;
+        }
+
+        .compact-item {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 0.7rem;
+        }
+
+        .compact-item:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .compact-title {
+            color: #0f172a;
+            font-weight: 800;
+            font-size: 0.92rem;
+        }
+
+        .compact-meta {
+            color: #64748b;
+            font-size: 0.8rem;
+            margin-top: 0.15rem;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            height: fit-content;
+            border: 1px solid #bfdbfe;
+            color: #155FC4;
+            background: #eff6ff;
+            border-radius: 999px;
+            padding: 0.22rem 0.55rem;
+            font-size: 0.72rem;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .admin-note {
+            border: 1px solid #fde68a;
+            background: #fffbeb;
+            color: #92400e;
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        @media (max-width: 900px) {
+            .metric-grid,
+            .dashboard-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 620px) {
+            .dashboard-head,
+            .metric-grid,
+            .dashboard-grid,
+            .bar-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-row">
+                    <div class="logo-lines"><span></span><span></span><span></span></div>
+                    <span class="logo-wordmark">health</span>
+                </div>
+                <div class="logo-underline"></div>
+            </div>
+            <div class="header-actions">
+                <a href="/laudos" class="btn-secondary">Histórico</a>
+                <a href="/" class="btn-secondary">Nova Análise</a>
+                <a href="/premium/logout" class="btn-secondary">Sair</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="dashboard-head">
+            <div>
+                <h1 class="dashboard-title">Dashboard da clínica</h1>
+                <p class="dashboard-subtitle">Volume, consenso, pendências de validação e desempenho clínico dos laudos.</p>
+            </div>
+            <a href="/" class="btn-primary">Analisar novo exame</a>
+        </div>
+
+        {% if is_admin %}
+        <div class="admin-note">Modo admin ativo: métricas calculadas sobre os laudos mais recentes do ambiente.</div>
+        {% endif %}
+
+        <section class="metric-grid">
+            <div class="metric-card">
+                <span class="metric-label">Laudos gerados</span>
+                <strong class="metric-value">{{ metrics.total_analises }}</strong>
+                <p class="metric-note">Histórico recente considerado no painel.</p>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Validações formais</span>
+                <strong class="metric-value">{{ metrics.total_validacoes }}</strong>
+                <p class="metric-note">{{ metrics.pendentes_validacao }} pendente{% if metrics.pendentes_validacao != 1 %}s{% endif %} de validação.</p>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Concordância média</span>
+                <strong class="metric-value">{{ metrics.media_concordancia }}%</strong>
+                <p class="metric-note">{{ metrics.concordancia_plena }} validação{% if metrics.concordancia_plena != 1 %}es{% endif %} com concordância plena.</p>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Consenso dual</span>
+                <strong class="metric-value">{{ metrics.consenso_percentual }}%</strong>
+                <p class="metric-note">{{ metrics.consenso_dual }} laudo{% if metrics.consenso_dual != 1 %}s{% endif %} com Gemini + Claude.</p>
+            </div>
+        </section>
+
+        <section class="dashboard-grid">
+            <div class="card">
+                <h2>Exames por região</h2>
+                <div class="bar-list">
+                    {% for pair in metrics.exames_por_tipo %}
+                    {% set label = pair[0]|exam_label %}
+                    {% set count = pair[1] %}
+                    <div class="bar-row">
+                        <span>{{ label }}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: {{ (count / metrics.total_analises * 100) if metrics.total_analises else 0 }}%"></div>
+                        </div>
+                        <strong>{{ count }}</strong>
+                    </div>
+                    {% else %}
+                    <p class="card-description">Sem exames suficientes para montar o gráfico.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Modalidades informadas</h2>
+                <div class="bar-list">
+                    {% for pair in metrics.modalidades %}
+                    {% set label = pair[0] %}
+                    {% set count = pair[1] %}
+                    <div class="bar-row">
+                        <span>{{ label }}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: {{ (count / metrics.total_analises * 100) if metrics.total_analises else 0 }}%"></div>
+                        </div>
+                        <strong>{{ count }}</strong>
+                    </div>
+                    {% else %}
+                    <p class="card-description">Sem modalidade informada ainda.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Pendentes de validação</h2>
+                <div class="compact-list">
+                    {% for item in pending %}
+                    <div class="compact-item">
+                        <div>
+                            <div class="compact-title">{{ item.tipo_exame|exam_label }}</div>
+                            <div class="compact-meta">{{ item.created_at|datetime_br }} · {{ item.num_imagens }} {{ 'imagem' if item.num_imagens == 1 else 'imagens' }}</div>
+                        </div>
+                        <a class="status-pill" href="{{ url_for('laudo_detalhe', analise_id=item.id) }}">Validar</a>
+                    </div>
+                    {% else %}
+                    <p class="card-description">Todos os laudos recentes foram validados.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Validações recentes</h2>
+                <div class="compact-list">
+                    {% for item in validations %}
+                    <div class="compact-item">
+                        <div>
+                            <div class="compact-title">{{ item.tipo_exame|exam_label }} · {{ item.grau_concordancia or 0 }}%</div>
+                            <div class="compact-meta">{{ item.created_at|datetime_br }}{% if item.validado_por %} · {{ item.validado_por }}{% endif %}</div>
+                        </div>
+                        <span class="status-pill">{{ 'Concordante' if item.concordancia else 'Revisado' }}</span>
+                    </div>
+                    {% else %}
+                    <p class="card-description">Nenhuma validação formal registrada ainda.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

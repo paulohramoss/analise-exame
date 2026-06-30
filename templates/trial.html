@@ -733,12 +733,12 @@
                 <form id="trial-form">
                     <div class="upload-area" id="upload-area">
                         <input type="file" name="exam_image" id="exam_image"
-                               accept=".png,.jpg,.jpeg,.webp,.gif"
+                               accept=".png,.jpg,.jpeg,.webp,.gif,.dcm"
                                class="file-input" required>
                         <label for="exam_image" class="upload-label" id="upload-label">
                             <span class="upload-icon">📷</span>
                             <span class="upload-text">Clique ou arraste a imagem aqui</span>
-                            <span class="upload-hint">RM · Raio-X · TC · PNG, JPG, WEBP — Máx. 20MB</span>
+                            <span class="upload-hint">RM · Raio-X · TC · DICOM, PNG, JPG, WEBP — Máx. 20MB</span>
                         </label>
                         <div class="preview-container" id="preview-container" style="display:none;">
                             <img id="image-preview" src="" alt="Preview">
@@ -1036,6 +1036,13 @@
 
         fileInput.addEventListener('change', function () {
             if (this.files && this.files[0]) {
+                const file = this.files[0];
+                if (file.name.toLowerCase().endsWith('.dcm')) {
+                    imagePreview.src = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="420" height="260" viewBox="0 0 420 260"><rect width="420" height="260" fill="#0f172a"/><text x="210" y="122" text-anchor="middle" fill="#bfdbfe" font-family="Arial" font-size="28" font-weight="700">DICOM</text><text x="210" y="154" text-anchor="middle" fill="#94a3b8" font-family="Arial" font-size="14">Arquivo será convertido para análise</text></svg>');
+                    previewContainer.style.display = 'flex';
+                    uploadLabel.style.display = 'none';
+                    return;
+                }
                 const reader = new FileReader();
                 reader.onload = e => {
                     imagePreview.src = e.target.result;

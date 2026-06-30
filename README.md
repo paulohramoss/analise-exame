@@ -86,6 +86,17 @@ Edite o arquivo `.env` e defina sua chave de API:
 GEMINI_API_KEY=sua_chave_aqui
 ```
 
+Se você já usa a nomenclatura da documentação do Google, `GOOGLE_API_KEY`
+também é aceito como alias local.
+
+Para manter a geração do consenso abaixo de 90 segundos, o app usa por padrão
+um orçamento de tempo e não faz upload do atlas PDF em toda análise:
+
+```env
+ANALYSIS_BUDGET_SECONDS=90
+INCLUDE_REFERENCE_PDF=false
+```
+
 ### 5. Iniciar a aplicação
 
 ```bash

@@ -45,6 +45,19 @@
             object-fit: cover;
         }
 
+        .thumb-dicom {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0f172a;
+            color: #bfdbfe;
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+        }
+
         .thumb-remove {
             position: absolute;
             top: 3px;
@@ -74,6 +87,13 @@
         .upload-area.has-files {
             border-color: #1B72E8;
             background: #f0f7ff;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            flex-wrap: wrap;
         }
 
         .responsible-section {
@@ -236,6 +256,16 @@
                 </div>
                 <div class="logo-underline"></div>
             </div>
+            <div class="header-actions">
+                {% if premium %}
+                <a href="/clinica/dashboard" class="btn-secondary">Dashboard</a>
+                <a href="/laudos" class="btn-secondary">Histórico</a>
+                <a href="/premium/logout" class="btn-secondary">Sair</a>
+                {% else %}
+                <a href="/login" class="btn-secondary">Entrar</a>
+                <a href="/planos" class="btn-secondary">Planos</a>
+                {% endif %}
+            </div>
         </div>
     </header>
 
@@ -317,7 +347,7 @@
                         type="file"
                         name="exam_images"
                         id="exam_images"
-                        accept=".png,.jpg,.jpeg,.webp,.gif"
+                        accept=".png,.jpg,.jpeg,.webp,.gif,.dcm"
                         class="file-input"
                         multiple
                         required
@@ -325,7 +355,7 @@
                     <label for="exam_images" class="upload-label" id="upload-label">
                         <span class="upload-icon">📷</span>
                         <span class="upload-text">Clique para selecionar ou arraste as imagens aqui</span>
-                        <span class="upload-hint">RM · Raio-X · TC · PNG, JPG, WEBP — Máximo 20MB por imagem · Até 5 imagens</span>
+                        <span class="upload-hint">RM · Raio-X · TC · DICOM, PNG, JPG, WEBP — Máximo 20MB por imagem · Até 5 imagens</span>
                     </label>
                     <div id="thumbnails-container" style="display:none; padding: 0.75rem 0;">
                         <div class="image-thumbnails" id="image-thumbnails"></div>
@@ -484,8 +514,8 @@
         <div class="loading-content">
             <div class="spinner"></div>
             <h3>Analisando exame...</h3>
-            <p>Buscando imagens de referência e gerando laudo com IA.</p>
-            <p>Isso pode levar alguns segundos.</p>
+            <p>Gerando laudo com consenso otimizado entre os modelos de IA.</p>
+            <p>Meta de resposta: até 90 segundos.</p>
         </div>
     </div>
 
@@ -527,6 +557,23 @@
 
             imageThumbnails.innerHTML = '';
             selectedFiles.forEach((file, index) => {
+                const isDicom = file.name.toLowerCase().endsWith('.dcm');
+                if (isDicom) {
+                    const item = document.createElement('div');
+                    item.className = 'thumb-item';
+                    item.innerHTML = `
+                        <div class="thumb-dicom">DICOM</div>
+                        <button type="button" class="thumb-remove" data-index="${index}" title="Remover imagem">✕</button>
+                    `;
+                    imageThumbnails.appendChild(item);
+                    item.querySelector('.thumb-remove').addEventListener('click', function() {
+                        const idx = parseInt(this.getAttribute('data-index'));
+                        selectedFiles.splice(idx, 1);
+                        syncFilesInput();
+                        updateThumbnails();
+                    });
+                    return;
+                }
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const item = document.createElement('div');

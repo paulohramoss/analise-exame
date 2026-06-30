@@ -1,0 +1,95 @@
+{% if analysis_id %}
+<div class="card formal-validation-card">
+    <div class="formal-validation-header">
+        <div>
+            <h2>Validação clínica formal</h2>
+            <p class="card-description">
+                Registre o parecer final do profissional para auditoria, concordância e evolução da base clínica.
+            </p>
+        </div>
+        <span class="formal-validation-badge">Revisão humana</span>
+    </div>
+    <form action="/validacao-clinica" method="POST">
+        <input type="hidden" name="analysis_id" value="{{ analysis_id }}">
+
+        <div class="formal-validation-grid">
+            <div class="formal-field">
+                <label for="reviewer_name_{{ analysis_id }}">Validador responsável</label>
+                <input
+                    type="text"
+                    id="reviewer_name_{{ analysis_id }}"
+                    name="reviewer_name"
+                    value="{{ responsible_name|default('', true) }}"
+                    placeholder="Nome do médico ou revisor"
+                >
+            </div>
+            <div class="formal-field">
+                <label for="reviewer_register_{{ analysis_id }}">Registro profissional</label>
+                <input
+                    type="text"
+                    id="reviewer_register_{{ analysis_id }}"
+                    name="reviewer_register"
+                    value="{{ responsible_register|default('', true) }}"
+                    placeholder="Ex: CRM-SP 000000"
+                >
+            </div>
+            <div class="formal-field">
+                <label for="reviewer_role_{{ analysis_id }}">Perfil do validador</label>
+                <select id="reviewer_role_{{ analysis_id }}" name="reviewer_role">
+                    <option value="{{ responsible_role|default('', true) }}">{{ responsible_role|default('Profissional de saúde', true) }}</option>
+                    <option value="Radiologista">Radiologista</option>
+                    <option value="Ortopedista">Ortopedista</option>
+                    <option value="Fisioterapeuta">Fisioterapeuta</option>
+                    <option value="Laudista">Laudista</option>
+                    <option value="Outro profissional de saúde">Outro profissional de saúde</option>
+                </select>
+            </div>
+            <div class="formal-field formal-field-compact">
+                <label for="concordance_score_{{ analysis_id }}">Concordância com a IA (%)</label>
+                <input
+                    type="number"
+                    id="concordance_score_{{ analysis_id }}"
+                    name="concordance_score"
+                    min="0"
+                    max="100"
+                    value="100"
+                    required
+                >
+            </div>
+
+            <div class="formal-field formal-validation-full">
+                <label for="final_diagnosis_{{ analysis_id }}">Diagnóstico final / parecer validado</label>
+                <textarea
+                    id="final_diagnosis_{{ analysis_id }}"
+                    name="final_diagnosis"
+                    class="textarea-tall"
+                    required
+                    placeholder="Informe o parecer final após revisão humana do laudo gerado pela IA."
+                ></textarea>
+            </div>
+
+            <div class="formal-field">
+                <label for="correct_findings_{{ analysis_id }}">Achados corretos</label>
+                <textarea class="textarea-short" id="correct_findings_{{ analysis_id }}" name="correct_findings" placeholder="Um achado por linha"></textarea>
+            </div>
+            <div class="formal-field">
+                <label for="missed_findings_{{ analysis_id }}">Achados perdidos pela IA</label>
+                <textarea class="textarea-short" id="missed_findings_{{ analysis_id }}" name="missed_findings" placeholder="Um achado por linha"></textarea>
+            </div>
+            <div class="formal-field">
+                <label for="wrong_findings_{{ analysis_id }}">Achados incorretos ou falso-positivos</label>
+                <textarea class="textarea-short" id="wrong_findings_{{ analysis_id }}" name="wrong_findings" placeholder="Um achado por linha"></textarea>
+            </div>
+            <div class="formal-field">
+                <label for="validation_notes_{{ analysis_id }}">Observações de validação</label>
+                <textarea class="textarea-short" id="validation_notes_{{ analysis_id }}" name="validation_notes" placeholder="Contexto, ressalvas, comparação com laudo assinado ou conduta adotada."></textarea>
+            </div>
+        </div>
+
+        <div class="formal-validation-actions">
+            <small>Esses dados alimentam a trilha de auditoria e a validação clínica supervisionada.</small>
+            <button type="submit" class="btn-primary btn-small">Salvar validação formal</button>
+        </div>
+    </form>
+</div>
+{% endif %}

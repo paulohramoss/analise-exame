@@ -3,56 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three Health — Laudo</title>
+    <title>Three Health — Laudo Salvo</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        .exam-images-gallery {
-            display: flex;
-            flex-direction: column;
-            gap: 0.6rem;
-        }
-
-        .exam-images-gallery .exam-image-wrapper {
-            background: #0a0a0a;
-            border-radius: 8px;
-            overflow: hidden;
+        .header-actions {
             display: flex;
             align-items: center;
-            justify-content: center;
+            gap: 0.55rem;
+            flex-wrap: wrap;
         }
-
-        .exam-image-label {
-            font-size: 0.72rem;
-            color: #64748b;
-            text-align: center;
-            margin-top: 0.2rem;
-            font-weight: 600;
-        }
-
-        .btn-pdf {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            background: #16a34a;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 0.45rem 0.9rem;
-            font-size: 0.82rem;
-            font-weight: 700;
-            cursor: pointer;
-            font-family: inherit;
-            transition: background 0.2s;
-        }
-
-        .btn-pdf:hover { background: #15803d; }
 
         .professional-summary {
             display: flex;
             justify-content: space-between;
-            gap: 1rem;
             align-items: flex-start;
+            gap: 1rem;
         }
 
         .professional-eyebrow {
@@ -76,18 +42,6 @@
             color: #475569;
             font-size: 0.94rem;
             margin-top: 0.35rem;
-        }
-
-        .professional-status {
-            text-align: right;
-            min-width: 150px;
-        }
-
-        .header-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.55rem;
-            flex-wrap: wrap;
         }
 
         .consensus-card {
@@ -150,9 +104,37 @@
             font-weight: 800;
         }
 
-        .feedback-card {
-            border: 1px solid #dbeafe;
+        .report-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1rem;
         }
+
+        .report-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-pdf {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: #16a34a;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.45rem 0.9rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .btn-pdf:hover { background: #15803d; }
 
         .feedback-options {
             display: flex;
@@ -170,7 +152,6 @@
             font-family: inherit;
             font-weight: 800;
             cursor: pointer;
-            transition: border-color 0.18s, color 0.18s, background 0.18s;
         }
 
         .feedback-option:hover,
@@ -208,12 +189,14 @@
         .feedback-status.error { color: #dc2626; }
 
         @media (max-width: 720px) {
-            .professional-summary {
+            .professional-summary,
+            .report-header {
                 flex-direction: column;
             }
 
-            .professional-status {
-                text-align: left;
+            .report-actions,
+            .report-actions button {
+                width: 100%;
             }
 
             .feedback-option {
@@ -251,13 +234,12 @@
         {% set responsible_role = responsible.role|default('', true) %}
         {% set responsible_register = responsible.register|default('', true) %}
         {% set responsible_organization = responsible.organization|default('', true) %}
-        <!-- Aviso médico -->
+
         <div class="disclaimer-banner">
             <span class="disclaimer-icon">⚕️</span>
             <p>
                 <strong>Aviso CFM/LGPD:</strong> Este laudo foi gerado por IA como ferramenta de apoio à decisão clínica.
                 <strong>Não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
-                O uso da IA deve ser informado ao paciente, os dados devem ser tratados conforme a LGPD e a decisão final deve ser registrada pelo profissional habilitado.
             </p>
         </div>
 
@@ -272,26 +254,23 @@
             {% endif %}
         {% endwith %}
 
-        <!-- Cabeçalho profissional da análise -->
         <div class="result-meta card">
             <div class="professional-summary">
                 <div>
                     <span class="professional-eyebrow">Responsável pela análise</span>
-                    <h1 class="professional-name">
-                        {{ responsible_name or 'Responsável não informado' }}
-                    </h1>
+                    <h1 class="professional-name">{{ responsible_name or 'Responsável não salvo neste histórico' }}</h1>
                     <p class="professional-details">
                         {% if responsible_role %}<span>{{ responsible_role }}</span>{% endif %}
                         {% if responsible_register %}<span>{% if responsible_role %} · {% endif %}{{ responsible_register }}</span>{% endif %}
                         {% if responsible_organization %}<span>{% if responsible_role or responsible_register %} · {% endif %}{{ responsible_organization }}</span>{% endif %}
                         {% if not responsible_role and not responsible_register and not responsible_organization %}
-                            <span>Dados profissionais não informados</span>
+                            <span>Dados profissionais indisponíveis para este registro</span>
                         {% endif %}
                     </p>
                 </div>
-                <div class="professional-status">
-                    <span class="meta-label">Status</span>
-                    <span class="meta-value status-ok">✅ Análise Concluída</span>
+                <div>
+                    <span class="meta-label">Gerado em</span>
+                    <span class="meta-value">{{ laudo.created_at|datetime_br }}</span>
                 </div>
             </div>
 
@@ -303,7 +282,6 @@
             {% endif %}
         </div>
 
-        {% if consensus %}
         <div class="consensus-card">
             <div class="consensus-head">
                 <span class="consensus-badge">IA</span>
@@ -320,53 +298,25 @@
                 {% if consensus.moderate_count > 0 %}<span class="consensus-pill">{{ consensus.moderate_count }} achado{% if consensus.moderate_count != 1 %}s{% endif %} moderado{% if consensus.moderate_count != 1 %}s{% endif %}</span>{% endif %}
             </div>
         </div>
-        {% endif %}
 
-        <!-- Layout lado a lado: imagens + laudo -->
-        <div class="result-layout">
-
-            <!-- Imagens do exame -->
-            <div class="card exam-image-card">
-                <h2>🔬 Exame{% if num_images|int > 1 %}s{% endif %} Analisado{% if num_images|int > 1 %}s{% endif %}</h2>
-                <div class="exam-images-gallery">
-                    {% for img in images %}
-                    <div>
-                        <div class="exam-image-wrapper">
-                            <img src="data:{{ img.mime }};base64,{{ img.b64 }}"
-                                 alt="Imagem {{ loop.index }} do exame"
-                                 class="exam-image" />
-                        </div>
-                        {% if num_images|int > 1 %}
-                        <div class="exam-image-label">Imagem {{ loop.index }}</div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
+        <div class="card report-card">
+            <div class="report-header">
+                <h2>Laudo salvo</h2>
+                <div class="report-actions">
+                    <button onclick="downloadPDF()" class="btn-pdf">Baixar PDF</button>
+                    <button onclick="window.print()" class="btn-secondary btn-small">Imprimir</button>
+                    <button onclick="copyReport()" class="btn-secondary btn-small">Copiar</button>
                 </div>
             </div>
-
-            <!-- Laudo da análise -->
-            <div class="card report-card">
-                <div class="report-header">
-                    <h2>📋 Laudo de Análise por IA</h2>
-                    <div class="report-actions">
-                        <button onclick="downloadPDF()" class="btn-pdf">⬇️ Baixar PDF</button>
-                        <button onclick="window.print()" class="btn-secondary btn-small">🖨️ Imprimir</button>
-                        <button onclick="copyReport()" class="btn-secondary btn-small">📋 Copiar</button>
-                    </div>
-                </div>
-
-                <div class="report-content" id="report-content">
-                    {{ analysis | safe }}
-                </div>
+            <div class="report-content" id="report-content">
+                {{ analysis | safe }}
             </div>
-
         </div>
 
         <div class="card feedback-card" id="feedback-card">
             <h2>Validação médica do laudo</h2>
-            {% if analysis_id %}
             <p class="card-description">
-                Registre sua concordância para alimentar o histórico clínico e melhorar a base de validação da plataforma.
+                Registre sua concordância ou correção. Esse dado alimenta o histórico de validação da plataforma.
             </p>
             <div class="feedback-options" role="group" aria-label="Feedback do laudo">
                 <button type="button" class="feedback-option" data-feedback="agree">Concordo totalmente</button>
@@ -378,114 +328,64 @@
                 <button type="button" class="btn-primary btn-small" id="submit-feedback" disabled>Salvar feedback</button>
                 <span class="feedback-status" id="feedback-status"></span>
             </div>
-            {% else %}
-            <p class="card-description">
-                O feedback ficará disponível quando o laudo for salvo no histórico. Verifique a configuração do Supabase para persistência.
-            </p>
-            {% endif %}
         </div>
 
         {% include "_validacao_clinica_form.html" %}
-
-        <!-- Ações -->
-        <div class="result-actions">
-            <a href="/" class="btn-primary">🔬 Analisar Novo Exame</a>
-        </div>
     </main>
 
     <script>
-        // Converte markdown para HTML simples para o laudo
         function renderMarkdown(element) {
             let html = element.innerHTML.trim();
-
-            // Headers (aceita espaços opcionais antes do #)
             html = html.replace(/^\s*### (.+)$/gm, '<h4>$1</h4>');
             html = html.replace(/^\s*## (.+)$/gm, '<h3>$1</h3>');
             html = html.replace(/^\s*# (.+)$/gm, '<h2>$1</h2>');
-
-            // Bold
             html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-            // Italic
             html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-            // Lists
             html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
             html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-
-            // Numbered lists
             html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
-
-            // Paragraphs
             html = html.replace(/\n\n/g, '</p><p>');
-            html = '<p>' + html + '</p>';
-
-            element.innerHTML = html;
+            element.innerHTML = '<p>' + html + '</p>';
         }
 
         const reportContent = document.getElementById('report-content');
         renderMarkdown(reportContent);
 
-        function copyReport() {
-            const text = reportContent.innerText;
-            navigator.clipboard.writeText(text).then(() => {
-                alert('Laudo copiado para a área de transferência!');
-            }).catch(() => {
-                const ta = document.createElement('textarea');
-                ta.value = text;
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-                alert('Laudo copiado!');
-            });
-        }
+        const responsible = {{ responsible|tojson }};
+        const consensus = {{ consensus|tojson }};
+        const generatedAt = {{ (laudo.created_at|datetime_br)|tojson }};
 
-        function downloadPDF() {
-            const now = new Date();
-            const dateStr = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-            // Coleta imagens do exame como base64
-            const examImages = document.querySelectorAll('.exam-images-gallery img');
-            let imagesHTML = '';
-            examImages.forEach((img, i) => {
-                imagesHTML += `
-                    <div class="pdf-img-item">
-                        <img src="${img.src}" alt="Imagem ${i + 1}" style="max-width:100%; max-height:240px; object-fit:contain; border-radius:6px; border:1px solid #ddd; background:#0a0a0a;">
-                        ${examImages.length > 1 ? `<div style="text-align:center;font-size:11px;color:#666;margin-top:4px;">Imagem ${i + 1}</div>` : ''}
-                    </div>`;
-            });
-
-            const reportHTML = reportContent.innerHTML;
-
-            const userDesc = {{ user_description|default('', true)|tojson }};
-
-            const responsible = {{ responsible|tojson }};
-            const consensus = {{ consensus|default({})|tojson }};
-            const responsibleName = responsible.name || 'Responsável não informado';
-            const responsibleDetails = [responsible.role, responsible.register, responsible.organization].filter(Boolean).join(' · ') || 'Dados profissionais não informados';
-            const examImagesTitle = examImages.length === 1 ? 'Imagem do Exame' : 'Imagens do Exame';
-            const escapeHtml = value => String(value || '').replace(/[&<>"']/g, char => ({
+        function escapeHtml(value) {
+            return String(value || '').replace(/[&<>"']/g, char => ({
                 '&': '&amp;',
                 '<': '&lt;',
                 '>': '&gt;',
                 '"': '&quot;',
                 "'": '&#39;'
             }[char]));
+        }
 
+        function copyReport() {
+            navigator.clipboard.writeText(reportContent.innerText).then(() => {
+                alert('Laudo copiado para a área de transferência!');
+            });
+        }
+
+        function downloadPDF() {
+            const responsibleName = responsible.name || 'Responsável não salvo neste histórico';
+            const responsibleDetails = [responsible.role, responsible.register, responsible.organization].filter(Boolean).join(' · ') || 'Dados profissionais indisponíveis';
+            const userDesc = {{ user_description|default('', true)|tojson }};
+            const reportHTML = reportContent.innerHTML;
             const pdfContent = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Laudo Three Health — ${dateStr}</title>
+<title>Laudo Three Health — ${generatedAt}</title>
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Nunito', Arial, sans-serif; font-size: 13px; color: #1e293b; background: white; padding: 0; }
+    body { font-family: 'Nunito', Arial, sans-serif; font-size: 13px; color: #1e293b; background: white; }
     .page { max-width: 780px; margin: 0 auto; padding: 32px 36px; }
-
-    /* Header */
     .pdf-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1B72E8; padding-bottom: 16px; margin-bottom: 20px; }
     .pdf-logo { display: flex; flex-direction: column; align-items: flex-start; }
     .pdf-logo-row { display: flex; align-items: center; gap: 8px; }
@@ -494,53 +394,27 @@
     .pdf-logo-lines span:nth-child(1) { width: 22px; }
     .pdf-logo-lines span:nth-child(2) { width: 16px; }
     .pdf-logo-lines span:nth-child(3) { width: 11px; }
-    .pdf-logo-wordmark { font-size: 22px; font-weight: 800; color: #1B72E8; letter-spacing: -0.5px; line-height: 1; }
+    .pdf-logo-wordmark { font-size: 22px; font-weight: 800; color: #1B72E8; line-height: 1; }
     .pdf-logo-underline { width: 100%; height: 2px; background: #1B72E8; margin-top: 3px; }
     .pdf-title-block { text-align: right; }
     .pdf-title { font-size: 15px; font-weight: 800; color: #1B72E8; }
     .pdf-subtitle { font-size: 11px; color: #64748b; margin-top: 2px; }
-
-    .pdf-professional { background: #eff6ff; border-left: 4px solid #1B72E8; border-radius: 0 8px 8px 0; padding: 12px 14px; margin-bottom: 14px; }
-    .pdf-professional-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #1B72E8; font-weight: 800; margin-bottom: 3px; }
-    .pdf-professional-name { font-size: 17px; font-weight: 800; color: #0f172a; line-height: 1.25; }
-    .pdf-professional-details { font-size: 11.5px; color: #475569; margin-top: 2px; }
-    .pdf-consensus { border: 1px solid #bfdbfe; border-left: 4px solid #1B72E8; border-radius: 0 8px 8px 0; padding: 10px 12px; margin-bottom: 14px; background: #f8fbff; }
-    .pdf-consensus-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #1B72E8; font-weight: 800; margin-bottom: 3px; }
-    .pdf-consensus-title { font-size: 13px; font-weight: 800; color: #0f172a; }
-    .pdf-consensus-text { font-size: 11px; color: #475569; line-height: 1.45; margin-top: 2px; }
-
-    /* Clinical info */
+    .pdf-professional, .pdf-consensus { border-left: 4px solid #1B72E8; border-radius: 0 8px 8px 0; padding: 12px 14px; margin-bottom: 14px; background: #eff6ff; }
+    .pdf-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #1B72E8; font-weight: 800; margin-bottom: 3px; }
+    .pdf-name { font-size: 17px; font-weight: 800; color: #0f172a; line-height: 1.25; }
+    .pdf-text { font-size: 11.5px; color: #475569; line-height: 1.5; margin-top: 2px; }
     .pdf-clinical { background: #eff6ff; border-left: 3px solid #1B72E8; border-radius: 0 6px 6px 0; padding: 8px 12px; margin-bottom: 16px; font-size: 12px; color: #1e40af; }
     .pdf-clinical strong { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; color: #1B72E8; }
-
-    /* Images */
-    .pdf-images-section { margin-bottom: 16px; }
-    .pdf-images-section h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 8px; font-weight: 700; }
-    .pdf-images-grid { display: flex; flex-wrap: wrap; gap: 10px; }
-    .pdf-img-item { flex: 0 0 auto; }
-
-    /* Report */
-    .pdf-report-section { margin-bottom: 20px; }
     .pdf-report-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 10px; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
     .pdf-report-content { line-height: 1.7; font-size: 12.5px; }
     .pdf-report-content h2 { font-size: 14px; color: #1B72E8; margin: 14px 0 5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
     .pdf-report-content h3 { font-size: 13px; color: #1B72E8; margin: 12px 0 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
     .pdf-report-content h4 { font-size: 12px; color: #155FC4; margin: 8px 0 3px; }
     .pdf-report-content ul, .pdf-report-content ol { padding-left: 18px; margin: 4px 0; }
-    .pdf-report-content li { margin-bottom: 2px; }
-    .pdf-report-content p { margin: 4px 0; }
-    .pdf-report-content strong { color: #0f172a; }
-
-    /* Footer */
     .pdf-footer { border-top: 2px solid #1B72E8; padding-top: 14px; margin-top: 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
     .pdf-footer-sig { font-size: 12px; color: #1B72E8; font-weight: 700; }
     .pdf-footer-sig span { display: block; font-size: 10px; color: #64748b; font-weight: 400; margin-top: 2px; }
     .pdf-disclaimer { font-size: 10px; color: #78350f; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 8px 10px; flex: 1; line-height: 1.5; }
-
-    @media print {
-        body { padding: 0; }
-        .page { padding: 20px 24px; }
-    }
 </style>
 </head>
 <body>
@@ -555,43 +429,30 @@
         </div>
         <div class="pdf-title-block">
             <div class="pdf-title">LAUDO DE ANÁLISE POR INTELIGÊNCIA ARTIFICIAL</div>
-            <div class="pdf-subtitle">Data: ${dateStr} · Hora: ${timeStr} · Three Health Platform</div>
+            <div class="pdf-subtitle">Gerado em: ${generatedAt} · Three Health Platform</div>
         </div>
     </div>
-
     <div class="pdf-professional">
-        <div class="pdf-professional-label">Responsável pela análise</div>
-        <div class="pdf-professional-name">${escapeHtml(responsibleName)}</div>
-        <div class="pdf-professional-details">${escapeHtml(responsibleDetails)}</div>
+        <div class="pdf-label">Responsável pela análise</div>
+        <div class="pdf-name">${escapeHtml(responsibleName)}</div>
+        <div class="pdf-text">${escapeHtml(responsibleDetails)}</div>
     </div>
-
-    ${consensus.status ? `<div class="pdf-consensus">
-        <div class="pdf-consensus-label">Consenso de IA</div>
-        <div class="pdf-consensus-title">${escapeHtml(consensus.status)} · ${escapeHtml(consensus.label || '')}</div>
-        <div class="pdf-consensus-text">${escapeHtml(consensus.description || '')}</div>
-    </div>` : ''}
-
+    <div class="pdf-consensus">
+        <div class="pdf-label">Consenso de IA</div>
+        <div class="pdf-name">${escapeHtml(consensus.status)} · ${escapeHtml(consensus.label || '')}</div>
+        <div class="pdf-text">${escapeHtml(consensus.description || '')}</div>
+    </div>
     ${userDesc ? `<div class="pdf-clinical"><strong>Informações Clínicas Fornecidas</strong>${userDesc}</div>` : ''}
-
-    <div class="pdf-images-section">
-        <h3>${examImagesTitle}</h3>
-        <div class="pdf-images-grid">${imagesHTML}</div>
-    </div>
-
-    <div class="pdf-report-section">
-        <div class="pdf-report-title">Laudo Ortopédico — Análise por IA</div>
-        <div class="pdf-report-content">${reportHTML}</div>
-    </div>
-
+    <div class="pdf-report-title">Laudo Ortopédico — Análise por IA</div>
+    <div class="pdf-report-content">${reportHTML}</div>
     <div class="pdf-footer">
         <div class="pdf-footer-sig">
             Three Health AI Assistant
-            <span>Gerado automaticamente por IA · ${dateStr}</span>
+            <span>Gerado automaticamente por IA · ${generatedAt}</span>
         </div>
         <div class="pdf-disclaimer">
-            ⚕️ <strong>AVISO CFM/LGPD:</strong> Este laudo foi gerado por Inteligência Artificial como ferramenta de apoio à decisão clínica.
+            <strong>AVISO CFM/LGPD:</strong> Este laudo foi gerado por Inteligência Artificial como ferramenta de apoio à decisão clínica.
             <strong>Não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
-            O uso da IA deve ser informado ao paciente, os dados devem ser tratados conforme a LGPD e a decisão final deve ser registrada pelo profissional habilitado.
         </div>
     </div>
 </div>
@@ -604,7 +465,6 @@
             printWindow.document.close();
         }
 
-        const feedbackCard = document.getElementById('feedback-card');
         const feedbackButtons = document.querySelectorAll('[data-feedback]');
         const feedbackSubmit = document.getElementById('submit-feedback');
         const feedbackComment = document.getElementById('feedback-comment');
@@ -615,62 +475,55 @@
             button.addEventListener('click', () => {
                 selectedFeedback = button.dataset.feedback;
                 feedbackButtons.forEach(item => item.classList.toggle('selected', item === button));
-                if (feedbackSubmit) feedbackSubmit.disabled = false;
-                if (feedbackStatus) {
-                    feedbackStatus.textContent = '';
-                    feedbackStatus.className = 'feedback-status';
-                }
+                feedbackSubmit.disabled = false;
+                feedbackStatus.textContent = '';
+                feedbackStatus.className = 'feedback-status';
             });
         });
 
-        if (feedbackSubmit) {
-            feedbackSubmit.addEventListener('click', async () => {
-                const comment = feedbackComment ? feedbackComment.value.trim() : '';
-                if (!selectedFeedback) return;
-                if ((selectedFeedback === 'partial' || selectedFeedback === 'disagree') && !comment) {
-                    feedbackStatus.textContent = 'Descreva o ajuste antes de salvar.';
-                    feedbackStatus.className = 'feedback-status error';
-                    feedbackComment.focus();
-                    return;
-                }
+        feedbackSubmit.addEventListener('click', async () => {
+            const comment = feedbackComment.value.trim();
+            if ((selectedFeedback === 'partial' || selectedFeedback === 'disagree') && !comment) {
+                feedbackStatus.textContent = 'Descreva o ajuste antes de salvar.';
+                feedbackStatus.className = 'feedback-status error';
+                feedbackComment.focus();
+                return;
+            }
 
-                feedbackSubmit.disabled = true;
-                feedbackStatus.textContent = 'Salvando feedback...';
-                feedbackStatus.className = 'feedback-status';
+            feedbackSubmit.disabled = true;
+            feedbackStatus.textContent = 'Salvando feedback...';
+            feedbackStatus.className = 'feedback-status';
 
-                try {
-                    const response = await fetch('/feedback', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            analysis_id: {{ (analysis_id or '')|tojson }},
-                            feedback: selectedFeedback,
-                            comment,
-                            responsible_name: responsible.name || '',
-                            responsible_role: responsible.role || ''
-                        })
-                    });
-                    const data = await response.json();
-                    if (!response.ok || !data.success) {
-                        throw new Error(data.error || 'Não foi possível salvar.');
-                    }
-                    feedbackStatus.textContent = data.message || 'Feedback salvo.';
-                    feedbackStatus.className = 'feedback-status success';
-                    if (feedbackCard) feedbackCard.classList.add('feedback-saved');
-                } catch (error) {
-                    feedbackSubmit.disabled = false;
-                    feedbackStatus.textContent = error.message;
-                    feedbackStatus.className = 'feedback-status error';
+            try {
+                const response = await fetch('/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        analysis_id: {{ analysis_id|tojson }},
+                        feedback: selectedFeedback,
+                        comment,
+                        responsible_name: responsible.name || '',
+                        responsible_role: responsible.role || ''
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Não foi possível salvar.');
                 }
-            });
-        }
+                feedbackStatus.textContent = data.message || 'Feedback salvo.';
+                feedbackStatus.className = 'feedback-status success';
+            } catch (error) {
+                feedbackSubmit.disabled = false;
+                feedbackStatus.textContent = error.message;
+                feedbackStatus.className = 'feedback-status error';
+            }
+        });
     </script>
 
     <style>
         @media print {
-            header, footer, .result-actions, .report-actions, .disclaimer-banner, .feedback-card, .formal-validation-card { display: none; }
+            header, .disclaimer-banner, .report-actions, .feedback-card, .formal-validation-card { display: none; }
             .card { box-shadow: none; border: 1px solid #ccc; }
-            .result-layout { grid-template-columns: 220px 1fr; }
         }
     </style>
 </body>

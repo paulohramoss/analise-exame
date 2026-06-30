@@ -22,8 +22,43 @@ from PIL import Image
 _FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
 
 _RETRYABLE_CODES = {503, 429, 500}
-_MAX_RETRIES = 3
-_RETRY_DELAY = 2.0
+_MAX_RETRIES = int(os.environ.get("AI_MAX_RETRIES", "2"))
+_RETRY_DELAY = float(os.environ.get("AI_RETRY_DELAY_SECONDS", "1.0"))
+_ANALYSIS_BUDGET_SECONDS = float(os.environ.get("ANALYSIS_BUDGET_SECONDS", "90"))
+_GEMINI_HTTP_TIMEOUT_MS = int(os.environ.get("GEMINI_HTTP_TIMEOUT_MS", "60000"))
+_GEMINI_MAX_OUTPUT_TOKENS = int(os.environ.get("GEMINI_MAX_OUTPUT_TOKENS", "6144"))
+_CLAUDE_ANALYSIS_TIMEOUT_SECONDS = float(os.environ.get("CLAUDE_ANALYSIS_TIMEOUT_SECONDS", "45"))
+_CLAUDE_SYNTHESIS_TIMEOUT_SECONDS = float(os.environ.get("CLAUDE_SYNTHESIS_TIMEOUT_SECONDS", "25"))
+_CLAUDE_ANALYSIS_MAX_TOKENS = int(os.environ.get("CLAUDE_ANALYSIS_MAX_TOKENS", "4096"))
+_CLAUDE_SYNTHESIS_MAX_TOKENS = int(os.environ.get("CLAUDE_SYNTHESIS_MAX_TOKENS", "4096"))
+_SYNTHESIS_INPUT_MAX_CHARS = int(os.environ.get("SYNTHESIS_INPUT_MAX_CHARS", "12000"))
+_INCLUDE_REFERENCE_PDF = os.environ.get("INCLUDE_REFERENCE_PDF", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _remaining_seconds(deadline: float | None, fallback: float) -> float:
+    if not deadline:
+        return fallback
+    return max(1.0, min(fallback, deadline - time.monotonic()))
+
+
+def _deadline_expired(deadline: float | None, reserve_seconds: float = 0.0) -> bool:
+    return bool(deadline and time.monotonic() + reserve_seconds >= deadline)
+
+
+def _truncate_for_synthesis(text: str, max_chars: int = _SYNTHESIS_INPUT_MAX_CHARS) -> str:
+    text = text or ""
+    if len(text) <= max_chars:
+        return text
+    head = text[: max_chars // 2].rstrip()
+    tail = text[-max_chars // 2 :].lstrip()
+    return f"{head}\n\n[... conteúdo intermediário abreviado para acelerar a síntese ...]\n\n{tail}"
+
+
+def _make_gemini_client(api_key: str) -> genai.Client:
+    return genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(timeout=_GEMINI_HTTP_TIMEOUT_MS),
+    )
 
 
 def _is_quota_exhausted(exc: Exception) -> bool:
@@ -51,7 +86,13 @@ def _is_retryable(exc: Exception) -> bool:
     )
 
 
-def _generate_with_retry(client: genai.Client, model_name: str, contents) -> object:
+def _generate_with_retry(
+    client: genai.Client,
+    model_name: str,
+    contents,
+    max_output_tokens: int = _GEMINI_MAX_OUTPUT_TOKENS,
+    deadline: float | None = None,
+) -> object:
     """Chama generate_content com retry exponencial e fallback de modelos."""
     models_to_try = [model_name] + [m for m in _FALLBACK_MODELS if m != model_name]
     last_exc = None
@@ -59,8 +100,18 @@ def _generate_with_retry(client: genai.Client, model_name: str, contents) -> obj
     for model in models_to_try:
         delay = _RETRY_DELAY
         for attempt in range(1, _MAX_RETRIES + 1):
+            if _deadline_expired(deadline, reserve_seconds=3):
+                raise TimeoutError("Orçamento de tempo da análise esgotado antes da chamada ao Gemini.")
             try:
-                response = client.models.generate_content(model=model, contents=contents)
+                response = client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        maxOutputTokens=max_output_tokens,
+                        temperature=0.1,
+                        httpOptions=types.HttpOptions(timeout=int(_remaining_seconds(deadline, _GEMINI_HTTP_TIMEOUT_MS / 1000) * 1000)),
+                    ),
+                )
                 if model != model_name:
                     print(f"[retry] Resposta obtida com modelo de fallback: {model}")
                 return response
@@ -69,6 +120,8 @@ def _generate_with_retry(client: genai.Client, model_name: str, contents) -> obj
                 if _is_retryable(exc):
                     if attempt < _MAX_RETRIES:
                         print(f"[retry] Tentativa {attempt}/{_MAX_RETRIES} falhou ({exc}). Aguardando {delay:.1f}s...")
+                        if _deadline_expired(deadline, reserve_seconds=delay):
+                            break
                         time.sleep(delay)
                         delay *= 2
                     else:
@@ -283,6 +336,7 @@ def detect_exam_type_from_image(
     image_bytes: bytes,
     mime_type: str,
     model_name: str = "gemini-2.5-flash",
+    deadline: float | None = None,
 ) -> str | None:
     """Detecta a região anatômica analisando visualmente a imagem via Gemini."""
     prompt = (
@@ -310,6 +364,8 @@ def detect_exam_type_from_image(
                 types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 types.Part.from_text(text=prompt),
             ],
+            max_output_tokens=16,
+            deadline=deadline,
         )
         result = response.text.strip().lower()
         valid_types = {"joelho", "coluna", "ombro", "quadril", "pe_tornozelo", "mao_punho", "cotovelo", "geral"}
@@ -444,16 +500,22 @@ def _analyze_with_claude(
     exam_type: str,
     user_description: str,
     reference_images: list,
+    timeout_seconds: float = _CLAUDE_ANALYSIS_TIMEOUT_SECONDS,
 ) -> str | None:
     """Análise independente com Claude. Retorna texto ou None em caso de falha."""
     try:
         print("[Claude] Iniciando análise independente...")
-        client = anthropic.Anthropic(api_key=anthropic_api_key)
+        client = anthropic.Anthropic(
+            api_key=anthropic_api_key,
+            timeout=timeout_seconds,
+            max_retries=0,
+        )
         content = _build_claude_content(exam_images, exam_type, user_description, reference_images)
         message = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=8192,
+            max_tokens=_CLAUDE_ANALYSIS_MAX_TOKENS,
             messages=[{"role": "user", "content": content}],
+            timeout=timeout_seconds,
         )
         print("[Claude] Análise concluída.")
         return message.content[0].text
@@ -468,6 +530,7 @@ def _synthesize_analyses(
     claude_analysis: str,
     exam_type: str,
     user_description: str,
+    timeout_seconds: float = _CLAUDE_SYNTHESIS_TIMEOUT_SECONDS,
 ) -> str:
     """
     Sintetiza as análises do Gemini e do Claude em um relatório de consenso final.
@@ -495,12 +558,12 @@ Dois sistemas de IA analisaram o mesmo exame de imagem de forma completamente in
 ---
 
 ## ANÁLISE DO MODELO A (Gemini 2.5 Flash):
-{gemini_analysis}
+{_truncate_for_synthesis(gemini_analysis)}
 
 ---
 
 ## ANÁLISE DO MODELO B (Claude Sonnet):
-{claude_analysis}
+{_truncate_for_synthesis(claude_analysis)}
 
 ---
 
@@ -534,6 +597,7 @@ Dois sistemas de IA analisaram o mesmo exame de imagem de forma completamente in
 
 **Regras finais:**
 - Não invente achados que nenhum modelo identificou
+- Seja completo, mas objetivo: priorize um laudo de até 1.200 palavras
 - Use terminologia ortopédica precisa em todo o relatório
 - Responda diretamente com o relatório — sem introdução, sem explicação do processo de síntese, sem menção aos "Modelos A e B"
 - O resultado deve parecer um único laudo coeso escrito por um especialista humano sênior
@@ -542,11 +606,16 @@ RELATÓRIO DE CONSENSO FINAL:"""
 
     try:
         print("[Síntese] Gerando relatório de consenso...")
-        client = anthropic.Anthropic(api_key=anthropic_api_key)
+        client = anthropic.Anthropic(
+            api_key=anthropic_api_key,
+            timeout=timeout_seconds,
+            max_retries=0,
+        )
         message = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=8192,
+            max_tokens=_CLAUDE_SYNTHESIS_MAX_TOKENS,
             messages=[{"role": "user", "content": synthesis_prompt}],
+            timeout=timeout_seconds,
         )
         print("[Síntese] Relatório de consenso concluído.")
         return message.content[0].text
@@ -564,23 +633,63 @@ def _run_dual_analysis(
     exam_type: str,
     user_description: str,
     reference_images: list,
+    deadline: float | None = None,
 ) -> tuple[str, str]:
     """
     Executa Gemini e Claude em paralelo.
     Retorna (gemini_text, claude_text_or_empty).
     """
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+    gemini_text = ""
+    claude_result = ""
+    try:
         gemini_future = executor.submit(
-            _generate_with_retry, gemini_client, gemini_model, gemini_parts
+            _generate_with_retry,
+            gemini_client,
+            gemini_model,
+            gemini_parts,
+            _GEMINI_MAX_OUTPUT_TOKENS,
+            deadline,
         )
         claude_future = executor.submit(
             _analyze_with_claude,
-            anthropic_api_key, exam_images, exam_type, user_description, reference_images,
+            anthropic_api_key,
+            exam_images,
+            exam_type,
+            user_description,
+            reference_images,
+            _remaining_seconds(deadline, _CLAUDE_ANALYSIS_TIMEOUT_SECONDS),
         )
-        gemini_response = gemini_future.result()
-        claude_result = claude_future.result()
 
-    return gemini_response.text, (claude_result or "")
+        done, pending = concurrent.futures.wait(
+            {gemini_future, claude_future},
+            timeout=_remaining_seconds(deadline, _ANALYSIS_BUDGET_SECONDS),
+        )
+
+        if gemini_future in done:
+            try:
+                gemini_text = gemini_future.result().text
+            except Exception as e:
+                print(f"[Dual AI] Gemini falhou: {e}")
+        else:
+            print("[Dual AI] Gemini excedeu o orçamento de tempo; seguindo com fallback disponível.")
+            gemini_future.cancel()
+
+        if claude_future in done:
+            try:
+                claude_result = claude_future.result() or ""
+            except Exception as e:
+                print(f"[Dual AI] Claude falhou: {e}")
+        else:
+            print("[Dual AI] Claude excedeu o orçamento de tempo; seguindo sem análise independente.")
+            claude_future.cancel()
+
+        for future in pending:
+            future.cancel()
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    return gemini_text, (claude_result or "")
 
 
 def analyze_exam(
@@ -604,7 +713,8 @@ def analyze_exam(
     if isinstance(exam_image_paths, str):
         exam_image_paths = [exam_image_paths]
 
-    gemini_client = genai.Client(api_key=api_key)
+    deadline = time.monotonic() + _ANALYSIS_BUDGET_SECONDS
+    gemini_client = _make_gemini_client(api_key)
 
     exam_images = []
     for path in exam_image_paths:
@@ -614,15 +724,22 @@ def analyze_exam(
         exam_images.append((processed_bytes, mime_type))
 
     first_filename = Path(exam_image_paths[0]).name
-    visual_type = detect_exam_type_from_image(gemini_client, exam_images[0][0], exam_images[0][1], model_name) if exam_images else None
-    if visual_type and visual_type != "geral":
-        exam_type = visual_type
-        print(f"[detect_exam_type] Tipo detectado visualmente: {exam_type}")
-    else:
-        exam_type = detect_exam_type(first_filename, user_description)
+    keyword_type = detect_exam_type(first_filename, user_description)
+    if keyword_type != "geral":
+        exam_type = keyword_type
         print(f"[detect_exam_type] Tipo detectado por keywords: {exam_type}")
+    else:
+        visual_type = detect_exam_type_from_image(
+            gemini_client, exam_images[0][0], exam_images[0][1], model_name, deadline
+        ) if exam_images and not _deadline_expired(deadline, reserve_seconds=70) else None
+        if visual_type and visual_type != "geral":
+            exam_type = visual_type
+            print(f"[detect_exam_type] Tipo detectado visualmente: {exam_type}")
+        else:
+            exam_type = keyword_type
+            print(f"[detect_exam_type] Tipo detectado por fallback: {exam_type}")
 
-    reference_pdfs = get_reference_pdfs()
+    reference_pdfs = get_reference_pdfs() if _INCLUDE_REFERENCE_PDF else []
     reference_images = get_reference_images_as_bytes(exam_type)
 
     content_parts, refs_used = _build_content_parts(
@@ -635,17 +752,24 @@ def analyze_exam(
         gemini_text, claude_text = _run_dual_analysis(
             gemini_client, model_name, content_parts,
             anthropic_api_key, exam_images, exam_type, user_description, reference_images,
+            deadline,
         )
-        if claude_text:
+        if gemini_text and claude_text and not _deadline_expired(deadline, reserve_seconds=12):
             final_analysis = _synthesize_analyses(
                 anthropic_api_key, gemini_text, claude_text, exam_type, user_description,
+                timeout_seconds=_remaining_seconds(deadline, _CLAUDE_SYNTHESIS_TIMEOUT_SECONDS),
             )
             model_used = f"{model_name} + claude-sonnet-4-6 → consenso"
-        else:
+        elif gemini_text:
             final_analysis = gemini_text
-            model_used = model_name
+            model_used = f"{model_name} → consenso rápido"
+        elif claude_text:
+            final_analysis = claude_text
+            model_used = "claude-sonnet-4-6 → consenso rápido"
+        else:
+            raise TimeoutError("A análise excedeu o limite de tempo antes de gerar um laudo.")
     else:
-        response = _generate_with_retry(gemini_client, model_name, contents=content_parts)
+        response = _generate_with_retry(gemini_client, model_name, contents=content_parts, deadline=deadline)
         final_analysis = response.text
         model_used = model_name
 
@@ -682,22 +806,30 @@ def analyze_exam_from_bytes(
     if isinstance(exam_images_data, tuple) and len(exam_images_data) == 2 and isinstance(exam_images_data[0], bytes):
         exam_images_data = [exam_images_data]
 
-    gemini_client = genai.Client(api_key=api_key)
+    deadline = time.monotonic() + _ANALYSIS_BUDGET_SECONDS
+    gemini_client = _make_gemini_client(api_key)
 
     exam_images = []
     for raw_bytes, _ in exam_images_data:
         processed_bytes, mime_type = _process_image_bytes(raw_bytes)
         exam_images.append((processed_bytes, mime_type))
 
-    visual_type = detect_exam_type_from_image(gemini_client, exam_images[0][0], exam_images[0][1], model_name) if exam_images else None
-    if visual_type and visual_type != "geral":
-        exam_type = visual_type
-        print(f"[detect_exam_type] Tipo detectado visualmente: {exam_type}")
-    else:
-        exam_type = detect_exam_type(exam_filename, user_description)
+    keyword_type = detect_exam_type(exam_filename, user_description)
+    if keyword_type != "geral":
+        exam_type = keyword_type
         print(f"[detect_exam_type] Tipo detectado por keywords: {exam_type}")
+    else:
+        visual_type = detect_exam_type_from_image(
+            gemini_client, exam_images[0][0], exam_images[0][1], model_name, deadline
+        ) if exam_images and not _deadline_expired(deadline, reserve_seconds=70) else None
+        if visual_type and visual_type != "geral":
+            exam_type = visual_type
+            print(f"[detect_exam_type] Tipo detectado visualmente: {exam_type}")
+        else:
+            exam_type = keyword_type
+            print(f"[detect_exam_type] Tipo detectado por fallback: {exam_type}")
 
-    reference_pdfs = get_reference_pdfs()
+    reference_pdfs = get_reference_pdfs() if _INCLUDE_REFERENCE_PDF else []
     reference_images = get_reference_images_as_bytes(exam_type)
 
     content_parts, refs_used = _build_content_parts(
@@ -710,17 +842,24 @@ def analyze_exam_from_bytes(
         gemini_text, claude_text = _run_dual_analysis(
             gemini_client, model_name, content_parts,
             anthropic_api_key, exam_images, exam_type, user_description, reference_images,
+            deadline,
         )
-        if claude_text:
+        if gemini_text and claude_text and not _deadline_expired(deadline, reserve_seconds=12):
             final_analysis = _synthesize_analyses(
                 anthropic_api_key, gemini_text, claude_text, exam_type, user_description,
+                timeout_seconds=_remaining_seconds(deadline, _CLAUDE_SYNTHESIS_TIMEOUT_SECONDS),
             )
             model_used = f"{model_name} + claude-sonnet-4-6 → consenso"
-        else:
+        elif gemini_text:
             final_analysis = gemini_text
-            model_used = model_name
+            model_used = f"{model_name} → consenso rápido"
+        elif claude_text:
+            final_analysis = claude_text
+            model_used = "claude-sonnet-4-6 → consenso rápido"
+        else:
+            raise TimeoutError("A análise excedeu o limite de tempo antes de gerar um laudo.")
     else:
-        response = _generate_with_retry(gemini_client, model_name, contents=content_parts)
+        response = _generate_with_retry(gemini_client, model_name, contents=content_parts, deadline=deadline)
         final_analysis = response.text
         model_used = model_name
 

@@ -13,12 +13,15 @@ import tempfile
 import time
 import uuid
 import subprocess
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from flask import Flask, g, render_template, request, jsonify, redirect, url_for, flash, make_response, Response
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
+from PIL import Image
 
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -38,6 +41,10 @@ load_dotenv()
 
 DEFAULT_FLASK_SECRET_KEY = "dev-secret-key-change-in-prod"
 DEFAULT_LOCAL_ADMIN_KEY = "pauloramosteste"
+try:
+    LOCAL_TZ = ZoneInfo("America/Sao_Paulo")
+except Exception:  # pragma: no cover - fallback para runtimes sem base IANA local
+    LOCAL_TZ = None
 
 
 def _is_production_like() -> bool:
@@ -215,6 +222,13 @@ def _rate_limit_key() -> str:
     return _get_ip() or "anonymous"
 
 
+def _secure_cookie() -> bool:
+    host = (request.host or "").split(":", 1)[0]
+    if host in {"127.0.0.1", "localhost", "::1"}:
+        return False
+    return request.is_secure or _is_production_like() or bool(os.environ.get("VERCEL"))
+
+
 limiter = None
 if Limiter is not None:
     limiter = Limiter(
@@ -272,6 +286,123 @@ def _responsible_info_from_form() -> dict[str, str]:
     }
 
 
+def _responsible_info_from_row(row: dict | None) -> dict[str, str]:
+    row = row or {}
+    return {
+        "name": row.get("responsavel_nome") or "",
+        "role": row.get("responsavel_perfil") or "",
+        "register": row.get("responsavel_registro") or "",
+        "organization": row.get("responsavel_instituicao") or "",
+    }
+
+
+def _format_exam_label(value: str | None) -> str:
+    labels = {
+        "joelho": "Joelho",
+        "coluna": "Coluna Vertebral",
+        "ombro": "Ombro",
+        "quadril": "Quadril",
+        "pe_tornozelo": "Pé e Tornozelo",
+        "mao_punho": "Mão e Punho",
+        "cotovelo": "Cotovelo",
+        "geral": "Região Ortopédica",
+    }
+    key = (value or "").strip().lower()
+    return labels.get(key, (value or "Exame Ortopédico").replace("_", " ").title())
+
+
+def _format_datetime_br(value) -> str:
+    if not value:
+        return "Data não informada"
+    try:
+        if isinstance(value, str):
+            normalized = value.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(normalized)
+        else:
+            dt = value
+        if getattr(dt, "tzinfo", None) and LOCAL_TZ:
+            dt = dt.astimezone(LOCAL_TZ)
+        return dt.strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return str(value)
+
+
+def _build_consensus_info(model_used: str = "", analysis: str = "") -> dict:
+    model_text = model_used or ""
+    lower_model = model_text.lower()
+    dual = "claude" in lower_model and "consenso" in lower_model
+    strong_count = (analysis or "").count("[FORTE]")
+    moderate_count = (analysis or "").count("[MODERADO]")
+
+    if dual:
+        return {
+            "enabled": True,
+            "status": "Consenso dual concluído",
+            "label": "Gemini + Claude",
+            "description": (
+                "Dois modelos analisaram o exame de forma independente. A síntese final prioriza achados "
+                "convergentes e rebaixa ou descarta achados com evidência insuficiente."
+            ),
+            "model_a": "Gemini 2.5 Flash",
+            "model_b": "Claude Sonnet 4.6",
+            "strong_count": strong_count,
+            "moderate_count": moderate_count,
+        }
+
+    return {
+        "enabled": False,
+        "status": "Análise por IA concluída",
+        "label": model_text or "Modelo principal",
+        "description": (
+            "Laudo gerado pelo modelo principal configurado no servidor. A revisão clínica do profissional "
+            "responsável continua obrigatória."
+        ),
+        "model_a": model_text or "Modelo principal",
+        "model_b": "",
+        "strong_count": strong_count,
+        "moderate_count": moderate_count,
+    }
+
+
+def _feedback_source_for_role(role: str = "") -> str:
+    role_lower = (role or "").lower()
+    if "radiologista" in role_lower or "laudista" in role_lower:
+        return "radiologista"
+    if _is_admin(request):
+        return "admin"
+    return "medico"
+
+
+def _split_validation_lines(value: str, limit: int = 12) -> list[str]:
+    lines = []
+    for line in (value or "").replace(";", "\n").splitlines():
+        cleaned = " ".join(line.strip().split())
+        if cleaned:
+            lines.append(cleaned[:400])
+        if len(lines) >= limit:
+            break
+    return lines
+
+
+def _score_value(value, default: int = 100) -> int:
+    try:
+        score = int(value)
+    except Exception:
+        score = default
+    return max(0, min(score, 100))
+
+
+def _premium_payload_from_request(req) -> dict | None:
+    token = req.cookies.get(PREMIUM_COOKIE)
+    if not token:
+        return None
+    return verify_premium_token(token)
+
+
+app.jinja_env.filters["datetime_br"] = _format_datetime_br
+app.jinja_env.filters["exam_label"] = _format_exam_label
+
+
 def _detect_modalidade(user_description: str) -> str | None:
     """Detecta a modalidade de imagem pela descrição do usuário."""
     desc = (user_description or "").lower()
@@ -293,7 +424,25 @@ def _before():
     g.t0 = time.time()
     g.analise_id = None
     g.cliente_id = None
+    g.user_email = None
+    g.is_admin = False
+    g.premium_payload = None
     g.modo = None
+
+    if request.path.startswith("/static"):
+        return
+
+    g.is_admin = _is_admin(request)
+    if g.is_admin:
+        return
+
+    payload = _premium_payload_from_request(request)
+    g.premium_payload = payload
+    if payload and payload.get("email"):
+        g.user_email = str(payload.get("email", "")).strip().lower()
+        g.cliente_id = db.buscar_cliente_id_por_email(g.user_email)
+        if not g.cliente_id:
+            g.cliente_id = db.upsert_cliente(g.user_email.split("@")[0], g.user_email)
 
 
 @app.after_request
@@ -338,8 +487,150 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def _hash_sensitive_value(value: str | None) -> str:
+    if not value:
+        return ""
+    seed = f"{app.secret_key}:{value}".encode("utf-8", "ignore")
+    return hashlib.sha256(seed).hexdigest()[:24]
+
+
+def _dicom_value(ds, name: str) -> str:
+    value = getattr(ds, name, "")
+    if value is None:
+        return ""
+    return " ".join(str(value).split())[:180]
+
+
+def _dicom_first_number(value, default: float | None = None) -> float | None:
+    if value is None:
+        return default
+    try:
+        if isinstance(value, (list, tuple)) or hasattr(value, "__len__") and not isinstance(value, (str, bytes)):
+            if len(value) == 0:
+                return default
+            value = value[0]
+        return float(value)
+    except Exception:
+        return default
+
+
+def _extract_dicom_metadata(ds) -> dict:
+    rows = getattr(ds, "Rows", None)
+    cols = getattr(ds, "Columns", None)
+    metadata = {
+        "modality": _dicom_value(ds, "Modality"),
+        "body_part": _dicom_value(ds, "BodyPartExamined"),
+        "study_description": _dicom_value(ds, "StudyDescription"),
+        "series_description": _dicom_value(ds, "SeriesDescription"),
+        "protocol_name": _dicom_value(ds, "ProtocolName"),
+        "rows": int(rows) if rows else None,
+        "columns": int(cols) if cols else None,
+        "patient_id_hash": _hash_sensitive_value(_dicom_value(ds, "PatientID")),
+        "study_uid_hash": _hash_sensitive_value(_dicom_value(ds, "StudyInstanceUID")),
+        "series_uid_hash": _hash_sensitive_value(_dicom_value(ds, "SeriesInstanceUID")),
+        "sop_uid_hash": _hash_sensitive_value(_dicom_value(ds, "SOPInstanceUID")),
+    }
+    return {key: value for key, value in metadata.items() if value not in {"", None}}
+
+
+def _normalize_dicom_pixels(ds, pixel_array):
+    np = importlib.import_module("numpy")
+    array = pixel_array
+
+    if array.ndim == 4:
+        array = array[0]
+    elif array.ndim == 3 and array.shape[-1] not in (3, 4):
+        array = array[0]
+
+    if array.ndim == 3 and array.shape[-1] in (3, 4):
+        image = array
+        if image.dtype != np.uint8:
+            low, high = np.percentile(image.astype("float32"), [1, 99])
+            if high <= low:
+                high = low + 1
+            image = np.clip((image.astype("float32") - low) * 255.0 / (high - low), 0, 255)
+        return image.astype("uint8")
+
+    image = array.astype("float32")
+    slope = _dicom_first_number(getattr(ds, "RescaleSlope", None), 1.0) or 1.0
+    intercept = _dicom_first_number(getattr(ds, "RescaleIntercept", None), 0.0) or 0.0
+    image = image * slope + intercept
+
+    center = _dicom_first_number(getattr(ds, "WindowCenter", None))
+    width = _dicom_first_number(getattr(ds, "WindowWidth", None))
+    if center is not None and width and width > 0:
+        low = center - width / 2
+        high = center + width / 2
+    else:
+        low, high = np.percentile(image, [1, 99])
+        if high <= low:
+            high = low + 1
+
+    image = np.clip((image - low) * 255.0 / (high - low), 0, 255).astype("uint8")
+    if str(getattr(ds, "PhotometricInterpretation", "")).upper() == "MONOCHROME1":
+        image = 255 - image
+    return image
+
+
+def _convert_dicom_to_jpeg(filepath: Path) -> tuple[Path, str, str, dict] | None:
+    try:
+        pydicom = importlib.import_module("pydicom")
+        ds = pydicom.dcmread(str(filepath), force=True)
+        pixels = ds.pixel_array
+        normalized = _normalize_dicom_pixels(ds, pixels)
+        image = Image.fromarray(normalized)
+        if image.mode not in {"RGB", "L"}:
+            image = image.convert("RGB")
+        converted_path = filepath.with_suffix(".jpg")
+        image.save(str(converted_path), format="JPEG", quality=92, optimize=True)
+        with open(str(converted_path), "rb") as f:
+            image_b64 = base64.b64encode(f.read()).decode("utf-8")
+        return converted_path, image_b64, "image/jpeg", _extract_dicom_metadata(ds)
+    except Exception as e:
+        print(f"[DICOM] Falha ao converter {filepath.name}: {e}", file=sys.stderr)
+        return None
+
+
+def _dicom_context(upload_items: list[dict]) -> str:
+    parts = []
+    for item in upload_items:
+        metadata = item.get("dicom_metadata") or {}
+        if not metadata:
+            continue
+        values = []
+        if metadata.get("modality"):
+            values.append(f"Modalidade DICOM: {metadata['modality']}")
+        if metadata.get("body_part"):
+            values.append(f"Região DICOM: {metadata['body_part']}")
+        if metadata.get("study_description"):
+            values.append(f"Estudo: {metadata['study_description']}")
+        if metadata.get("series_description"):
+            values.append(f"Série: {metadata['series_description']}")
+        if values:
+            parts.append("; ".join(values))
+    return " | ".join(parts)
+
+
+def _description_with_dicom_context(user_description: str, upload_items: list[dict]) -> str:
+    dicom_context = _dicom_context(upload_items)
+    if not dicom_context:
+        return user_description
+    if user_description:
+        return f"{user_description} | {dicom_context}"
+    return dicom_context
+
+
+def _env_value(*names: str) -> str:
+    """Retorna a primeira variável de ambiente preenchida."""
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
 def get_api_key() -> str:
-    return os.environ.get("GEMINI_API_KEY", "")
+    return _env_value("GEMINI_API_KEY", "GOOGLE_API_KEY")
 
 
 def get_anthropic_api_key() -> str:
@@ -350,10 +641,28 @@ def get_model_name() -> str:
     return os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 
-def save_upload_file(file) -> tuple[Path, str, str] | None:
+def _gemini_key_missing_message() -> str:
+    if _is_local_runtime():
+        return (
+            "Erro: chave do Gemini não configurada. No ambiente local, edite o arquivo .env "
+            "e preencha GEMINI_API_KEY=sua_chave. Também aceito GOOGLE_API_KEY como alias."
+        )
+    return (
+        "Erro: GEMINI_API_KEY não configurada. Adicione a variável de ambiente no painel "
+        "do Vercel (Settings -> Environment Variables)."
+    )
+
+
+def _gemini_key_invalid_message() -> str:
+    if _is_local_runtime():
+        return "Erro de autenticação: chave do Gemini inválida. Verifique GEMINI_API_KEY no arquivo .env local."
+    return "Erro de autenticação: GEMINI_API_KEY inválida. Verifique a chave no painel do Vercel."
+
+
+def save_upload_file(file) -> dict | None:
     """
     Salva um arquivo de upload em disco.
-    Retorna (filepath, image_b64, image_mime) ou None se inválido.
+    Retorna metadados da imagem processada ou None se inválido.
     """
     if not file or file.filename == "" or not allowed_file(file.filename):
         return None
@@ -364,6 +673,26 @@ def save_upload_file(file) -> tuple[Path, str, str] | None:
     file.save(str(filepath))
 
     ext = filepath.suffix.lower().lstrip(".")
+    if ext == "dcm":
+        dicom_result = _convert_dicom_to_jpeg(filepath)
+        if not dicom_result:
+            try:
+                filepath.unlink()
+            except Exception:
+                pass
+            return None
+        converted_path, image_b64, image_mime, dicom_metadata = dicom_result
+        return {
+            "filepath": converted_path,
+            "display_b64": image_b64,
+            "display_mime": image_mime,
+            "storage_mime": "application/dicom",
+            "source": "dicom",
+            "original_name": original_name,
+            "original_path": filepath,
+            "dicom_metadata": dicom_metadata,
+        }
+
     mime_map = {
         "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
         "webp": "image/webp", "gif": "image/gif",
@@ -373,7 +702,16 @@ def save_upload_file(file) -> tuple[Path, str, str] | None:
     with open(str(filepath), "rb") as f:
         image_b64 = base64.b64encode(f.read()).decode("utf-8")
 
-    return filepath, image_b64, image_mime
+    return {
+        "filepath": filepath,
+        "display_b64": image_b64,
+        "display_mime": image_mime,
+        "storage_mime": image_mime,
+        "source": "upload",
+        "original_name": original_name,
+        "original_path": filepath,
+        "dicom_metadata": {},
+    }
 
 
 # ── Acesso admin (testes internos) ───────────────────────────────────────────
@@ -403,7 +741,7 @@ def admin_entrar():
         max_age=30 * 24 * 3600,   # 30 dias
         httponly=True,
         samesite="Lax",
-        secure=not app.debug,
+        secure=_secure_cookie(),
     )
     return resp
 
@@ -420,7 +758,7 @@ def admin_sair():
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", premium=is_premium(request))
 
 
 @app.route("/analyze", methods=["POST"])
@@ -441,7 +779,7 @@ def analyze():
 
     api_key = get_api_key()
     if not api_key:
-        flash("Erro: GEMINI_API_KEY não configurada. Adicione a variável de ambiente no painel do Vercel (Settings → Environment Variables).", "error")
+        flash(_gemini_key_missing_message(), "error")
         return redirect(url_for("index"))
 
     # Suporta múltiplos arquivos via campo "exam_images[]" ou "exam_images"
@@ -466,25 +804,32 @@ def analyze():
     user_description = request.form.get("description", "").strip()
 
     filepaths = []
+    upload_items = []
     images_data = []  # Lista de {"b64": str, "mime": str} para exibição no resultado
 
     for file in files:
-        result = save_upload_file(file)
-        if result is None:
+        upload_item = save_upload_file(file)
+        if upload_item is None:
             continue
-        filepath, image_b64, image_mime = result
+        filepath = upload_item["filepath"]
         filepaths.append(str(filepath))
-        images_data.append({"b64": image_b64, "mime": image_mime})
+        upload_items.append(upload_item)
+        images_data.append({
+            "b64": upload_item["display_b64"],
+            "mime": upload_item["display_mime"],
+            "source": upload_item["source"],
+        })
 
     if not filepaths:
         flash(f"Formato de arquivo não suportado. Use: {', '.join(ALLOWED_EXTENSIONS)}", "error")
         return redirect(url_for("index"))
 
     try:
+        analysis_description = _description_with_dicom_context(user_description, upload_items)
         result = analyze_exam(
             exam_image_paths=filepaths,
             api_key=api_key,
-            user_description=user_description,
+            user_description=analysis_description,
             model_name=get_model_name(),
             anthropic_api_key=get_anthropic_api_key(),
         )
@@ -498,22 +843,27 @@ def analyze():
             num_imagens=result["num_images"],
             modo="premium",
             descricao_usuario=user_description,
-            modalidade=_detect_modalidade(user_description),
+            modalidade=_detect_modalidade(analysis_description),
             ip_address=_get_ip(),
             user_agent=request.headers.get("User-Agent"),
             tempo_ms=int((time.time() - t0) * 1000),
             cliente_id=g.get("cliente_id"),
+            responsavel=responsible_info,
         )
         if analise_id:
             g.analise_id = analise_id
-            for i, img_data in enumerate(images_data, 1):
-                raw = base64.b64decode(img_data["b64"])
+            for i, upload_item in enumerate(upload_items, 1):
+                source_path = Path(upload_item.get("original_path") or upload_item["filepath"])
+                raw = source_path.read_bytes()
                 db.salvar_imagem_exame(
                     analise_id=analise_id,
-                    mime_type=img_data["mime"],
+                    mime_type=upload_item.get("storage_mime") or upload_item["display_mime"],
                     tamanho_bytes=len(raw),
                     hash_md5=hashlib.md5(raw).hexdigest(),
                     ordem=i,
+                    origem=upload_item.get("source") or "upload",
+                    arquivo_original=upload_item.get("original_name") or "",
+                    dicom_metadata=upload_item.get("dicom_metadata") or None,
                 )
 
         return render_template(
@@ -526,6 +876,8 @@ def analyze():
             num_images=result["num_images"],
             user_description=user_description,
             responsible=responsible_info,
+            analysis_id=analise_id,
+            consensus=_build_consensus_info(result["model_used"], result["analysis"]),
         )
 
     except Exception as e:
@@ -533,7 +885,7 @@ def analyze():
         print(f"[ERRO ANÁLISE] {type(e).__name__}: {error_msg}", file=sys.stderr)
         error_lower = error_msg.lower()
         if "api key not valid" in error_lower or "invalid api key" in error_lower or "api_key_invalid" in error_lower:
-            flash("Erro de autenticação: GEMINI_API_KEY inválida. Verifique a chave no painel do Vercel.", "error")
+            flash(_gemini_key_invalid_message(), "error")
         elif "quota" in error_lower or "rate limit" in error_lower or "resource_exhausted" in error_lower:
             flash("Limite de requisições atingido. Aguarde alguns instantes e tente novamente.", "error")
         elif "503" in error_lower or "unavailable" in error_lower or "overloaded" in error_lower:
@@ -546,7 +898,12 @@ def analyze():
         return redirect(url_for("index"))
 
     finally:
-        for fp in filepaths:
+        cleanup_paths = set(filepaths)
+        for upload_item in upload_items:
+            for key in ("filepath", "original_path"):
+                if upload_item.get(key):
+                    cleanup_paths.add(str(upload_item[key]))
+        for fp in cleanup_paths:
             try:
                 Path(fp).unlink()
             except Exception:
@@ -589,13 +946,16 @@ def trial_analyze():
     if result_save is None:
         return jsonify({"error": "Erro ao processar o arquivo enviado."}), 400
 
-    filepath, image_b64, image_mime = result_save
+    filepath = result_save["filepath"]
+    image_b64 = result_save["display_b64"]
+    image_mime = result_save["display_mime"]
+    analysis_description = _description_with_dicom_context(user_description, [result_save])
 
     try:
         result = analyze_exam(
             exam_image_paths=[str(filepath)],
             api_key=api_key,
-            user_description=user_description,
+            user_description=analysis_description,
             model_name=get_model_name(),
             anthropic_api_key=get_anthropic_api_key(),
         )
@@ -609,19 +969,23 @@ def trial_analyze():
             num_imagens=1,
             modo="trial",
             descricao_usuario=user_description,
-            modalidade=_detect_modalidade(user_description),
+            modalidade=_detect_modalidade(analysis_description),
             ip_address=_get_ip(),
             user_agent=request.headers.get("User-Agent"),
             tempo_ms=int((time.time() - t0) * 1000),
         )
         if analise_id:
             g.analise_id = analise_id
-            raw = base64.b64decode(image_b64)
+            source_path = Path(result_save.get("original_path") or result_save["filepath"])
+            raw = source_path.read_bytes()
             db.salvar_imagem_exame(
                 analise_id=analise_id,
-                mime_type=image_mime,
+                mime_type=result_save.get("storage_mime") or image_mime,
                 tamanho_bytes=len(raw),
                 hash_md5=hashlib.md5(raw).hexdigest(),
+                origem=result_save.get("source") or "upload",
+                arquivo_original=result_save.get("original_name") or "",
+                dicom_metadata=result_save.get("dicom_metadata") or None,
             )
 
         return jsonify({
@@ -629,6 +993,7 @@ def trial_analyze():
             "exam_type": result["exam_type"].replace("_", " ").title(),
             "references_used": result["references_used"],
             "model_used": result["model_used"],
+            "consensus": _build_consensus_info(result["model_used"], result["analysis"]),
             "image_b64": image_b64,
             "image_mime": image_mime,
         }), 200
@@ -648,10 +1013,11 @@ def trial_analyze():
         return jsonify({"error": "Não foi possível processar o exame. Tente novamente."}), 500
 
     finally:
-        try:
-            filepath.unlink()
-        except Exception:
-            pass
+        for fp in {str(filepath), str(result_save.get("original_path") or filepath)}:
+            try:
+                Path(fp).unlink()
+            except Exception:
+                pass
 
 
 @app.route("/api/analyze", methods=["POST"])
@@ -684,18 +1050,23 @@ def api_analyze():
     user_description = request.form.get("description", "")
 
     filepaths = []
+    upload_items = []
     for file in files:
-        original_name = secure_filename(file.filename)
-        unique_name = f"{uuid.uuid4().hex}_{original_name}"
-        filepath = UPLOAD_FOLDER / unique_name
-        file.save(str(filepath))
-        filepaths.append(str(filepath))
+        upload_item = save_upload_file(file)
+        if upload_item is None:
+            continue
+        upload_items.append(upload_item)
+        filepaths.append(str(upload_item["filepath"]))
+
+    if not filepaths:
+        return jsonify({"error": "Nenhum arquivo válido pôde ser processado"}), 400
 
     try:
+        analysis_description = _description_with_dicom_context(user_description, upload_items)
         result = analyze_exam(
             exam_image_paths=filepaths,
             api_key=api_key,
-            user_description=user_description,
+            user_description=analysis_description,
             model_name=get_model_name(),
             anthropic_api_key=get_anthropic_api_key(),
         )
@@ -709,25 +1080,286 @@ def api_analyze():
             num_imagens=result["num_images"],
             modo="api",
             descricao_usuario=user_description,
-            modalidade=_detect_modalidade(user_description),
+            modalidade=_detect_modalidade(analysis_description),
             ip_address=_get_ip(),
             user_agent=request.headers.get("User-Agent"),
             tempo_ms=int((time.time() - t0) * 1000),
         )
         if analise_id:
             g.analise_id = analise_id
+            for i, upload_item in enumerate(upload_items, 1):
+                source_path = Path(upload_item.get("original_path") or upload_item["filepath"])
+                raw = source_path.read_bytes()
+                db.salvar_imagem_exame(
+                    analise_id=analise_id,
+                    mime_type=upload_item.get("storage_mime") or upload_item["display_mime"],
+                    tamanho_bytes=len(raw),
+                    hash_md5=hashlib.md5(raw).hexdigest(),
+                    ordem=i,
+                    origem=upload_item.get("source") or "upload",
+                    arquivo_original=upload_item.get("original_name") or "",
+                    dicom_metadata=upload_item.get("dicom_metadata") or None,
+                )
 
+        result["consensus"] = _build_consensus_info(result.get("model_used", ""), result.get("analysis", ""))
         return jsonify(result), 200
 
     except Exception as e:
         return jsonify({"error": str(e), "success": False}), 500
 
     finally:
-        for fp in filepaths:
+        cleanup_paths = set(filepaths)
+        for upload_item in upload_items:
+            for key in ("filepath", "original_path"):
+                if upload_item.get(key):
+                    cleanup_paths.add(str(upload_item[key]))
+        for fp in cleanup_paths:
             try:
                 Path(fp).unlink()
             except Exception:
                 pass
+
+
+# ── Histórico e feedback médico ───────────────────────────────────────────────
+
+@app.route("/laudos")
+@premium_required
+def laudos():
+    """Lista laudos salvos do usuário premium atual."""
+    g.modo = "premium"
+    include_all = bool(g.get("is_admin"))
+    rows = db.listar_analises(
+        cliente_id=g.get("cliente_id"),
+        limit=80,
+        include_all=include_all,
+    )
+    return render_template(
+        "laudos.html",
+        analyses=rows,
+        is_admin=include_all,
+    )
+
+
+@app.route("/laudos/<analise_id>")
+@premium_required
+def laudo_detalhe(analise_id: str):
+    """Abre um laudo salvo no histórico."""
+    g.modo = "premium"
+    include_all = bool(g.get("is_admin"))
+    row = db.buscar_analise(
+        analise_id=analise_id,
+        cliente_id=g.get("cliente_id"),
+        include_all=include_all,
+    )
+    if not row:
+        flash("Laudo não encontrado no histórico deste acesso.", "error")
+        return redirect(url_for("laudos"))
+
+    responsible = _responsible_info_from_row(row)
+    return render_template(
+        "laudo_detalhe.html",
+        laudo=row,
+        analysis=row.get("analise_completa") or "",
+        analysis_id=row.get("id"),
+        exam_type=_format_exam_label(row.get("tipo_exame")),
+        user_description=row.get("descricao_usuario") or "",
+        responsible=responsible,
+        consensus=_build_consensus_info(row.get("modelo_ia") or "", row.get("analise_completa") or ""),
+    )
+
+
+@app.route("/clinica/dashboard")
+@premium_required
+def dashboard_clinica():
+    """Dashboard operacional da clínica/usuário premium."""
+    g.modo = "premium"
+    include_all = bool(g.get("is_admin"))
+    analyses = db.listar_analises(
+        cliente_id=g.get("cliente_id"),
+        limit=500,
+        include_all=include_all,
+    )
+    analysis_ids = [item.get("id") for item in analyses if item.get("id")]
+    validations = db.listar_validacoes_clinicas(analysis_ids)
+    feedbacks = db.listar_feedbacks_por_analises(analysis_ids)
+    metrics = db.montar_metricas_dashboard(analyses, validations, feedbacks)
+
+    validation_by_analysis = {}
+    for validation in validations:
+        analysis_id = validation.get("analise_id")
+        if analysis_id and analysis_id not in validation_by_analysis:
+            validation_by_analysis[analysis_id] = validation
+
+    pending = [item for item in analyses if item.get("id") not in validation_by_analysis]
+
+    return render_template(
+        "dashboard_clinica.html",
+        metrics=metrics,
+        analyses=analyses[:12],
+        pending=pending[:12],
+        validations=validations[:12],
+        is_admin=include_all,
+    )
+
+
+@app.route("/feedback", methods=["POST"])
+@premium_required
+def feedback():
+    """Recebe validação/correção médica sobre um laudo gerado."""
+    g.modo = "premium"
+    data = request.get_json(silent=True) or request.form
+    analise_id = str(data.get("analysis_id") or "").strip()
+    feedback_value = str(data.get("feedback") or "").strip()
+    comentario = str(data.get("comment") or "").strip()[:3000]
+    responsible_name = str(data.get("responsible_name") or "").strip()[:160]
+    responsible_role = str(data.get("responsible_role") or "").strip()[:80]
+
+    feedback_map = {
+        "agree": {
+            "tipo": "validacao",
+            "label": "Concordo totalmente",
+            "concordancia": True,
+            "grau": 100,
+        },
+        "partial": {
+            "tipo": "correcao",
+            "label": "Concordo em parte",
+            "concordancia": False,
+            "grau": 60,
+        },
+        "disagree": {
+            "tipo": "correcao",
+            "label": "Discordo",
+            "concordancia": False,
+            "grau": 0,
+        },
+    }
+
+    if feedback_value not in feedback_map:
+        return jsonify({"error": "Tipo de feedback inválido."}), 400
+    if not analise_id:
+        return jsonify({"error": "Laudo sem identificação para salvar feedback."}), 400
+    if feedback_value in {"partial", "disagree"} and not comentario:
+        return jsonify({"error": "Descreva o que deveria ser corrigido no laudo."}), 400
+
+    include_all = bool(g.get("is_admin"))
+    row = db.buscar_analise(
+        analise_id=analise_id,
+        cliente_id=g.get("cliente_id"),
+        include_all=include_all,
+    )
+    if not row:
+        return jsonify({"error": "Laudo não encontrado para este acesso."}), 404
+
+    meta = feedback_map[feedback_value]
+    fonte_nome = " — ".join(part for part in [responsible_name, responsible_role] if part)
+    if not fonte_nome:
+        fonte_nome = g.get("user_email") or ("admin" if include_all else "")
+
+    feedback_id = db.salvar_feedback(
+        analise_id=analise_id,
+        tipo=meta["tipo"],
+        comentario=comentario or meta["label"],
+        achado_original=row.get("analise_completa") or "",
+        achado_corrigido=comentario if feedback_value in {"partial", "disagree"} else "",
+        secao="validacao_medica",
+        fonte=_feedback_source_for_role(responsible_role),
+        fonte_nome=fonte_nome,
+    )
+
+    if not feedback_id:
+        return jsonify({"error": "Não foi possível salvar o feedback agora."}), 503
+
+    db.salvar_diagnostico_validado(
+        analise_id=analise_id,
+        tipo_exame=row.get("tipo_exame") or "",
+        diagnostico_ia=row.get("analise_completa") or "",
+        diagnostico_final=comentario or meta["label"],
+        concordancia=meta["concordancia"],
+        grau_concordancia=meta["grau"],
+        validado_por=fonte_nome,
+        modalidade=row.get("modalidade"),
+    )
+
+    return jsonify({
+        "success": True,
+        "message": "Feedback médico salvo no histórico de validação.",
+    })
+
+
+@app.route("/validacao-clinica", methods=["POST"])
+@premium_required
+def validacao_clinica():
+    """Registra validação clínica formal de um laudo salvo."""
+    g.modo = "premium"
+    data = request.get_json(silent=True) or request.form
+    wants_json = request.is_json or "application/json" in (request.headers.get("Accept") or "")
+
+    analise_id = str(data.get("analysis_id") or "").strip()
+    final_diagnosis = str(data.get("final_diagnosis") or "").strip()[:6000]
+    reviewer_name = str(data.get("reviewer_name") or "").strip()[:160]
+    reviewer_register = str(data.get("reviewer_register") or "").strip()[:100]
+    reviewer_role = str(data.get("reviewer_role") or "").strip()[:80]
+    score = _score_value(data.get("concordance_score"), 100)
+    correct_findings = _split_validation_lines(str(data.get("correct_findings") or ""))
+    missed_findings = _split_validation_lines(str(data.get("missed_findings") or ""))
+    wrong_findings = _split_validation_lines(str(data.get("wrong_findings") or ""))
+    notes = str(data.get("validation_notes") or "").strip()[:3000]
+
+    def _validation_response(message: str, status: int = 200, ok: bool = True):
+        if wants_json:
+            payload = {"success": ok, "message": message} if ok else {"error": message}
+            return jsonify(payload), status
+        flash(message, "success" if ok else "error")
+        return redirect(request.referrer or url_for("laudos"))
+
+    if not analise_id:
+        return _validation_response("Laudo sem identificação para validação.", 400, False)
+    if not final_diagnosis:
+        return _validation_response("Informe o diagnóstico final ou parecer validado.", 400, False)
+
+    include_all = bool(g.get("is_admin"))
+    row = db.buscar_analise(
+        analise_id=analise_id,
+        cliente_id=g.get("cliente_id"),
+        include_all=include_all,
+    )
+    if not row:
+        return _validation_response("Laudo não encontrado para este acesso.", 404, False)
+
+    validado_por = " — ".join(part for part in [reviewer_name, reviewer_register or reviewer_role] if part)
+    if not validado_por:
+        validado_por = g.get("user_email") or ("admin" if include_all else "Profissional responsável")
+
+    validation_id = db.salvar_diagnostico_validado(
+        analise_id=analise_id,
+        tipo_exame=row.get("tipo_exame") or "",
+        diagnostico_ia=row.get("analise_completa") or "",
+        diagnostico_final=final_diagnosis,
+        concordancia=score >= 80 and not missed_findings and not wrong_findings,
+        grau_concordancia=score,
+        achados_corretos=correct_findings,
+        achados_perdidos=missed_findings,
+        achados_incorretos=wrong_findings,
+        validado_por=validado_por,
+        modalidade=row.get("modalidade"),
+    )
+
+    if not validation_id:
+        return _validation_response("Não foi possível salvar a validação clínica agora.", 503, False)
+
+    db.salvar_feedback(
+        analise_id=analise_id,
+        tipo="validacao",
+        comentario=notes or f"Validação clínica formal registrada com {score}% de concordância.",
+        achado_original=row.get("analise_completa") or "",
+        achado_corrigido=final_diagnosis,
+        secao="validacao_clinica_formal",
+        fonte=_feedback_source_for_role(reviewer_role),
+        fonte_nome=validado_por,
+    )
+
+    return _validation_response("Validação clínica formal salva com sucesso.")
 
 
 # ── Planos ───────────────────────────────────────────────────────────────────
@@ -945,7 +1577,7 @@ def checkout_pay():
             token = generate_premium_token(payment_id, email, cookie_max_age)
             resp.set_cookie(
                 PREMIUM_COOKIE, token, max_age=cookie_max_age,
-                httponly=True, samesite="Lax", secure=not app.debug,
+                httponly=True, samesite="Lax", secure=_secure_cookie(),
             )
         return resp
 
@@ -1003,7 +1635,7 @@ def payment_status():
             max_age=cookie_max_age,
             httponly=True,
             samesite="Lax",
-            secure=not app.debug,
+            secure=_secure_cookie(),
         )
 
         # Atualiza status e registra sessão premium no banco
@@ -1103,7 +1735,7 @@ def acesso_verificar():
         max_age=cookie_max_age,
         httponly=True,
         samesite="Lax",
-        secure=not app.debug,
+        secure=_secure_cookie(),
     )
 
     cliente_id = db.buscar_cliente_id_por_email(email)
@@ -1183,7 +1815,7 @@ def login():
         max_age=cookie_max_age,
         httponly=True,
         samesite="Lax",
-        secure=not app.debug,
+        secure=_secure_cookie(),
     )
 
     cliente_id = db.buscar_cliente_id_por_email(email)
@@ -1248,7 +1880,7 @@ def login_definir_senha():
             max_age=cookie_max_age,
             httponly=True,
             samesite="Lax",
-            secure=not app.debug,
+            secure=_secure_cookie(),
         )
         cliente_id = db.buscar_cliente_id_por_email(email)
         db.salvar_sessao(

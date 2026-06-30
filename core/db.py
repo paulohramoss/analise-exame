@@ -5,8 +5,10 @@ Todas as operações são fire-and-forget: erros são logados mas nunca propagad
 para não bloquear o fluxo principal da aplicação.
 """
 
+import importlib
 import os
 from functools import lru_cache
+from collections import Counter
 
 
 @lru_cache(maxsize=1)
@@ -18,7 +20,8 @@ def _get_client():
         print("[DB] SUPABASE_URL ou SUPABASE_SERVICE_KEY não configurados — persistência desativada.")
         return None
     try:
-        from supabase import create_client
+        supabase_module = importlib.import_module("supabase")
+        create_client = getattr(supabase_module, "create_client")
         client = create_client(url, key)
         print("[DB] Conectado ao Supabase.")
         return client
@@ -232,13 +235,14 @@ def salvar_analise(
     tempo_ms: int | None = None,
     cliente_id: str | None = None,
     sessao_id: str | None = None,
+    responsavel: dict | None = None,
 ) -> str | None:
     """Persiste resultado de análise da IA. Retorna UUID da análise ou None."""
     db = _get_client()
     if not db:
         return None
     try:
-        res = db.table("analises").insert({
+        data = {
             "tipo_exame": tipo_exame,
             "analise_completa": analise_completa,
             "modelo_ia": modelo_ia,
@@ -252,11 +256,109 @@ def salvar_analise(
             "tempo_processamento_ms": tempo_ms,
             "cliente_id": cliente_id,
             "sessao_id": sessao_id,
-        }).execute()
+        }
+        optional_keys: list[str] = []
+        if responsavel:
+            optional_fields = {
+                "responsavel_nome": responsavel.get("name") or None,
+                "responsavel_perfil": responsavel.get("role") or None,
+                "responsavel_registro": responsavel.get("register") or None,
+                "responsavel_instituicao": responsavel.get("organization") or None,
+            }
+            data.update(optional_fields)
+            optional_keys = list(optional_fields.keys())
+
+        try:
+            res = db.table("analises").insert(data).execute()
+        except Exception as e:
+            if not optional_keys:
+                raise e
+            for key in optional_keys:
+                data.pop(key, None)
+            res = db.table("analises").insert(data).execute()
         return res.data[0]["id"] if res.data else None
     except Exception as e:
         print(f"[DB] salvar_analise: {e}")
         return None
+
+
+def listar_analises(
+    cliente_id: str | None = None,
+    limit: int = 50,
+    include_all: bool = False,
+) -> list[dict]:
+    """Lista análises salvas para o cliente atual. Admin pode listar todas."""
+    db = _get_client()
+    if not db:
+        return []
+    if not include_all and not cliente_id:
+        return []
+
+    base_cols = (
+        "id, created_at, tipo_exame, modelo_ia, referencias_usadas, num_imagens, "
+        "modo, descricao_usuario, modalidade, tempo_processamento_ms"
+    )
+    optional_cols = (
+        ", responsavel_nome, responsavel_perfil, responsavel_registro, "
+        "responsavel_instituicao"
+    )
+
+    def _run_query(columns: str):
+        query = db.table("analises").select(columns)
+        if cliente_id:
+            query = query.eq("cliente_id", cliente_id)
+        query = query.order("created_at", desc=True).limit(limit)
+        return query.execute()
+
+    try:
+        res = _run_query(base_cols + optional_cols)
+        return res.data or []
+    except Exception:
+        try:
+            res = _run_query(base_cols)
+            return res.data or []
+        except Exception as e:
+            print(f"[DB] listar_analises: {e}")
+            return []
+
+
+def buscar_analise(
+    analise_id: str,
+    cliente_id: str | None = None,
+    include_all: bool = False,
+) -> dict | None:
+    """Busca uma análise, respeitando o vínculo com o cliente quando não for admin."""
+    db = _get_client()
+    if not db or not analise_id:
+        return None
+    if not include_all and not cliente_id:
+        return None
+
+    base_cols = (
+        "id, created_at, tipo_exame, analise_completa, modelo_ia, referencias_usadas, "
+        "num_imagens, modo, descricao_usuario, modalidade, tempo_processamento_ms, cliente_id"
+    )
+    optional_cols = (
+        ", responsavel_nome, responsavel_perfil, responsavel_registro, "
+        "responsavel_instituicao"
+    )
+
+    def _run_query(columns: str):
+        query = db.table("analises").select(columns).eq("id", analise_id)
+        if cliente_id:
+            query = query.eq("cliente_id", cliente_id)
+        return query.limit(1).execute()
+
+    try:
+        res = _run_query(base_cols + optional_cols)
+        return res.data[0] if res.data else None
+    except Exception:
+        try:
+            res = _run_query(base_cols)
+            return res.data[0] if res.data else None
+        except Exception as e:
+            print(f"[DB] buscar_analise: {e}")
+            return None
 
 
 def salvar_imagem_exame(
@@ -265,21 +367,118 @@ def salvar_imagem_exame(
     tamanho_bytes: int,
     hash_md5: str,
     ordem: int = 1,
+    origem: str = "upload",
+    arquivo_original: str = "",
+    dicom_metadata: dict | None = None,
 ) -> None:
     """Persiste metadados de imagem de exame vinculada a uma análise."""
     db = _get_client()
     if not db:
         return
     try:
-        db.table("imagens_exame").insert({
+        data = {
             "analise_id": analise_id,
             "mime_type": mime_type,
             "tamanho_bytes": tamanho_bytes,
             "hash_md5": hash_md5,
             "ordem": ordem,
-        }).execute()
+        }
+        optional_fields = {
+            "origem": origem or "upload",
+            "arquivo_original": arquivo_original or None,
+            "dicom_metadata": dicom_metadata or None,
+        }
+        data.update(optional_fields)
+        try:
+            db.table("imagens_exame").insert(data).execute()
+        except Exception:
+            for key in optional_fields:
+                data.pop(key, None)
+            db.table("imagens_exame").insert(data).execute()
     except Exception as e:
         print(f"[DB] salvar_imagem_exame: {e}")
+
+
+def listar_feedbacks_por_analises(analise_ids: list[str]) -> list[dict]:
+    """Lista feedbacks vinculados às análises informadas."""
+    db = _get_client()
+    if not db or not analise_ids:
+        return []
+    try:
+        res = (
+            db.table("feedbacks_ia")
+            .select("id, analise_id, tipo, secao, fonte, fonte_nome, created_at")
+            .in_("analise_id", analise_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        print(f"[DB] listar_feedbacks_por_analises: {e}")
+        return []
+
+
+def listar_validacoes_clinicas(analise_ids: list[str]) -> list[dict]:
+    """Lista validações clínicas formais vinculadas às análises informadas."""
+    db = _get_client()
+    if not db or not analise_ids:
+        return []
+    try:
+        res = (
+            db.table("diagnosticos_validados")
+            .select(
+                "id, analise_id, tipo_exame, modalidade, concordancia, grau_concordancia, "
+                "achados_corretos, achados_perdidos, achados_incorretos, validado_por, created_at"
+            )
+            .in_("analise_id", analise_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        print(f"[DB] listar_validacoes_clinicas: {e}")
+        return []
+
+
+def montar_metricas_dashboard(
+    analises: list[dict],
+    validacoes: list[dict],
+    feedbacks: list[dict],
+) -> dict:
+    """Calcula métricas simples para dashboard de clínica."""
+    total_analises = len(analises)
+    total_validacoes = len(validacoes)
+    validados = {v.get("analise_id") for v in validacoes if v.get("analise_id")}
+    pendentes = max(total_analises - len(validados), 0)
+    consenso_dual = sum(
+        1
+        for item in analises
+        if "claude" in (item.get("modelo_ia") or "").lower()
+        and "consenso" in (item.get("modelo_ia") or "").lower()
+    )
+    feedback_count = len(feedbacks)
+    concordancias = [
+        int(v.get("grau_concordancia") or 0)
+        for v in validacoes
+        if v.get("grau_concordancia") is not None
+    ]
+    media_concordancia = round(sum(concordancias) / len(concordancias)) if concordancias else 0
+    concordancia_plena = sum(1 for v in validacoes if v.get("concordancia") is True)
+    exames_por_tipo = Counter(item.get("tipo_exame") or "geral" for item in analises)
+    modalidades = Counter(item.get("modalidade") or "Não informada" for item in analises)
+
+    return {
+        "total_analises": total_analises,
+        "total_validacoes": total_validacoes,
+        "pendentes_validacao": pendentes,
+        "feedbacks": feedback_count,
+        "consenso_dual": consenso_dual,
+        "consenso_percentual": round((consenso_dual / total_analises) * 100) if total_analises else 0,
+        "media_concordancia": media_concordancia,
+        "concordancia_plena": concordancia_plena,
+        "exames_por_tipo": exames_por_tipo.most_common(6),
+        "modalidades": modalidades.most_common(6),
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
