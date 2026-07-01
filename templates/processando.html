@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processando análise — Three Health</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="{{ url_for('static', filename='favicon.svg') }}"
+    >
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    >
+    <style>
+      .processing-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 50vh;
+      }
+
+      .processing-card {
+        max-width: 440px;
+        width: 100%;
+        text-align: center;
+      }
+
+      .processing-card .spinner {
+        margin: 0 auto 1.25rem;
+      }
+
+      .processing-card h2 {
+        margin-bottom: 0.75rem;
+      }
+
+      .processing-card p {
+        color: var(--text-muted);
+        font-size: 0.92rem;
+        margin-bottom: 0.4rem;
+      }
+
+      .processing-card .alert-error {
+        text-align: left;
+        margin-top: 1.25rem;
+        margin-bottom: 0;
+      }
+
+      .processing-card .btn-primary {
+        margin-top: 1.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="header-content">
+        <div class="logo">
+          <div class="logo-row">
+            <div class="logo-lines">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <span class="logo-wordmark">health</span>
+          </div>
+          <div class="logo-underline"></div>
+        </div>
+        <div class="header-actions">
+          <a href="/clinica/dashboard" class="btn-secondary">Dashboard</a>
+          <a href="/laudos" class="btn-secondary">Histórico</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="container processing-container">
+      <div class="card processing-card" id="processing-content">
+        <div class="spinner"></div>
+        <h2>Analisando exame...</h2>
+        <p>Gerando laudo com consenso otimizado entre os modelos de IA.</p>
+        <p>
+          Esta página atualiza automaticamente quando o laudo estiver pronto —
+          não é necessário recarregar.
+        </p>
+      </div>
+    </main>
+
+    <script>
+      const statusUrl = "{{ status_url }}";
+      const resultadoUrl = "{{ resultado_url }}";
+
+      async function pollStatus(intervalMs = 2500, maxAttempts = 90) {
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+              try {
+                  const resp = await fetch(statusUrl);
+                  const data = await resp.json();
+
+                  if (data.status === 'finished') {
+                      window.location.href = resultadoUrl;
+                      return;
+                  }
+                  if (data.status === 'failed' || data.status === 'not_found') {
+                      showError(data.error || 'Não foi possível processar a análise. Tente novamente.');
+                      return;
+                  }
+              } catch (err) {
+                  // falha transitória de rede — tenta de novo no próximo intervalo
+              }
+              await new Promise(resolve => setTimeout(resolve, intervalMs));
+          }
+          showError('A análise está demorando mais que o esperado. Tente novamente em alguns instantes.');
+      }
+
+      function showError(message) {
+          document.getElementById('processing-content').innerHTML =
+              '<h2>Não foi possível concluir a análise</h2>' +
+              '<div class="alert alert-error"><span>❌</span>' + message + '</div>' +
+              '<a href="/" class="btn-primary">Voltar e tentar novamente</a>';
+      }
+
+      pollStatus();
+    </script>
+  </body>
+</html>

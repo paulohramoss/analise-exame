@@ -42,8 +42,8 @@ try:
 except ImportError:  # pragma: no cover - dependência instalada em produção via requirements.txt
     _sentry_sdk = None
 
-from core.analyzer import analyze_exam
-from core import asaas, cost_tracking, db
+from core.analyzer import analyze_exam_from_bytes
+from core import asaas, cost_tracking, db, jobs
 from core.logging_config import configure_logging, new_trace_id
 
 load_dotenv()
@@ -872,6 +872,71 @@ def _record_analysis_cost(mode: str, result: dict) -> None:
             cost_tracking.add_spend(scope, own_cost_usd)
 
 
+# ── Fila de análise assíncrona ─────────────────────────────────────────────────
+#
+# Quando um Redis real está configurado (jobs.is_async_enabled()), as rotas de
+# análise enfileiram o trabalho e respondem em milissegundos com um job_id,
+# em vez de bloquear a requisição HTTP por até ~90s. Um worker separado
+# (worker.py) consome a fila. Sem Redis configurado, as rotas caem no
+# caminho síncrono existente — nada muda para quem não configurar a fila.
+
+def _read_upload_bytes(upload_items: list[dict]) -> tuple[list[tuple[bytes, str]], list[dict]]:
+    """Lê os bytes de cada upload (para enviar ao job) e os metadados de persistência."""
+    images = []
+    image_meta = []
+    for upload_item in upload_items:
+        source_path = Path(upload_item.get("original_path") or upload_item["filepath"])
+        raw = source_path.read_bytes()
+        images.append((raw, upload_item.get("storage_mime") or upload_item["display_mime"]))
+        image_meta.append({
+            "origem": upload_item.get("source") or "upload",
+            "arquivo_original": upload_item.get("original_name") or "",
+            "dicom_metadata": upload_item.get("dicom_metadata") or None,
+        })
+    return images, image_meta
+
+
+def _cleanup_upload_files(upload_items: list[dict]) -> None:
+    paths = set()
+    for upload_item in upload_items:
+        for key in ("filepath", "original_path"):
+            if upload_item.get(key):
+                paths.add(str(upload_item[key]))
+    for fp in paths:
+        try:
+            Path(fp).unlink()
+        except Exception:
+            pass
+
+
+def _enqueue_analysis_job(
+    mode: str,
+    images: list[tuple[bytes, str]],
+    image_meta: list[dict],
+    exam_filename: str,
+    api_key: str,
+    user_description: str,
+    persist: dict,
+    display_extra: dict | None = None,
+) -> str | None:
+    """Enfileira a análise. Retorna o job_id, ou None se a fila não está disponível."""
+    exclude_gemini_cost = mode == "api" and bool(request.headers.get("X-API-Key", "").strip())
+    return jobs.enqueue_analysis(
+        mode=mode,
+        images=images,
+        image_meta=image_meta,
+        exam_filename=exam_filename,
+        api_key=api_key,
+        user_description=user_description,
+        model_name=get_model_name(),
+        anthropic_api_key=get_anthropic_api_key(),
+        exclude_gemini_cost=exclude_gemini_cost,
+        cost_scopes=_cost_budget_scopes(mode),
+        persist=persist,
+        display_extra=display_extra,
+    )
+
+
 # ── Rotas principais ──────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -925,16 +990,12 @@ def analyze():
 
     user_description = request.form.get("description", "").strip()
 
-    filepaths = []
     upload_items = []
-    images_data = []  # Lista de {"b64": str, "mime": str} para exibição no resultado
-
+    images_data = []  # Lista de {"b64": str, "mime": str, "source": str} para exibição no resultado
     for file in files:
         upload_item = save_upload_file(file)
         if upload_item is None:
             continue
-        filepath = upload_item["filepath"]
-        filepaths.append(str(filepath))
         upload_items.append(upload_item)
         images_data.append({
             "b64": upload_item["display_b64"],
@@ -942,14 +1003,45 @@ def analyze():
             "source": upload_item["source"],
         })
 
-    if not filepaths:
+    if not upload_items:
         flash(f"Formato de arquivo não suportado. Use: {', '.join(ALLOWED_EXTENSIONS)}", "error")
         return redirect(url_for("index"))
 
+    analysis_description = _description_with_dicom_context(user_description, upload_items)
+    images, image_meta = _read_upload_bytes(upload_items)
+    exam_filename = upload_items[0].get("original_name") or "exame.jpg"
+    _cleanup_upload_files(upload_items)  # os bytes já foram lidos; não precisamos mais do disco
+
+    if jobs.is_async_enabled():
+        job_id = _enqueue_analysis_job(
+            mode="premium",
+            images=images,
+            image_meta=image_meta,
+            exam_filename=exam_filename,
+            api_key=api_key,
+            user_description=analysis_description,
+            persist={
+                "descricao_usuario": user_description,
+                "modalidade": _detect_modalidade(analysis_description),
+                "ip_address": _get_ip(),
+                "user_agent": request.headers.get("User-Agent"),
+                "cliente_id": g.get("cliente_id"),
+                "responsavel": responsible_info,
+            },
+            display_extra={
+                "images_data": images_data,
+                "user_description_display": user_description,
+                "responsible": responsible_info,
+            },
+        )
+        if job_id:
+            return redirect(url_for("analyze_processando", job_id=job_id))
+
+    # Fallback síncrono (fila indisponível): mesma análise, sem enfileirar.
     try:
-        analysis_description = _description_with_dicom_context(user_description, upload_items)
-        result = analyze_exam(
-            exam_image_paths=filepaths,
+        result = analyze_exam_from_bytes(
+            exam_images_data=images,
+            exam_filename=exam_filename,
             api_key=api_key,
             user_description=analysis_description,
             model_name=get_model_name(),
@@ -975,18 +1067,17 @@ def analyze():
         )
         if analise_id:
             g.analise_id = analise_id
-            for i, upload_item in enumerate(upload_items, 1):
-                source_path = Path(upload_item.get("original_path") or upload_item["filepath"])
-                raw = source_path.read_bytes()
+            for i, (raw_bytes, mime) in enumerate(images, 1):
+                meta = image_meta[i - 1]
                 db.salvar_imagem_exame(
                     analise_id=analise_id,
-                    mime_type=upload_item.get("storage_mime") or upload_item["display_mime"],
-                    tamanho_bytes=len(raw),
-                    hash_md5=hashlib.md5(raw).hexdigest(),
+                    mime_type=mime,
+                    tamanho_bytes=len(raw_bytes),
+                    hash_md5=hashlib.md5(raw_bytes).hexdigest(),
                     ordem=i,
-                    origem=upload_item.get("source") or "upload",
-                    arquivo_original=upload_item.get("original_name") or "",
-                    dicom_metadata=upload_item.get("dicom_metadata") or None,
+                    origem=meta.get("origem") or "upload",
+                    arquivo_original=meta.get("arquivo_original") or "",
+                    dicom_metadata=meta.get("dicom_metadata") or None,
                 )
 
         return render_template(
@@ -1019,17 +1110,49 @@ def analyze():
             flash("Não foi possível processar o exame. Tente novamente.", "error")
         return redirect(url_for("index"))
 
-    finally:
-        cleanup_paths = set(filepaths)
-        for upload_item in upload_items:
-            for key in ("filepath", "original_path"):
-                if upload_item.get(key):
-                    cleanup_paths.add(str(upload_item[key]))
-        for fp in cleanup_paths:
-            try:
-                Path(fp).unlink()
-            except Exception:
-                pass
+
+@app.route("/analyze/processando/<job_id>")
+@premium_required
+def analyze_processando(job_id: str):
+    """Página de espera (poll) enquanto a análise premium é processada de forma assíncrona."""
+    return render_template(
+        "processando.html",
+        status_url=url_for("analyze_status", job_id=job_id),
+        resultado_url=url_for("analyze_resultado", job_id=job_id),
+    )
+
+
+@app.route("/analyze/status/<job_id>")
+@premium_required
+@rate_limit("STATUS_POLL_RATE_LIMIT", "60 per minute")
+def analyze_status(job_id: str):
+    """Consulta o status de uma análise premium enfileirada (usado pela página de espera)."""
+    status = jobs.get_job_status(job_id)
+    return jsonify({"status": status["status"], "error": status.get("error", "")})
+
+
+@app.route("/analyze/resultado/<job_id>")
+@premium_required
+def analyze_resultado(job_id: str):
+    """Renderiza o resultado de uma análise premium assíncrona já concluída."""
+    status = jobs.get_job_status(job_id)
+    if status["status"] != "finished":
+        return redirect(url_for("analyze_processando", job_id=job_id))
+
+    result = status["result"]
+    return render_template(
+        "result.html",
+        analysis=result["analysis"],
+        exam_type=result["exam_type"].replace("_", " ").title(),
+        references_used=result["references_used"],
+        model_used=result["model_used"],
+        images=result.get("images_data") or [],
+        num_images=result["num_images"],
+        user_description=result.get("user_description_display", ""),
+        responsible=result.get("responsible") or {"name": "", "role": ""},
+        analysis_id=result.get("analise_id"),
+        consensus=_build_consensus_info(result["model_used"], result["analysis"]),
+    )
 
 
 @app.route("/trial")
@@ -1071,14 +1194,41 @@ def trial_analyze():
     if result_save is None:
         return jsonify({"error": "Erro ao processar o arquivo enviado."}), 400
 
-    filepath = result_save["filepath"]
     image_b64 = result_save["display_b64"]
     image_mime = result_save["display_mime"]
     analysis_description = _description_with_dicom_context(user_description, [result_save])
+    images, image_meta = _read_upload_bytes([result_save])
+    exam_filename = result_save.get("original_name") or "exame.jpg"
+    _cleanup_upload_files([result_save])
 
+    if jobs.is_async_enabled():
+        job_id = _enqueue_analysis_job(
+            mode="trial",
+            images=images,
+            image_meta=image_meta,
+            exam_filename=exam_filename,
+            api_key=api_key,
+            user_description=analysis_description,
+            persist={
+                "descricao_usuario": user_description,
+                "modalidade": _detect_modalidade(analysis_description),
+                "ip_address": _get_ip(),
+                "user_agent": request.headers.get("User-Agent"),
+            },
+            display_extra={"image_b64": image_b64, "image_mime": image_mime},
+        )
+        if job_id:
+            return jsonify({
+                "status": "queued",
+                "job_id": job_id,
+                "status_url": url_for("trial_analyze_status", job_id=job_id),
+            }), 202
+
+    # Fallback síncrono (fila indisponível): mesma análise, sem enfileirar.
     try:
-        result = analyze_exam(
-            exam_image_paths=[str(filepath)],
+        result = analyze_exam_from_bytes(
+            exam_images_data=images,
+            exam_filename=exam_filename,
             api_key=api_key,
             user_description=analysis_description,
             model_name=get_model_name(),
@@ -1086,7 +1236,6 @@ def trial_analyze():
         )
         _record_analysis_cost("trial", result)
 
-        # Persiste análise no banco
         analise_id = db.salvar_analise(
             tipo_exame=result["exam_type"],
             analise_completa=result["analysis"],
@@ -1102,16 +1251,15 @@ def trial_analyze():
         )
         if analise_id:
             g.analise_id = analise_id
-            source_path = Path(result_save.get("original_path") or result_save["filepath"])
-            raw = source_path.read_bytes()
+            raw_bytes, mime = images[0]
             db.salvar_imagem_exame(
                 analise_id=analise_id,
-                mime_type=result_save.get("storage_mime") or image_mime,
-                tamanho_bytes=len(raw),
-                hash_md5=hashlib.md5(raw).hexdigest(),
-                origem=result_save.get("source") or "upload",
-                arquivo_original=result_save.get("original_name") or "",
-                dicom_metadata=result_save.get("dicom_metadata") or None,
+                mime_type=mime,
+                tamanho_bytes=len(raw_bytes),
+                hash_md5=hashlib.md5(raw_bytes).hexdigest(),
+                origem=image_meta[0].get("origem") or "upload",
+                arquivo_original=image_meta[0].get("arquivo_original") or "",
+                dicom_metadata=image_meta[0].get("dicom_metadata") or None,
             )
 
         return jsonify({
@@ -1138,12 +1286,27 @@ def trial_analyze():
             return jsonify({"error": "Serviço de IA temporariamente indisponível. Tente novamente."}), 503
         return jsonify({"error": "Não foi possível processar o exame. Tente novamente."}), 500
 
-    finally:
-        for fp in {str(filepath), str(result_save.get("original_path") or filepath)}:
-            try:
-                Path(fp).unlink()
-            except Exception:
-                pass
+
+@app.route("/trial/analyze/status/<job_id>")
+@rate_limit("STATUS_POLL_RATE_LIMIT", "60 per minute")
+def trial_analyze_status(job_id: str):
+    """Consulta o status de uma análise trial enfileirada."""
+    status = jobs.get_job_status(job_id)
+    if status["status"] == "finished":
+        result = status["result"]
+        return jsonify({
+            "status": "finished",
+            "analysis": result["analysis"],
+            "exam_type": result["exam_type"].replace("_", " ").title(),
+            "references_used": result["references_used"],
+            "model_used": result["model_used"],
+            "consensus": _build_consensus_info(result["model_used"], result["analysis"]),
+            "image_b64": result.get("image_b64", ""),
+            "image_mime": result.get("image_mime", ""),
+        }), 200
+    if status["status"] == "not_found":
+        return jsonify({"status": "not_found", "error": "Job não encontrado."}), 404
+    return jsonify(status), 200
 
 
 @app.route("/api/analyze", methods=["POST"])
@@ -1178,22 +1341,49 @@ def api_analyze():
 
     user_description = request.form.get("description", "")
 
-    filepaths = []
     upload_items = []
     for file in files:
         upload_item = save_upload_file(file)
         if upload_item is None:
             continue
         upload_items.append(upload_item)
-        filepaths.append(str(upload_item["filepath"]))
 
-    if not filepaths:
+    if not upload_items:
         return jsonify({"error": "Nenhum arquivo válido pôde ser processado"}), 400
 
+    analysis_description = _description_with_dicom_context(user_description, upload_items)
+    images, image_meta = _read_upload_bytes(upload_items)
+    exam_filename = upload_items[0].get("original_name") or "exame.jpg"
+    _cleanup_upload_files(upload_items)  # os bytes já foram lidos; não precisamos mais do disco
+
+    if jobs.is_async_enabled():
+        job_id = _enqueue_analysis_job(
+            mode="api",
+            images=images,
+            image_meta=image_meta,
+            exam_filename=exam_filename,
+            api_key=api_key,
+            user_description=analysis_description,
+            persist={
+                "descricao_usuario": user_description,
+                "modalidade": _detect_modalidade(analysis_description),
+                "ip_address": _get_ip(),
+                "user_agent": request.headers.get("User-Agent"),
+            },
+        )
+        if job_id:
+            return jsonify({
+                "success": True,
+                "status": "queued",
+                "job_id": job_id,
+                "status_url": url_for("api_analyze_status", job_id=job_id),
+            }), 202
+
+    # Fallback síncrono (fila indisponível): mesma análise, sem enfileirar.
     try:
-        analysis_description = _description_with_dicom_context(user_description, upload_items)
-        result = analyze_exam(
-            exam_image_paths=filepaths,
+        result = analyze_exam_from_bytes(
+            exam_images_data=images,
+            exam_filename=exam_filename,
             api_key=api_key,
             user_description=analysis_description,
             model_name=get_model_name(),
@@ -1201,7 +1391,6 @@ def api_analyze():
         )
         _record_analysis_cost("api", result)
 
-        # Persiste análise no banco
         analise_id = db.salvar_analise(
             tipo_exame=result["exam_type"],
             analise_completa=result["analysis"],
@@ -1217,18 +1406,17 @@ def api_analyze():
         )
         if analise_id:
             g.analise_id = analise_id
-            for i, upload_item in enumerate(upload_items, 1):
-                source_path = Path(upload_item.get("original_path") or upload_item["filepath"])
-                raw = source_path.read_bytes()
+            for i, (raw_bytes, mime) in enumerate(images, 1):
+                meta = image_meta[i - 1]
                 db.salvar_imagem_exame(
                     analise_id=analise_id,
-                    mime_type=upload_item.get("storage_mime") or upload_item["display_mime"],
-                    tamanho_bytes=len(raw),
-                    hash_md5=hashlib.md5(raw).hexdigest(),
+                    mime_type=mime,
+                    tamanho_bytes=len(raw_bytes),
+                    hash_md5=hashlib.md5(raw_bytes).hexdigest(),
                     ordem=i,
-                    origem=upload_item.get("source") or "upload",
-                    arquivo_original=upload_item.get("original_name") or "",
-                    dicom_metadata=upload_item.get("dicom_metadata") or None,
+                    origem=meta.get("origem") or "upload",
+                    arquivo_original=meta.get("arquivo_original") or "",
+                    dicom_metadata=meta.get("dicom_metadata") or None,
                 )
 
         result["consensus"] = _build_consensus_info(result.get("model_used", ""), result.get("analysis", ""))
@@ -1237,17 +1425,19 @@ def api_analyze():
     except Exception as e:
         return jsonify({"error": str(e), "success": False}), 500
 
-    finally:
-        cleanup_paths = set(filepaths)
-        for upload_item in upload_items:
-            for key in ("filepath", "original_path"):
-                if upload_item.get(key):
-                    cleanup_paths.add(str(upload_item[key]))
-        for fp in cleanup_paths:
-            try:
-                Path(fp).unlink()
-            except Exception:
-                pass
+
+@app.route("/api/analyze/status/<job_id>")
+@rate_limit("STATUS_POLL_RATE_LIMIT", "60 per minute")
+def api_analyze_status(job_id: str):
+    """Consulta o status de uma análise enfileirada via /api/analyze."""
+    status = jobs.get_job_status(job_id)
+    if status["status"] == "finished":
+        result = dict(status["result"])
+        result["consensus"] = _build_consensus_info(result.get("model_used", ""), result.get("analysis", ""))
+        return jsonify({"status": "finished", **result}), 200
+    if status["status"] == "not_found":
+        return jsonify({"status": "not_found", "error": "Job não encontrado."}), 404
+    return jsonify(status), 200
 
 
 # ── Histórico e feedback médico ───────────────────────────────────────────────

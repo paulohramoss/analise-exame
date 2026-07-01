@@ -11,4 +11,5 @@ Werkzeug==3.0.4
 supabase==2.15.0
 httpx>=0.28.1
 redis>=5.0.0
+rq>=1.16.0
 sentry-sdk[flask]>=2.0.0

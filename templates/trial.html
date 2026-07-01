@@ -1160,41 +1160,24 @@
                 const resp = await fetch('/trial/analyze', { method: 'POST', body: formData });
                 const data = await resp.json();
 
-                if (!resp.ok || data.error) {
+                if (!resp.ok && resp.status !== 202) {
                     showError(data.error || 'Erro inesperado. Tente novamente.');
                     return;
                 }
-
-                // Increment count
-                trialCount++;
-                saveCount();
-                updateBadge();
-
-                // Populate result section
-                document.getElementById('r-exam-type').textContent = data.exam_type || '—';
-                const referencesUsed = Number(data.references_used || 0);
-                document.getElementById('r-refs').textContent =
-                    referencesUsed > 0
-                        ? `${referencesUsed} ${referencesUsed === 1 ? 'imagem' : 'imagens'}`
-                        : 'Análise sem referência';
-                document.getElementById('r-image').src = `data:${data.image_mime};base64,${data.image_b64}`;
-
-                const reportEl = document.getElementById('report-content');
-                reportEl.innerHTML = data.analysis;
-                renderMarkdown(reportEl);
-
-                // Show/hide new analysis button and last-analysis warning
-                const btnNew = document.getElementById('btn-new-analysis');
-                const lastWarn = document.getElementById('last-analysis-warning');
-                if (trialCount >= MAX_TRIALS) {
-                    btnNew.style.display = 'none';
-                    lastWarn.style.display = 'block';
-                } else {
-                    btnNew.style.display = 'inline-flex';
-                    lastWarn.style.display = 'none';
+                if (data.error) {
+                    showError(data.error);
+                    return;
                 }
 
-                showSection('section-result');
+                // Fila assíncrona: aguarda o job terminar antes de exibir o resultado.
+                const finalData = data.status === 'queued'
+                    ? await pollTrialJobStatus(data.status_url)
+                    : data;
+                if (!finalData) {
+                    return;  // pollTrialJobStatus já exibiu o erro
+                }
+
+                populateTrialResult(finalData);
 
             } catch (err) {
                 showError('Falha de conexão. Verifique sua internet e tente novamente.');
@@ -1203,6 +1186,65 @@
                 document.getElementById('loading-overlay').style.display = 'none';
             }
         });
+
+        // Consulta /trial/analyze/status/<job_id> periodicamente até o job terminar.
+        // Retorna os dados finais (mesmo formato da resposta síncrona) ou null em caso de erro.
+        async function pollTrialJobStatus(statusUrl, intervalMs = 2000, maxAttempts = 90) {
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, intervalMs));
+
+                let resp, data;
+                try {
+                    resp = await fetch(statusUrl);
+                    data = await resp.json();
+                } catch (err) {
+                    continue;  // falha transitória de rede — tenta de novo no próximo intervalo
+                }
+
+                if (!resp.ok || data.status === 'failed' || data.status === 'not_found') {
+                    showError(data.error || 'Não foi possível processar a análise. Tente novamente.');
+                    return null;
+                }
+                if (data.status === 'finished') {
+                    return data;
+                }
+                // 'queued' ou 'started' — continua aguardando
+            }
+            showError('A análise está demorando mais que o esperado. Tente novamente em alguns instantes.');
+            return null;
+        }
+
+        function populateTrialResult(data) {
+            // Increment count
+            trialCount++;
+            saveCount();
+            updateBadge();
+
+            document.getElementById('r-exam-type').textContent = data.exam_type || '—';
+            const referencesUsed = Number(data.references_used || 0);
+            document.getElementById('r-refs').textContent =
+                referencesUsed > 0
+                    ? `${referencesUsed} ${referencesUsed === 1 ? 'imagem' : 'imagens'}`
+                    : 'Análise sem referência';
+            document.getElementById('r-image').src = `data:${data.image_mime};base64,${data.image_b64}`;
+
+            const reportEl = document.getElementById('report-content');
+            reportEl.innerHTML = data.analysis;
+            renderMarkdown(reportEl);
+
+            // Show/hide new analysis button and last-analysis warning
+            const btnNew = document.getElementById('btn-new-analysis');
+            const lastWarn = document.getElementById('last-analysis-warning');
+            if (trialCount >= MAX_TRIALS) {
+                btnNew.style.display = 'none';
+                lastWarn.style.display = 'block';
+            } else {
+                btnNew.style.display = 'inline-flex';
+                lastWarn.style.display = 'none';
+            }
+
+            showSection('section-result');
+        }
 
         // ── Markdown render ──
         function renderMarkdown(el) {

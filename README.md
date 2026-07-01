@@ -40,6 +40,19 @@ analise-exame/
     └── style.css             # Estilos da interface
 ```
 
+> A árvore acima é ilustrativa. O `core/` também tem `db.py` (Supabase),
+> `asaas.py` (pagamentos), `cost_tracking.py`, `logging_config.py` e
+> `jobs.py` (fila assíncrona) — veja os arquivos para detalhes.
+
+---
+
+## Banco de Dados
+
+O schema completo do Supabase está documentado em
+[`docs/SCHEMA.md`](docs/SCHEMA.md) (diagrama e explicação de cada tabela) e
+em [`supabase_migrations/schema.sql`](supabase_migrations/schema.sql) (DDL
+consolidado e idempotente — seguro rodar num projeto novo ou no existente).
+
 ---
 
 ## Instalação e Execução
@@ -107,6 +120,39 @@ Acesse a interface em: `http://localhost:5000`
 
 ---
 
+## Fila de análise assíncrona (opcional)
+
+Por padrão, cada análise roda dentro do próprio ciclo de request/response do
+Flask — o cliente espera até ~90s pela resposta. Isso é simples e funciona
+bem em baixo volume, mas sob carga cada análise em andamento ocupa um worker
+HTTP inteiro, reduzindo a capacidade de atender outras requisições ao mesmo
+tempo (mesmo as rápidas, como a página inicial).
+
+Configurando um Redis real em `RATELIMIT_STORAGE_URI` ou
+`ANALYSIS_QUEUE_REDIS_URL` (ver `.env.example`), as rotas de análise
+(`/analyze`, `/trial/analyze`, `/api/analyze`) passam a enfileirar o
+trabalho e responder em milissegundos com um `job_id` — o cliente faz
+polling do status até o laudo ficar pronto. **Sem Redis configurado, nada
+muda**: as rotas caem automaticamente no caminho síncrono existente.
+
+Quem processa a fila é um worker separado do processo web:
+
+```bash
+python worker.py
+```
+
+Esse processo precisa rodar em algo que sustente processos de longa duração
+(uma VM, um container, um serviço always-on como Railway/Render) — **não
+funciona hospedado como função serverless da Vercel**, que não mantém
+processos em background entre invocações. Se você deploia só na Vercel sem
+um worker rodando em outro lugar, não configure `ANALYSIS_QUEUE_REDIS_URL`
+(ou deixe `RATELIMIT_STORAGE_URI=memory://`) para permanecer no caminho
+síncrono.
+
+Detalhes de implementação em [`core/jobs.py`](core/jobs.py).
+
+---
+
 ## API REST
 
 A aplicação expõe um endpoint para integração programática.
@@ -150,10 +196,13 @@ curl -X POST http://localhost:5000/api/analyze \
 
 | Camada     | Tecnologia                              |
 |------------|-----------------------------------------|
-| Backend    | Python 3, Flask                         |
-| IA         | Google Gemini 2.5 Flash (multimodal)    |
-| Referências | Wikimedia Commons (domínio público)    |
-| Frontend   | HTML5, CSS3 (sem frameworks externos)   |
+| Backend         | Python 3, Flask                                                     |
+| IA              | Google Gemini 2.5 Flash (multimodal), Claude Sonnet (consenso dual) |
+| Fila (opcional) | Redis + RQ (worker separado — ver "Fila de análise assíncrona")     |
+| Banco de dados  | Supabase (Postgres)                                                 |
+| Monitoramento   | Sentry (opcional), logging estruturado (JSON)                       |
+| Referências     | Wikimedia Commons (domínio público)                                 |
+| Frontend        | HTML5, CSS3 (sem frameworks externos)                               |
 
 ---
 

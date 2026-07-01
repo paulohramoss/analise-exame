@@ -8,6 +8,7 @@ Ordem de prioridade:
 """
 
 import logging
+import tempfile
 import requests
 from pathlib import Path
 
@@ -113,10 +114,10 @@ def _load_images_from_dir(directory: Path, max_images: int = 2) -> list[tuple[by
 
 
 def _download_fallback(exam_type: str) -> list[tuple[bytes, str]]:
-    """Baixa imagens de referência da internet como fallback. Cache em /tmp."""
+    """Baixa imagens de referência da internet como fallback. Cache no diretório temporário do sistema."""
     key = exam_type if exam_type in FALLBACK_URLS else "joelho"
     urls = FALLBACK_URLS[key]
-    cache_dir = Path("/tmp/reference_data") / exam_type
+    cache_dir = Path(tempfile.gettempdir()) / "reference_data" / exam_type
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
