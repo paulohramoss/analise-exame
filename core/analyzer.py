@@ -24,14 +24,18 @@ _FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
 _RETRYABLE_CODES = {503, 429, 500}
 _MAX_RETRIES = int(os.environ.get("AI_MAX_RETRIES", "2"))
 _RETRY_DELAY = float(os.environ.get("AI_RETRY_DELAY_SECONDS", "1.0"))
-_ANALYSIS_BUDGET_SECONDS = float(os.environ.get("ANALYSIS_BUDGET_SECONDS", "90"))
-_GEMINI_HTTP_TIMEOUT_MS = int(os.environ.get("GEMINI_HTTP_TIMEOUT_MS", "60000"))
-_GEMINI_MAX_OUTPUT_TOKENS = int(os.environ.get("GEMINI_MAX_OUTPUT_TOKENS", "6144"))
-_CLAUDE_ANALYSIS_TIMEOUT_SECONDS = float(os.environ.get("CLAUDE_ANALYSIS_TIMEOUT_SECONDS", "45"))
-_CLAUDE_SYNTHESIS_TIMEOUT_SECONDS = float(os.environ.get("CLAUDE_SYNTHESIS_TIMEOUT_SECONDS", "25"))
-_CLAUDE_ANALYSIS_MAX_TOKENS = int(os.environ.get("CLAUDE_ANALYSIS_MAX_TOKENS", "4096"))
-_CLAUDE_SYNTHESIS_MAX_TOKENS = int(os.environ.get("CLAUDE_SYNTHESIS_MAX_TOKENS", "4096"))
-_SYNTHESIS_INPUT_MAX_CHARS = int(os.environ.get("SYNTHESIS_INPUT_MAX_CHARS", "12000"))
+_ANALYSIS_BUDGET_SECONDS = float(os.environ.get("ANALYSIS_BUDGET_SECONDS", "22"))
+_GEMINI_HTTP_TIMEOUT_MS = int(os.environ.get("GEMINI_HTTP_TIMEOUT_MS", "22000"))
+_GEMINI_MAX_OUTPUT_TOKENS = int(os.environ.get("GEMINI_MAX_OUTPUT_TOKENS", "3000"))
+# thinking_budget=0 desabilita o thinking interno do Gemini 2.5 Flash, reduzindo
+# latência em 10-30s sem impacto relevante na qualidade para prompts estruturados.
+# Defina GEMINI_THINKING_BUDGET=-1 para restaurar o thinking dinâmico.
+_GEMINI_THINKING_BUDGET = int(os.environ.get("GEMINI_THINKING_BUDGET", "0"))
+_CLAUDE_ANALYSIS_TIMEOUT_SECONDS = float(os.environ.get("CLAUDE_ANALYSIS_TIMEOUT_SECONDS", "18"))
+_CLAUDE_SYNTHESIS_TIMEOUT_SECONDS = float(os.environ.get("CLAUDE_SYNTHESIS_TIMEOUT_SECONDS", "8"))
+_CLAUDE_ANALYSIS_MAX_TOKENS = int(os.environ.get("CLAUDE_ANALYSIS_MAX_TOKENS", "2500"))
+_CLAUDE_SYNTHESIS_MAX_TOKENS = int(os.environ.get("CLAUDE_SYNTHESIS_MAX_TOKENS", "2000"))
+_SYNTHESIS_INPUT_MAX_CHARS = int(os.environ.get("SYNTHESIS_INPUT_MAX_CHARS", "6000"))
 _INCLUDE_REFERENCE_PDF = os.environ.get("INCLUDE_REFERENCE_PDF", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -107,9 +111,10 @@ def _generate_with_retry(
                     model=model,
                     contents=contents,
                     config=types.GenerateContentConfig(
-                        maxOutputTokens=max_output_tokens,
+                        max_output_tokens=max_output_tokens,
                         temperature=0.1,
-                        httpOptions=types.HttpOptions(timeout=int(_remaining_seconds(deadline, _GEMINI_HTTP_TIMEOUT_MS / 1000) * 1000)),
+                        thinking_config=types.ThinkingConfig(thinking_budget=_GEMINI_THINKING_BUDGET),
+                        http_options=types.HttpOptions(timeout=int(_remaining_seconds(deadline, _GEMINI_HTTP_TIMEOUT_MS / 1000) * 1000)),
                     ),
                 )
                 if model != model_name:
@@ -129,15 +134,38 @@ def _generate_with_retry(
                         break
                 else:
                     raise
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("Failed to generate content: all retry attempts exhausted and no exception was recorded.")
 
-    raise last_exc
-
-
+from core import db
 from core.reference_images import (
     detect_exam_type,
     get_reference_images_as_bytes,
     get_reference_pdfs,
 )
+
+
+def _format_validated_case_reference(case: dict | None) -> str | None:
+    """Formata um diagnóstico validado como bloco de exemplo de calibração para o prompt."""
+    if not case:
+        return None
+    diagnostico_final = (case.get("diagnostico_final") or "").strip()
+    if not diagnostico_final:
+        return None
+
+    grau = case.get("grau_concordancia")
+    grau_label = f"{grau}%" if grau is not None else "não informada"
+    lines = [
+        f"**CASO CLÍNICO VALIDADO POR ESPECIALISTA (referência de calibração — mesmo tipo de exame, "
+        f"concordância {grau_label}):**",
+        diagnostico_final,
+    ]
+    achados_corretos = case.get("achados_corretos") or []
+    if achados_corretos:
+        lines.append("Achados confirmados neste caso de referência: " + "; ".join(achados_corretos))
+    return "\n".join(lines)
+
 
 # Cache in-memory para URIs de PDF do Gemini File API
 _pdf_uri_cache: dict = {}
@@ -220,7 +248,8 @@ Região detectada: **{region_label}**
 Você recebeu (nesta ordem):
 1. Atlas de referência em PDF (se fornecido) — base anatômica
 2. Imagem(ns) de referência normal — padrão de comparação
-3. Exame do paciente (imagem ou imagens finais) — objeto da análise
+3. Caso clínico validado por especialista (se fornecido) — exemplo de calibração de um laudo já revisado por profissional para o mesmo tipo de exame; NÃO é um achado deste paciente, use apenas como referência de padrão/rigor
+4. Exame do paciente (imagem ou imagens finais) — objeto da análise
 
 ---
 
@@ -388,6 +417,7 @@ def _build_content_parts(
     user_description: str,
     reference_pdfs: list,
     reference_images: list,
+    validated_case_text: str | None = None,
 ) -> tuple[list, int]:
     """Monta a lista de parts para envio ao Gemini."""
     parts = []
@@ -401,7 +431,7 @@ def _build_content_parts(
             result = _get_or_upload_pdf(client, pdf_bytes)
             if result:
                 uri, mime = result
-                parts.append(types.Part.from_uri(uri=uri, mime_type=mime))
+                parts.append(types.Part.from_uri(file_uri=uri, mime_type=mime))
             else:
                 parts.append(types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
             refs_used += 1
@@ -414,6 +444,9 @@ def _build_content_parts(
             parts.append(types.Part.from_text(text=f"Referência {i + 1} — Anatomia normal:"))
             parts.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
             refs_used += 1
+
+    if validated_case_text:
+        parts.append(types.Part.from_text(text=f"\n{validated_case_text}"))
 
     num_images = len(exam_images)
     if num_images == 1:
@@ -442,6 +475,7 @@ def _build_claude_content(
     exam_type: str,
     user_description: str,
     reference_images: list,
+    validated_case_text: str | None = None,
 ) -> list:
     """Monta o conteúdo multimodal para a API do Claude."""
     content = []
@@ -458,6 +492,9 @@ def _build_claude_content(
                     "data": base64.standard_b64encode(ref_bytes).decode("utf-8"),
                 },
             })
+
+    if validated_case_text:
+        content.append({"type": "text", "text": f"\n{validated_case_text}"})
 
     num_images = len(exam_images)
     if num_images == 1:
@@ -501,6 +538,7 @@ def _analyze_with_claude(
     user_description: str,
     reference_images: list,
     timeout_seconds: float = _CLAUDE_ANALYSIS_TIMEOUT_SECONDS,
+    validated_case_text: str | None = None,
 ) -> str | None:
     """Análise independente com Claude. Retorna texto ou None em caso de falha."""
     try:
@@ -510,7 +548,9 @@ def _analyze_with_claude(
             timeout=timeout_seconds,
             max_retries=0,
         )
-        content = _build_claude_content(exam_images, exam_type, user_description, reference_images)
+        content = _build_claude_content(
+            exam_images, exam_type, user_description, reference_images, validated_case_text
+        )
         message = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=_CLAUDE_ANALYSIS_MAX_TOKENS,
@@ -634,6 +674,7 @@ def _run_dual_analysis(
     user_description: str,
     reference_images: list,
     deadline: float | None = None,
+    validated_case_text: str | None = None,
 ) -> tuple[str, str]:
     """
     Executa Gemini e Claude em paralelo.
@@ -659,6 +700,7 @@ def _run_dual_analysis(
             user_description,
             reference_images,
             _remaining_seconds(deadline, _CLAUDE_ANALYSIS_TIMEOUT_SECONDS),
+            validated_case_text,
         )
 
         done, pending = concurrent.futures.wait(
@@ -741,10 +783,13 @@ def analyze_exam(
 
     reference_pdfs = get_reference_pdfs() if _INCLUDE_REFERENCE_PDF else []
     reference_images = get_reference_images_as_bytes(exam_type)
+    validated_case_text = _format_validated_case_reference(
+        db.buscar_caso_validado_referencia(exam_type)
+    )
 
     content_parts, refs_used = _build_content_parts(
         gemini_client, exam_images, exam_type, user_description,
-        reference_pdfs, reference_images,
+        reference_pdfs, reference_images, validated_case_text,
     )
 
     if anthropic_api_key:
@@ -752,7 +797,7 @@ def analyze_exam(
         gemini_text, claude_text = _run_dual_analysis(
             gemini_client, model_name, content_parts,
             anthropic_api_key, exam_images, exam_type, user_description, reference_images,
-            deadline,
+            deadline, validated_case_text,
         )
         if gemini_text and claude_text and not _deadline_expired(deadline, reserve_seconds=12):
             final_analysis = _synthesize_analyses(
@@ -831,10 +876,13 @@ def analyze_exam_from_bytes(
 
     reference_pdfs = get_reference_pdfs() if _INCLUDE_REFERENCE_PDF else []
     reference_images = get_reference_images_as_bytes(exam_type)
+    validated_case_text = _format_validated_case_reference(
+        db.buscar_caso_validado_referencia(exam_type)
+    )
 
     content_parts, refs_used = _build_content_parts(
         gemini_client, exam_images, exam_type, user_description,
-        reference_pdfs, reference_images,
+        reference_pdfs, reference_images, validated_case_text,
     )
 
     if anthropic_api_key:
@@ -842,7 +890,7 @@ def analyze_exam_from_bytes(
         gemini_text, claude_text = _run_dual_analysis(
             gemini_client, model_name, content_parts,
             anthropic_api_key, exam_images, exam_type, user_description, reference_images,
-            deadline,
+            deadline, validated_case_text,
         )
         if gemini_text and claude_text and not _deadline_expired(deadline, reserve_seconds=12):
             final_analysis = _synthesize_analyses(

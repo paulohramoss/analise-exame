@@ -7,8 +7,15 @@ para não bloquear o fluxo principal da aplicação.
 
 import importlib
 import os
+import time
 from functools import lru_cache
 from collections import Counter
+
+# Cache em memória do melhor caso validado por tipo de exame, usado como
+# exemplo de calibração no prompt de análise. TTL curto para não bater no
+# Supabase a cada análise, mas ainda refletir novas validações em minutos.
+_validated_case_cache: dict = {}
+_VALIDATED_CASE_CACHE_TTL_SECONDS = 900
 
 
 @lru_cache(maxsize=1)
@@ -438,6 +445,46 @@ def listar_validacoes_clinicas(analise_ids: list[str]) -> list[dict]:
     except Exception as e:
         print(f"[DB] listar_validacoes_clinicas: {e}")
         return []
+
+
+def buscar_caso_validado_referencia(tipo_exame: str, min_concordancia: int = 80) -> dict | None:
+    """
+    Retorna o diagnóstico validado mais recente do tipo de exame com
+    grau_concordancia >= min_concordancia, para uso como exemplo de
+    calibração no prompt de análise. Cacheado em memória por
+    _VALIDATED_CASE_CACHE_TTL_SECONDS (inclusive resultados vazios).
+    """
+    now = time.time()
+    cached = _validated_case_cache.get(tipo_exame)
+    if cached and cached["expires_at"] > now:
+        return cached["case"]
+
+    case = None
+    db = _get_client()
+    if db:
+        try:
+            res = (
+                db.table("diagnosticos_validados")
+                .select(
+                    "diagnostico_final, achados_corretos, achados_perdidos, "
+                    "achados_incorretos, grau_concordancia, created_at"
+                )
+                .eq("tipo_exame", tipo_exame)
+                .gte("grau_concordancia", min_concordancia)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if res.data:
+                case = res.data[0]
+        except Exception as e:
+            print(f"[DB] buscar_caso_validado_referencia: {e}")
+
+    _validated_case_cache[tipo_exame] = {
+        "case": case,
+        "expires_at": now + _VALIDATED_CASE_CACHE_TTL_SECONDS,
+    }
+    return case
 
 
 def montar_metricas_dashboard(
