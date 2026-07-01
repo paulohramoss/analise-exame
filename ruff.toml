@@ -1,0 +1,6 @@
+line-length = 200
+
+[lint]
+# Foco em bugs reais (erros de sintaxe, nomes indefinidos, imports não usados),
+# não em estilo — o projeto ainda não adotou uma convenção de formatação única.
+select = ["E9", "F"]

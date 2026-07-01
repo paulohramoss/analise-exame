@@ -6,10 +6,13 @@ para não bloquear o fluxo principal da aplicação.
 """
 
 import importlib
+import logging
 import os
 import time
 from functools import lru_cache
 from collections import Counter
+
+logger = logging.getLogger(__name__)
 
 # Cache em memória do melhor caso validado por tipo de exame, usado como
 # exemplo de calibração no prompt de análise. TTL curto para não bater no
@@ -24,16 +27,16 @@ def _get_client():
     url = os.environ.get("SUPABASE_URL", "")
     key = os.environ.get("SUPABASE_SERVICE_KEY", "")
     if not url or not key:
-        print("[DB] SUPABASE_URL ou SUPABASE_SERVICE_KEY não configurados — persistência desativada.")
+        logger.warning("SUPABASE_URL ou SUPABASE_SERVICE_KEY não configurados — persistência desativada.")
         return None
     try:
         supabase_module = importlib.import_module("supabase")
         create_client = getattr(supabase_module, "create_client")
         client = create_client(url, key)
-        print("[DB] Conectado ao Supabase.")
+        logger.info("Conectado ao Supabase.")
         return client
-    except Exception as e:
-        print(f"[DB] Falha ao criar cliente Supabase: {e}")
+    except Exception:
+        logger.exception("Falha ao criar cliente Supabase")
         return None
 
 
@@ -54,8 +57,8 @@ def upsert_cliente(nome: str, email: str, cpf_cnpj: str = "", asaas_customer_id:
             data["asaas_customer_id"] = asaas_customer_id
         res = db.table("clientes").upsert(data, on_conflict="email").execute()
         return res.data[0]["id"] if res.data else None
-    except Exception as e:
-        print(f"[DB] upsert_cliente: {e}")
+    except Exception:
+        logger.exception("Erro em upsert_cliente")
         return None
 
 
@@ -67,8 +70,8 @@ def buscar_cliente_id_por_email(email: str) -> str | None:
     try:
         res = db.table("clientes").select("id").eq("email", email).limit(1).execute()
         return res.data[0]["id"] if res.data else None
-    except Exception as e:
-        print(f"[DB] buscar_cliente_id_por_email: {e}")
+    except Exception:
+        logger.exception("Erro em buscar_cliente_id_por_email")
         return None
 
 
@@ -80,8 +83,8 @@ def salvar_senha_cliente(email: str, senha_hash: str) -> bool:
     try:
         db.table("clientes").update({"senha_hash": senha_hash}).eq("email", email).execute()
         return True
-    except Exception as e:
-        print(f"[DB] salvar_senha_cliente: {e}")
+    except Exception:
+        logger.exception("Erro em salvar_senha_cliente")
         return False
 
 
@@ -101,8 +104,8 @@ def buscar_senha_hash_cliente(email: str) -> str | None:
         if res.data:
             return res.data[0].get("senha_hash")
         return None
-    except Exception as e:
-        print(f"[DB] buscar_senha_hash_cliente: {e}")
+    except Exception:
+        logger.exception("Erro em buscar_senha_hash_cliente")
         return None
 
 
@@ -139,8 +142,8 @@ def salvar_pagamento(
         }
         res = db.table("pagamentos").upsert(data, on_conflict="asaas_payment_id").execute()
         return res.data[0]["id"] if res.data else None
-    except Exception as e:
-        print(f"[DB] salvar_pagamento: {e}")
+    except Exception:
+        logger.exception("Erro em salvar_pagamento")
         return None
 
 
@@ -165,8 +168,8 @@ def buscar_pagamento_confirmado_por_email(email: str) -> tuple[str, str] | None:
             row = res.data[0]
             return row["asaas_payment_id"], row.get("external_reference", "")
         return None
-    except Exception as e:
-        print(f"[DB] buscar_pagamento_confirmado_por_email: {e}")
+    except Exception:
+        logger.exception("Erro em buscar_pagamento_confirmado_por_email")
         return None
 
 
@@ -178,8 +181,8 @@ def buscar_pagamento_id(asaas_payment_id: str) -> str | None:
     try:
         res = db.table("pagamentos").select("id").eq("asaas_payment_id", asaas_payment_id).limit(1).execute()
         return res.data[0]["id"] if res.data else None
-    except Exception as e:
-        print(f"[DB] buscar_pagamento_id: {e}")
+    except Exception:
+        logger.exception("Erro em buscar_pagamento_id")
         return None
 
 
@@ -193,8 +196,8 @@ def atualizar_status_pagamento(asaas_payment_id: str, status: str, payload: dict
         if payload:
             data["payload_asaas"] = payload
         db.table("pagamentos").update(data).eq("asaas_payment_id", asaas_payment_id).execute()
-    except Exception as e:
-        print(f"[DB] atualizar_status_pagamento: {e}")
+    except Exception:
+        logger.exception("Erro em atualizar_status_pagamento")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -219,8 +222,8 @@ def salvar_sessao(
             "user_agent": user_agent,
         }).execute()
         return res.data[0]["id"] if res.data else None
-    except Exception as e:
-        print(f"[DB] salvar_sessao: {e}")
+    except Exception:
+        logger.exception("Erro em salvar_sessao")
         return None
 
 
@@ -284,8 +287,8 @@ def salvar_analise(
                 data.pop(key, None)
             res = db.table("analises").insert(data).execute()
         return res.data[0]["id"] if res.data else None
-    except Exception as e:
-        print(f"[DB] salvar_analise: {e}")
+    except Exception:
+        logger.exception("Erro em salvar_analise")
         return None
 
 
@@ -324,8 +327,8 @@ def listar_analises(
         try:
             res = _run_query(base_cols)
             return res.data or []
-        except Exception as e:
-            print(f"[DB] listar_analises: {e}")
+        except Exception:
+            logger.exception("Erro em listar_analises")
             return []
 
 
@@ -363,8 +366,8 @@ def buscar_analise(
         try:
             res = _run_query(base_cols)
             return res.data[0] if res.data else None
-        except Exception as e:
-            print(f"[DB] buscar_analise: {e}")
+        except Exception:
+            logger.exception("Erro em buscar_analise")
             return None
 
 
@@ -402,8 +405,8 @@ def salvar_imagem_exame(
             for key in optional_fields:
                 data.pop(key, None)
             db.table("imagens_exame").insert(data).execute()
-    except Exception as e:
-        print(f"[DB] salvar_imagem_exame: {e}")
+    except Exception:
+        logger.exception("Erro em salvar_imagem_exame")
 
 
 def listar_feedbacks_por_analises(analise_ids: list[str]) -> list[dict]:
@@ -420,8 +423,8 @@ def listar_feedbacks_por_analises(analise_ids: list[str]) -> list[dict]:
             .execute()
         )
         return res.data or []
-    except Exception as e:
-        print(f"[DB] listar_feedbacks_por_analises: {e}")
+    except Exception:
+        logger.exception("Erro em listar_feedbacks_por_analises")
         return []
 
 
@@ -442,8 +445,8 @@ def listar_validacoes_clinicas(analise_ids: list[str]) -> list[dict]:
             .execute()
         )
         return res.data or []
-    except Exception as e:
-        print(f"[DB] listar_validacoes_clinicas: {e}")
+    except Exception:
+        logger.exception("Erro em listar_validacoes_clinicas")
         return []
 
 
@@ -477,8 +480,8 @@ def buscar_caso_validado_referencia(tipo_exame: str, min_concordancia: int = 80)
             )
             if res.data:
                 case = res.data[0]
-        except Exception as e:
-            print(f"[DB] buscar_caso_validado_referencia: {e}")
+        except Exception:
+            logger.exception("Erro em buscar_caso_validado_referencia")
 
     _validated_case_cache[tipo_exame] = {
         "case": case,
@@ -562,8 +565,8 @@ def salvar_feedback(
             "fonte_nome": fonte_nome or None,
         }).execute()
         return res.data[0]["id"] if res.data else None
-    except Exception as e:
-        print(f"[DB] salvar_feedback: {e}")
+    except Exception:
+        logger.exception("Erro em salvar_feedback")
         return None
 
 
@@ -602,8 +605,8 @@ def salvar_diagnostico_validado(
             "validado_por": validado_por or None,
         }).execute()
         return res.data[0]["id"] if res.data else None
-    except Exception as e:
-        print(f"[DB] salvar_diagnostico_validado: {e}")
+    except Exception:
+        logger.exception("Erro em salvar_diagnostico_validado")
         return None
 
 
@@ -661,5 +664,5 @@ def salvar_webhook(
             "status_pagamento": status_pagamento,
             "payload": payload,
         }).execute()
-    except Exception as e:
-        print(f"[DB] salvar_webhook: {e}")
+    except Exception:
+        logger.exception("Erro em salvar_webhook")

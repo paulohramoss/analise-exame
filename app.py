@@ -7,8 +7,9 @@ import base64
 import hmac
 import hashlib
 import importlib
+import logging
 import os
-import sys
+import secrets
 import tempfile
 import time
 import uuid
@@ -34,13 +35,26 @@ except ImportError:  # pragma: no cover - dependency is installed in production 
     Limiter = None
     RateLimitExceeded = None
 
+try:
+    _sentry_sdk = importlib.import_module("sentry_sdk")
+    _SentryFlaskIntegration = getattr(importlib.import_module("sentry_sdk.integrations.flask"), "FlaskIntegration")
+    _SentryLoggingIntegration = getattr(importlib.import_module("sentry_sdk.integrations.logging"), "LoggingIntegration")
+except ImportError:  # pragma: no cover - dependência instalada em produção via requirements.txt
+    _sentry_sdk = None
+
 from core.analyzer import analyze_exam
 from core import asaas, db
+from core.logging_config import configure_logging, new_trace_id
 
 load_dotenv()
+configure_logging()
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_FLASK_SECRET_KEY = "dev-secret-key-change-in-prod"
-DEFAULT_LOCAL_ADMIN_KEY = "pauloramosteste"
+# Gerada uma vez por processo (nunca hardcoded/commitada) — usada apenas quando
+# ADMIN_KEY não está definida e o runtime é local (ver _is_local_runtime()).
+_GENERATED_LOCAL_ADMIN_KEY = secrets.token_urlsafe(18)
 try:
     LOCAL_TZ = ZoneInfo("America/Sao_Paulo")
 except Exception:  # pragma: no cover - fallback para runtimes sem base IANA local
@@ -66,7 +80,7 @@ def _get_admin_key() -> str:
     if admin_key:
         return admin_key
     if _is_local_runtime():
-        return DEFAULT_LOCAL_ADMIN_KEY
+        return _GENERATED_LOCAL_ADMIN_KEY
     return ""
 
 
@@ -76,6 +90,13 @@ if _is_production_like() and flask_secret_key == DEFAULT_FLASK_SECRET_KEY:
 
 app = Flask(__name__)
 app.secret_key = flask_secret_key
+
+if _is_local_runtime() and not os.environ.get("ADMIN_KEY", "").strip():
+    logger.warning(
+        "ADMIN_KEY não definida — acesso admin local liberado via /admin/entrar?key=%s "
+        "(chave temporária, gerada nesta execução; defina ADMIN_KEY no .env para uma chave estável).",
+        _GENERATED_LOCAL_ADMIN_KEY,
+    )
 
 # ── Planos disponíveis ────────────────────────────────────────────────────────
 PLANS = {
@@ -206,6 +227,23 @@ def _get_build_version() -> str:
 
 BUILD_VERSION = _get_build_version()
 app.jinja_env.globals["BUILD_VERSION"] = BUILD_VERSION
+
+_SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+if _SENTRY_DSN and _sentry_sdk:
+    _sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        environment=os.environ.get("SENTRY_ENVIRONMENT", "").strip() or ("production" if _is_production_like() else "development"),
+        release=BUILD_VERSION,
+        integrations=[
+            _SentryFlaskIntegration(),
+            _SentryLoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
+        ],
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0")),
+        send_default_pii=False,
+    )
+    logger.info("Sentry inicializado (release=%s)", BUILD_VERSION)
+elif _SENTRY_DSN:
+    logger.warning("SENTRY_DSN definido, mas o pacote sentry-sdk não está instalado.")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -422,6 +460,7 @@ def _detect_modalidade(user_description: str) -> str | None:
 @app.before_request
 def _before():
     g.t0 = time.time()
+    g.trace_id = new_trace_id()
     g.analise_id = None
     g.cliente_id = None
     g.user_email = None
@@ -448,6 +487,10 @@ def _before():
 @app.after_request
 def set_cache_headers(response):
     """Impede cache de páginas HTML e registra log de acesso no banco."""
+    trace_id = g.get("trace_id")
+    if trace_id:
+        response.headers["X-Trace-Id"] = trace_id
+
     if "text/html" in response.content_type:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
@@ -586,8 +629,8 @@ def _convert_dicom_to_jpeg(filepath: Path) -> tuple[Path, str, str, dict] | None
         with open(str(converted_path), "rb") as f:
             image_b64 = base64.b64encode(f.read()).decode("utf-8")
         return converted_path, image_b64, "image/jpeg", _extract_dicom_metadata(ds)
-    except Exception as e:
-        print(f"[DICOM] Falha ao converter {filepath.name}: {e}", file=sys.stderr)
+    except Exception:
+        logger.exception("Falha ao converter DICOM %s", filepath.name)
         return None
 
 
@@ -721,7 +764,8 @@ def admin_entrar():
     """
     Concede acesso de teste via cookie admin.
     Protegido pela variável de ambiente ADMIN_KEY.
-    Em ambiente local, usa DEFAULT_LOCAL_ADMIN_KEY se ADMIN_KEY não estiver definida.
+    Em ambiente local, se ADMIN_KEY não estiver definida, uma chave temporária é
+    gerada por processo e registrada no log de inicialização (ver _GENERATED_LOCAL_ADMIN_KEY).
     Uso: /admin/entrar?key=SUA_ADMIN_KEY
     Para revogar: /admin/sair
     """
@@ -882,7 +926,7 @@ def analyze():
 
     except Exception as e:
         error_msg = str(e)
-        print(f"[ERRO ANÁLISE] {type(e).__name__}: {error_msg}", file=sys.stderr)
+        logger.exception("Falha na análise de exame (%s)", type(e).__name__)
         error_lower = error_msg.lower()
         if "api key not valid" in error_lower or "invalid api key" in error_lower or "api_key_invalid" in error_lower:
             flash(_gemini_key_invalid_message(), "error")
@@ -893,7 +937,6 @@ def analyze():
         elif "404" in error_lower or "not found" in error_lower:
             flash("Modelo de IA temporariamente indisponível. Tente novamente em instantes.", "error")
         else:
-            print(f"[ERRO INESPERADO] {error_msg}", file=sys.stderr)
             flash("Não foi possível processar o exame. Tente novamente.", "error")
         return redirect(url_for("index"))
 
@@ -1000,7 +1043,7 @@ def trial_analyze():
 
     except Exception as e:
         error_msg = str(e)
-        print(f"[ERRO TRIAL ANÁLISE] {type(e).__name__}: {error_msg}", file=sys.stderr)
+        logger.exception("Falha na análise trial (%s)", type(e).__name__)
         error_lower = error_msg.lower()
         if "api key not valid" in error_lower or "invalid api key" in error_lower:
             return jsonify({"error": "Serviço temporariamente indisponível."}), 503
@@ -1483,7 +1526,7 @@ def checkout_pay():
         )
     except Exception as e:
         err_str = str(e)
-        print(f"[ASAAS] Erro ao criar cobrança: {type(e).__name__}: {err_str}", file=sys.stderr)
+        logger.exception("Erro ao criar cobrança Asaas (%s)", type(e).__name__)
         if "401" in err_str or "Unauthorized" in err_str or "unauthorized" in err_str.lower():
             msg = "Chave da API Asaas inválida. Verifique ASAAS_API_KEY."
         elif "403" in err_str:
@@ -1525,8 +1568,8 @@ def checkout_pay():
     if billing_type == "PIX":
         try:
             pix = asaas.get_pix_qr_code(payment_id)
-        except Exception as e:
-            print(f"[ASAAS] Erro QR PIX: {e}", file=sys.stderr)
+        except Exception:
+            logger.exception("Erro ao obter QR PIX (payment_id=%s)", payment_id)
             pix = {}
         return jsonify({
             "success": True,
@@ -1539,8 +1582,8 @@ def checkout_pay():
     if billing_type == "BOLETO":
         try:
             boleto = asaas.get_boleto_identification(payment_id)
-        except Exception as e:
-            print(f"[ASAAS] Erro boleto ID: {e}", file=sys.stderr)
+        except Exception:
+            logger.exception("Erro ao obter identificação de boleto (payment_id=%s)", payment_id)
             boleto = {}
         return jsonify({
             "success": True,
@@ -1604,8 +1647,8 @@ def payment_status():
 
     try:
         confirmed = asaas.is_payment_confirmed(payment_id)
-    except Exception as e:
-        print(f"[ASAAS] Erro ao verificar pagamento {payment_id}: {e}", file=sys.stderr)
+    except Exception:
+        logger.exception("Erro ao verificar pagamento Asaas (payment_id=%s)", payment_id)
         return jsonify({"confirmed": False, "error": "Erro ao consultar pagamento"}), 502
 
     if confirmed:
@@ -1674,7 +1717,7 @@ def webhook_asaas():
     payment_id = payment.get("id", "")
     status = payment.get("status", "")
 
-    print(f"[ASAAS WEBHOOK] event={event} payment_id={payment_id} status={status}", file=sys.stderr)
+    logger.info("Webhook Asaas recebido", extra={"event": event, "payment_id": payment_id, "status": status})
 
     # Persiste webhook e atualiza status do pagamento
     db.salvar_webhook(

@@ -1,0 +1,30 @@
+"""
+Configuração compartilhada dos testes.
+
+Define variáveis de ambiente de teste ANTES de importar `app` (que chama
+load_dotenv() na importação) para garantir que segredos reais do .env local
+nunca sejam usados nem que testes façam chamadas de rede reais ao Supabase
+ou ao Asaas.
+"""
+
+import os
+
+os.environ.setdefault("FLASK_SECRET_KEY", "test-secret-key-for-pytest-only")
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
+os.environ.setdefault("ADMIN_KEY", "test-admin-key")
+os.environ.setdefault("ASAAS_API_KEY", "test-asaas-key")
+os.environ.setdefault("ASAAS_WEBHOOK_TOKEN", "")
+os.environ.setdefault("SUPABASE_URL", "")
+os.environ.setdefault("SUPABASE_SERVICE_KEY", "")
+os.environ.setdefault("SENTRY_DSN", "")
+
+import pytest
+
+import app as flask_app_module
+
+
+@pytest.fixture()
+def client():
+    flask_app_module.app.testing = True
+    with flask_app_module.app.test_client() as test_client:
+        yield test_client

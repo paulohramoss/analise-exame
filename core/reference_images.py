@@ -7,8 +7,11 @@ Ordem de prioridade:
 3. Download de URLs públicas como fallback
 """
 
+import logging
 import requests
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _THIS_DIR = Path(__file__).parent
 REFERENCE_DATA_DIR = _THIS_DIR.parent / "reference_data"
@@ -77,12 +80,12 @@ def get_reference_pdfs() -> list[tuple[bytes, str]]:
     try:
         data = pdf_path.read_bytes()
         if len(data) > _PDF_MAX_BYTES:
-            print(f"Aviso: {pdf_path.name} excede 20 MB ({len(data)//1024//1024} MB) — ignorado.")
+            logger.warning("%s excede 20 MB (%d MB) — ignorado.", pdf_path.name, len(data) // 1024 // 1024)
             return []
-        print(f"Atlas carregado: {pdf_path.name} ({len(data)//1024} KB)")
+        logger.info("Atlas carregado: %s (%d KB)", pdf_path.name, len(data) // 1024)
         return [(data, "application/pdf")]
-    except Exception as e:
-        print(f"Erro ao carregar PDF {pdf_path.name}: {e}")
+    except Exception:
+        logger.exception("Erro ao carregar PDF %s", pdf_path.name)
         return []
 
 
@@ -103,8 +106,8 @@ def _load_images_from_dir(directory: Path, max_images: int = 2) -> list[tuple[by
             ext = img_path.suffix.lower().lstrip(".")
             mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
             results.append((data, mime))
-        except Exception as e:
-            print(f"Aviso: erro ao ler {img_path.name}: {e}")
+        except Exception:
+            logger.warning("Erro ao ler %s", img_path.name, exc_info=True)
 
     return results
 
@@ -132,8 +135,8 @@ def _download_fallback(exam_type: str) -> list[tuple[bytes, str]]:
             if resp.status_code == 200:
                 cached_path.write_bytes(resp.content)
                 results.append((resp.content, "image/jpeg"))
-        except Exception as e:
-            print(f"Aviso: não foi possível baixar referência de fallback: {e}")
+        except Exception:
+            logger.warning("Não foi possível baixar referência de fallback: %s", url, exc_info=True)
 
     return results
 

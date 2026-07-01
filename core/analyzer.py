@@ -8,6 +8,7 @@ import base64
 import concurrent.futures
 import hashlib
 import io
+import logging
 import os
 import tempfile
 import time
@@ -17,6 +18,8 @@ import anthropic
 from google import genai
 from google.genai import types
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 # Modelos de fallback em ordem de preferência
 _FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
@@ -118,19 +121,22 @@ def _generate_with_retry(
                     ),
                 )
                 if model != model_name:
-                    print(f"[retry] Resposta obtida com modelo de fallback: {model}")
+                    logger.info("Resposta obtida com modelo de fallback: %s", model)
                 return response
             except Exception as exc:
                 last_exc = exc
                 if _is_retryable(exc):
                     if attempt < _MAX_RETRIES:
-                        print(f"[retry] Tentativa {attempt}/{_MAX_RETRIES} falhou ({exc}). Aguardando {delay:.1f}s...")
+                        logger.warning(
+                            "Tentativa %d/%d falhou (%s). Aguardando %.1fs...",
+                            attempt, _MAX_RETRIES, exc, delay,
+                        )
                         if _deadline_expired(deadline, reserve_seconds=delay):
                             break
                         time.sleep(delay)
                         delay *= 2
                     else:
-                        print(f"[retry] Modelo {model} esgotou {_MAX_RETRIES} tentativas. Tentando fallback...")
+                        logger.warning("Modelo %s esgotou %d tentativas. Tentando fallback...", model, _MAX_RETRIES)
                         break
                 else:
                     raise
@@ -177,7 +183,7 @@ def _get_or_upload_pdf(client: genai.Client, pdf_bytes: bytes) -> tuple[str, str
 
     cached = _pdf_uri_cache.get(pdf_hash)
     if cached and cached["expires_at"] > time.time():
-        print(f"[PDF cache] Reutilizando URI: {cached['uri'][:60]}...")
+        logger.debug("Reutilizando URI de PDF em cache: %s...", cached["uri"][:60])
         return cached["uri"], cached["mime"]
 
     tmp_path = None
@@ -186,7 +192,7 @@ def _get_or_upload_pdf(client: genai.Client, pdf_bytes: bytes) -> tuple[str, str
             tmp.write(pdf_bytes)
             tmp_path = tmp.name
 
-        print(f"[PDF upload] Enviando {len(pdf_bytes)//1024} KB para Gemini File API...")
+        logger.info("Enviando %d KB para Gemini File API...", len(pdf_bytes) // 1024)
         file_response = client.files.upload(file=tmp_path)
 
         uri = file_response.uri
@@ -197,11 +203,11 @@ def _get_or_upload_pdf(client: genai.Client, pdf_bytes: bytes) -> tuple[str, str
             "mime": mime,
             "expires_at": time.time() + 47 * 3600,
         }
-        print(f"[PDF upload] Concluído. URI: {uri[:60]}...")
+        logger.info("Upload de PDF concluído. URI: %s...", uri[:60])
         return uri, mime
 
-    except Exception as e:
-        print(f"[PDF upload] Falhou: {e}. Usando bytes inline como fallback.")
+    except Exception:
+        logger.warning("Upload de PDF falhou. Usando bytes inline como fallback.", exc_info=True)
         return None
     finally:
         if tmp_path:
@@ -401,12 +407,12 @@ def detect_exam_type_from_image(
         for token in result.replace("\n", " ").split():
             token_clean = token.strip(".,;:-*")
             if token_clean in valid_types:
-                print(f"[detect_exam_type_from_image] Resposta bruta: '{result}' → detectado: '{token_clean}'")
+                logger.debug("Resposta bruta: '%s' → detectado: '%s'", result, token_clean)
                 return token_clean
-        print(f"[detect_exam_type_from_image] Resposta não mapeável: '{result}'")
+        logger.warning("Resposta de detecção visual não mapeável: '%s'", result)
         return None
-    except Exception as e:
-        print(f"[detect_exam_type_from_image] Falhou: {e}")
+    except Exception:
+        logger.warning("Detecção visual do tipo de exame falhou.", exc_info=True)
         return None
 
 
@@ -542,7 +548,7 @@ def _analyze_with_claude(
 ) -> str | None:
     """Análise independente com Claude. Retorna texto ou None em caso de falha."""
     try:
-        print("[Claude] Iniciando análise independente...")
+        logger.info("Claude: iniciando análise independente...")
         client = anthropic.Anthropic(
             api_key=anthropic_api_key,
             timeout=timeout_seconds,
@@ -557,10 +563,10 @@ def _analyze_with_claude(
             messages=[{"role": "user", "content": content}],
             timeout=timeout_seconds,
         )
-        print("[Claude] Análise concluída.")
+        logger.info("Claude: análise concluída.")
         return message.content[0].text
-    except Exception as e:
-        print(f"[Claude] Análise falhou: {e}")
+    except Exception:
+        logger.warning("Claude: análise falhou.", exc_info=True)
         return None
 
 
@@ -645,7 +651,7 @@ Dois sistemas de IA analisaram o mesmo exame de imagem de forma completamente in
 RELATÓRIO DE CONSENSO FINAL:"""
 
     try:
-        print("[Síntese] Gerando relatório de consenso...")
+        logger.info("Síntese: gerando relatório de consenso...")
         client = anthropic.Anthropic(
             api_key=anthropic_api_key,
             timeout=timeout_seconds,
@@ -657,10 +663,10 @@ RELATÓRIO DE CONSENSO FINAL:"""
             messages=[{"role": "user", "content": synthesis_prompt}],
             timeout=timeout_seconds,
         )
-        print("[Síntese] Relatório de consenso concluído.")
+        logger.info("Síntese: relatório de consenso concluído.")
         return message.content[0].text
-    except Exception as e:
-        print(f"[Síntese] Falhou: {e}. Retornando análise Gemini.")
+    except Exception:
+        logger.warning("Síntese falhou. Retornando análise Gemini.", exc_info=True)
         return gemini_analysis
 
 
@@ -711,19 +717,19 @@ def _run_dual_analysis(
         if gemini_future in done:
             try:
                 gemini_text = gemini_future.result().text
-            except Exception as e:
-                print(f"[Dual AI] Gemini falhou: {e}")
+            except Exception:
+                logger.warning("Dual AI: Gemini falhou.", exc_info=True)
         else:
-            print("[Dual AI] Gemini excedeu o orçamento de tempo; seguindo com fallback disponível.")
+            logger.warning("Dual AI: Gemini excedeu o orçamento de tempo; seguindo com fallback disponível.")
             gemini_future.cancel()
 
         if claude_future in done:
             try:
                 claude_result = claude_future.result() or ""
-            except Exception as e:
-                print(f"[Dual AI] Claude falhou: {e}")
+            except Exception:
+                logger.warning("Dual AI: Claude falhou.", exc_info=True)
         else:
-            print("[Dual AI] Claude excedeu o orçamento de tempo; seguindo sem análise independente.")
+            logger.warning("Dual AI: Claude excedeu o orçamento de tempo; seguindo sem análise independente.")
             claude_future.cancel()
 
         for future in pending:
@@ -769,17 +775,17 @@ def analyze_exam(
     keyword_type = detect_exam_type(first_filename, user_description)
     if keyword_type != "geral":
         exam_type = keyword_type
-        print(f"[detect_exam_type] Tipo detectado por keywords: {exam_type}")
+        logger.debug("Tipo de exame detectado por keywords: %s", exam_type)
     else:
         visual_type = detect_exam_type_from_image(
             gemini_client, exam_images[0][0], exam_images[0][1], model_name, deadline
         ) if exam_images and not _deadline_expired(deadline, reserve_seconds=70) else None
         if visual_type and visual_type != "geral":
             exam_type = visual_type
-            print(f"[detect_exam_type] Tipo detectado visualmente: {exam_type}")
+            logger.debug("Tipo de exame detectado visualmente: %s", exam_type)
         else:
             exam_type = keyword_type
-            print(f"[detect_exam_type] Tipo detectado por fallback: {exam_type}")
+            logger.debug("Tipo de exame detectado por fallback: %s", exam_type)
 
     reference_pdfs = get_reference_pdfs() if _INCLUDE_REFERENCE_PDF else []
     reference_images = get_reference_images_as_bytes(exam_type)
@@ -793,7 +799,7 @@ def analyze_exam(
     )
 
     if anthropic_api_key:
-        print("[Dual AI] Executando Gemini + Claude em paralelo...")
+        logger.info("Dual AI: executando Gemini + Claude em paralelo...")
         gemini_text, claude_text = _run_dual_analysis(
             gemini_client, model_name, content_parts,
             anthropic_api_key, exam_images, exam_type, user_description, reference_images,
@@ -862,17 +868,17 @@ def analyze_exam_from_bytes(
     keyword_type = detect_exam_type(exam_filename, user_description)
     if keyword_type != "geral":
         exam_type = keyword_type
-        print(f"[detect_exam_type] Tipo detectado por keywords: {exam_type}")
+        logger.debug("Tipo de exame detectado por keywords: %s", exam_type)
     else:
         visual_type = detect_exam_type_from_image(
             gemini_client, exam_images[0][0], exam_images[0][1], model_name, deadline
         ) if exam_images and not _deadline_expired(deadline, reserve_seconds=70) else None
         if visual_type and visual_type != "geral":
             exam_type = visual_type
-            print(f"[detect_exam_type] Tipo detectado visualmente: {exam_type}")
+            logger.debug("Tipo de exame detectado visualmente: %s", exam_type)
         else:
             exam_type = keyword_type
-            print(f"[detect_exam_type] Tipo detectado por fallback: {exam_type}")
+            logger.debug("Tipo de exame detectado por fallback: %s", exam_type)
 
     reference_pdfs = get_reference_pdfs() if _INCLUDE_REFERENCE_PDF else []
     reference_images = get_reference_images_as_bytes(exam_type)
@@ -886,7 +892,7 @@ def analyze_exam_from_bytes(
     )
 
     if anthropic_api_key:
-        print("[Dual AI] Executando Gemini + Claude em paralelo...")
+        logger.info("Dual AI: executando Gemini + Claude em paralelo...")
         gemini_text, claude_text = _run_dual_analysis(
             gemini_client, model_name, content_parts,
             anthropic_api_key, exam_images, exam_type, user_description, reference_images,
