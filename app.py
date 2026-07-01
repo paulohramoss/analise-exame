@@ -43,7 +43,7 @@ except ImportError:  # pragma: no cover - dependência instalada em produção v
     _sentry_sdk = None
 
 from core.analyzer import analyze_exam
-from core import asaas, db
+from core import asaas, cost_tracking, db
 from core.logging_config import configure_logging, new_trace_id
 
 load_dotenv()
@@ -798,6 +798,80 @@ def admin_sair():
     return resp
 
 
+# ── Orçamento de custo diário (Gemini + Claude) ────────────────────────────────
+#
+# Protege contra estouro de custo (ex.: abuso do trial gratuito) limitando o
+# gasto diário por escopo. Cada cap é opcional (0 = desativado); o cap do
+# trial vem habilitado por padrão pois é o vetor de abuso mais óbvio (uso
+# gratuito sem limite de gasto agregado).
+
+def _budget_user_key(mode: str) -> str | None:
+    """Identificador do 'usuário' para o cap de orçamento por usuário, por modo."""
+    if mode == "premium":
+        return g.get("user_email") or None
+    if mode == "api":
+        supplied_key = request.headers.get("X-API-Key", "").strip()
+        if not supplied_key:
+            return None
+        return f"apikey:{hashlib.sha256(supplied_key.encode('utf-8')).hexdigest()[:16]}"
+    return None
+
+
+def _cost_budget_scopes(mode: str) -> list[tuple[str, float]]:
+    """Escopos [(scope, cap_usd), ...] a verificar/atualizar para esta análise."""
+    scopes = []
+    global_cap = float(os.environ.get("GLOBAL_DAILY_COST_BUDGET_USD", "0"))
+    if global_cap > 0:
+        scopes.append(("global", global_cap))
+
+    if mode == "trial":
+        trial_cap = float(os.environ.get("TRIAL_DAILY_COST_BUDGET_USD", "3.00"))
+        if trial_cap > 0:
+            scopes.append(("trial", trial_cap))
+
+    user_cap = float(os.environ.get("USER_DAILY_COST_BUDGET_USD", "0"))
+    user_key = _budget_user_key(mode)
+    if user_key and user_cap > 0:
+        scopes.append((f"user:{user_key}", user_cap))
+
+    return scopes
+
+
+def _blocked_by_cost_budget(mode: str) -> bool:
+    for scope, cap in _cost_budget_scopes(mode):
+        if cost_tracking.is_budget_exceeded(scope, cap):
+            logger.warning("Bloqueado por orçamento de custo diário excedido (scope=%s, cap_usd=%.2f)", scope, cap)
+            return True
+    return False
+
+
+def _own_cost_usage(mode: str, usage: list[dict]) -> list[dict]:
+    """
+    Uso de tokens que sai do nosso orçamento. No modo API, se o chamador
+    informou sua própria chave Gemini (X-API-Key), o custo do Gemini é dele —
+    só a parcela do Claude (sempre com nossa chave, usada na síntese dual)
+    continua contando para o nosso orçamento.
+    """
+    if mode == "api" and request.headers.get("X-API-Key", "").strip():
+        return [item for item in usage if not item["model"].startswith("gemini")]
+    return usage
+
+
+def _record_analysis_cost(mode: str, result: dict) -> None:
+    """Loga o custo total da análise (visibilidade) e credita apenas o custo que é nosso nos orçamentos."""
+    usage = result.get("usage", [])
+    cost_tracking.log_analysis_cost(result.get("exam_type", ""), result.get("model_used", ""), usage)
+
+    own_usage = _own_cost_usage(mode, usage)
+    own_cost_usd = sum(
+        cost_tracking.estimate_cost_usd(item["model"], item["input_tokens"], item["output_tokens"])
+        for item in own_usage
+    )
+    if own_cost_usd > 0:
+        for scope, _ in _cost_budget_scopes(mode):
+            cost_tracking.add_spend(scope, own_cost_usd)
+
+
 # ── Rotas principais ──────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -824,6 +898,10 @@ def analyze():
     api_key = get_api_key()
     if not api_key:
         flash(_gemini_key_missing_message(), "error")
+        return redirect(url_for("index"))
+
+    if _blocked_by_cost_budget("premium"):
+        flash("Limite de gasto diário atingido. Tente novamente mais tarde ou contate o suporte.", "error")
         return redirect(url_for("index"))
 
     # Suporta múltiplos arquivos via campo "exam_images[]" ou "exam_images"
@@ -877,6 +955,7 @@ def analyze():
             model_name=get_model_name(),
             anthropic_api_key=get_anthropic_api_key(),
         )
+        _record_analysis_cost("premium", result)
 
         # Persiste análise e imagens no banco
         analise_id = db.salvar_analise(
@@ -973,6 +1052,9 @@ def trial_analyze():
     if not api_key:
         return jsonify({"error": "Serviço temporariamente indisponível. Tente novamente mais tarde."}), 503
 
+    if _blocked_by_cost_budget("trial"):
+        return jsonify({"error": "Limite de uso gratuito diário atingido. Tente novamente mais tarde."}), 429
+
     if "exam_image" not in request.files:
         return jsonify({"error": "Nenhuma imagem enviada."}), 400
 
@@ -1002,6 +1084,7 @@ def trial_analyze():
             model_name=get_model_name(),
             anthropic_api_key=get_anthropic_api_key(),
         )
+        _record_analysis_cost("trial", result)
 
         # Persiste análise no banco
         analise_id = db.salvar_analise(
@@ -1074,6 +1157,9 @@ def api_analyze():
     if not api_key:
         return jsonify({"error": "API key não fornecida"}), 401
 
+    if _blocked_by_cost_budget("api"):
+        return jsonify({"error": "Limite de gasto diário atingido para esta chave. Tente novamente mais tarde."}), 429
+
     # Suporta múltiplos arquivos via exam_images ou exam_images[]
     files = request.files.getlist("exam_images") or request.files.getlist("exam_images[]")
     if not files or all(f.filename == "" for f in files):
@@ -1113,6 +1199,7 @@ def api_analyze():
             model_name=get_model_name(),
             anthropic_api_key=get_anthropic_api_key(),
         )
+        _record_analysis_cost("api", result)
 
         # Persiste análise no banco
         analise_id = db.salvar_analise(

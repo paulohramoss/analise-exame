@@ -146,3 +146,117 @@ def test_truncate_for_synthesis_truncates_long_text():
 )
 def test_detect_exam_type_from_keywords(filename, description, expected):
     assert detect_exam_type(filename, description) == expected
+
+
+# ── Uso de tokens (cost tracking) ────────────────────────────────────────────
+
+def test_extract_gemini_usage_reads_usage_metadata():
+    response = MagicMock()
+    response.usage_metadata = MagicMock(prompt_token_count=100, candidates_token_count=50)
+    usage = analyzer._extract_gemini_usage("gemini-2.5-flash", response)
+    assert usage == {"model": "gemini-2.5-flash", "input_tokens": 100, "output_tokens": 50}
+
+
+def test_extract_gemini_usage_returns_none_without_metadata():
+    response = MagicMock(spec=[])
+    assert analyzer._extract_gemini_usage("gemini-2.5-flash", response) is None
+
+
+def test_extract_claude_usage_reads_usage():
+    message = MagicMock()
+    message.usage = MagicMock(input_tokens=200, output_tokens=80)
+    usage = analyzer._extract_claude_usage("claude-sonnet-4-6", message)
+    assert usage == {"model": "claude-sonnet-4-6", "input_tokens": 200, "output_tokens": 80}
+
+
+def test_extract_claude_usage_returns_none_without_usage():
+    message = MagicMock(spec=[])
+    assert analyzer._extract_claude_usage("claude-sonnet-4-6", message) is None
+
+
+# ── Cache de resultado por hash de imagem ────────────────────────────────────
+
+def test_analysis_cache_key_same_for_equivalent_description():
+    key1 = analyzer._analysis_cache_key([b"abc"], "joelho", "gemini-2.5-flash", False)
+    key2 = analyzer._analysis_cache_key([b"abc"], "JOELHO  ", "gemini-2.5-flash", False)
+    assert key1 == key2
+
+
+def test_analysis_cache_key_differs_by_description():
+    key1 = analyzer._analysis_cache_key([b"abc"], "joelho", "gemini-2.5-flash", False)
+    key2 = analyzer._analysis_cache_key([b"abc"], "coluna", "gemini-2.5-flash", False)
+    assert key1 != key2
+
+
+def test_analysis_cache_key_differs_by_dual_ai_flag():
+    key1 = analyzer._analysis_cache_key([b"abc"], "joelho", "gemini-2.5-flash", False)
+    key2 = analyzer._analysis_cache_key([b"abc"], "joelho", "gemini-2.5-flash", True)
+    assert key1 != key2
+
+
+def test_analysis_cache_round_trip():
+    key = "cache-key-round-trip"
+    assert analyzer._get_cached_analysis(key) is None
+    analyzer._store_cached_analysis(key, {"analysis": "laudo", "usage": [{"model": "x"}], "cache_hit": False})
+
+    cached = analyzer._get_cached_analysis(key)
+    assert cached["analysis"] == "laudo"
+    assert cached["cache_hit"] is True
+    assert cached["usage"] == []  # cache hit não deve contar custo novo
+
+
+def test_analysis_cache_disabled_via_flag(monkeypatch):
+    monkeypatch.setattr(analyzer, "_ANALYSIS_RESULT_CACHE_ENABLED", False)
+    key = "cache-key-disabled"
+    analyzer._store_cached_analysis(key, {"analysis": "laudo"})
+    assert analyzer._get_cached_analysis(key) is None
+
+
+def test_analyze_exam_from_bytes_second_identical_call_hits_cache(monkeypatch):
+    monkeypatch.setattr(analyzer, "get_reference_images_as_bytes", lambda exam_type: [])
+    monkeypatch.setattr(analyzer, "_make_gemini_client", lambda api_key: MagicMock())
+
+    fake_response = MagicMock()
+    fake_response.text = "## 1. IDENTIFICAÇÃO DO EXAME\nlaudo de teste"
+    fake_response.usage_metadata = MagicMock(prompt_token_count=1000, candidates_token_count=500)
+    generate_mock = MagicMock(return_value=fake_response)
+    monkeypatch.setattr(analyzer, "_generate_with_retry", generate_mock)
+
+    image_bytes = b"fake-jpeg-bytes-para-teste-de-cache"
+
+    result1 = analyzer.analyze_exam_from_bytes(
+        (image_bytes, "image/jpeg"), "joelho.jpg", api_key="fake-key", user_description="dor no joelho direito"
+    )
+    assert result1["cache_hit"] is False
+    assert result1["usage"] == [{"model": "gemini-2.5-flash", "input_tokens": 1000, "output_tokens": 500}]
+    assert generate_mock.call_count == 1
+
+    result2 = analyzer.analyze_exam_from_bytes(
+        (image_bytes, "image/jpeg"), "joelho.jpg", api_key="fake-key", user_description="dor no joelho direito"
+    )
+    assert result2["cache_hit"] is True
+    assert result2["usage"] == []
+    assert result2["analysis"] == result1["analysis"]
+    assert generate_mock.call_count == 1  # não reprocessou a imagem idêntica
+
+
+def test_analyze_exam_from_bytes_different_description_bypasses_cache(monkeypatch):
+    monkeypatch.setattr(analyzer, "get_reference_images_as_bytes", lambda exam_type: [])
+    monkeypatch.setattr(analyzer, "_make_gemini_client", lambda api_key: MagicMock())
+
+    fake_response = MagicMock()
+    fake_response.text = "## 1. IDENTIFICAÇÃO DO EXAME\nlaudo de teste"
+    fake_response.usage_metadata = MagicMock(prompt_token_count=1000, candidates_token_count=500)
+    generate_mock = MagicMock(return_value=fake_response)
+    monkeypatch.setattr(analyzer, "_generate_with_retry", generate_mock)
+
+    image_bytes = b"fake-jpeg-bytes-para-teste-de-cache-2"
+
+    analyzer.analyze_exam_from_bytes(
+        (image_bytes, "image/jpeg"), "joelho.jpg", api_key="fake-key", user_description="dor no joelho direito"
+    )
+    analyzer.analyze_exam_from_bytes(
+        (image_bytes, "image/jpeg"), "joelho.jpg", api_key="fake-key", user_description="dor lombar"
+    )
+
+    assert generate_mock.call_count == 2

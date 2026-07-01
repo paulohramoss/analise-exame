@@ -21,6 +21,7 @@ os.environ.setdefault("SENTRY_DSN", "")
 import pytest
 
 import app as flask_app_module
+from core import analyzer, cost_tracking
 
 
 @pytest.fixture()
@@ -28,3 +29,15 @@ def client():
     flask_app_module.app.testing = True
     with flask_app_module.app.test_client() as test_client:
         yield test_client
+
+
+@pytest.fixture(autouse=True)
+def _reset_module_level_caches():
+    """Evita que o cache de análise e os contadores de gasto vazem entre testes."""
+    analyzer._analysis_result_cache.clear()
+    with cost_tracking._memory_lock:
+        cost_tracking._memory_spend.clear()
+    yield
+    analyzer._analysis_result_cache.clear()
+    with cost_tracking._memory_lock:
+        cost_tracking._memory_spend.clear()

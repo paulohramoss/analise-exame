@@ -41,6 +41,13 @@ _CLAUDE_SYNTHESIS_MAX_TOKENS = int(os.environ.get("CLAUDE_SYNTHESIS_MAX_TOKENS",
 _SYNTHESIS_INPUT_MAX_CHARS = int(os.environ.get("SYNTHESIS_INPUT_MAX_CHARS", "6000"))
 _INCLUDE_REFERENCE_PDF = os.environ.get("INCLUDE_REFERENCE_PDF", "false").strip().lower() in {"1", "true", "yes", "on"}
 
+# Cache do resultado completo de uma análise, por hash do conteúdo (imagens +
+# descrição + modelo). Evita reprocessar a mesma imagem duas vezes — mesma
+# limitação de escopo por processo que o _pdf_uri_cache abaixo.
+_ANALYSIS_RESULT_CACHE_TTL_SECONDS = int(os.environ.get("ANALYSIS_RESULT_CACHE_TTL_SECONDS", str(24 * 3600)))
+_ANALYSIS_RESULT_CACHE_ENABLED = os.environ.get("ANALYSIS_RESULT_CACHE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+_analysis_result_cache: dict = {}
+
 
 def _remaining_seconds(deadline: float | None, fallback: float) -> float:
     if not deadline:
@@ -59,6 +66,63 @@ def _truncate_for_synthesis(text: str, max_chars: int = _SYNTHESIS_INPUT_MAX_CHA
     head = text[: max_chars // 2].rstrip()
     tail = text[-max_chars // 2 :].lstrip()
     return f"{head}\n\n[... conteúdo intermediário abreviado para acelerar a síntese ...]\n\n{tail}"
+
+
+def _extract_gemini_usage(model: str, response: object) -> dict | None:
+    usage_metadata = getattr(response, "usage_metadata", None)
+    if not usage_metadata:
+        return None
+    return {
+        "model": model,
+        "input_tokens": usage_metadata.prompt_token_count or 0,
+        "output_tokens": usage_metadata.candidates_token_count or 0,
+    }
+
+
+def _extract_claude_usage(model: str, message: object) -> dict | None:
+    usage = getattr(message, "usage", None)
+    if not usage:
+        return None
+    return {
+        "model": model,
+        "input_tokens": usage.input_tokens or 0,
+        "output_tokens": usage.output_tokens or 0,
+    }
+
+
+def _analysis_cache_key(images_bytes: list[bytes], user_description: str, model_name: str, dual_ai: bool) -> str:
+    hasher = hashlib.sha256()
+    for data in images_bytes:
+        hasher.update(data)
+    hasher.update(user_description.strip().lower().encode("utf-8"))
+    hasher.update(model_name.encode("utf-8"))
+    hasher.update(b"dual" if dual_ai else b"single")
+    return hasher.hexdigest()
+
+
+def _get_cached_analysis(cache_key: str) -> dict | None:
+    if not _ANALYSIS_RESULT_CACHE_ENABLED:
+        return None
+    entry = _analysis_result_cache.get(cache_key)
+    if not entry:
+        return None
+    if entry["expires_at"] <= time.time():
+        _analysis_result_cache.pop(cache_key, None)
+        return None
+    logger.info("Cache hit para análise (hash=%s...)", cache_key[:12])
+    result = dict(entry["result"])
+    result["cache_hit"] = True
+    result["usage"] = []
+    return result
+
+
+def _store_cached_analysis(cache_key: str, result: dict) -> None:
+    if not _ANALYSIS_RESULT_CACHE_ENABLED:
+        return
+    _analysis_result_cache[cache_key] = {
+        "result": result,
+        "expires_at": time.time() + _ANALYSIS_RESULT_CACHE_TTL_SECONDS,
+    }
 
 
 def _make_gemini_client(api_key: str) -> genai.Client:
@@ -545,8 +609,8 @@ def _analyze_with_claude(
     reference_images: list,
     timeout_seconds: float = _CLAUDE_ANALYSIS_TIMEOUT_SECONDS,
     validated_case_text: str | None = None,
-) -> str | None:
-    """Análise independente com Claude. Retorna texto ou None em caso de falha."""
+) -> tuple[str, dict | None] | None:
+    """Análise independente com Claude. Retorna (texto, uso_de_tokens) ou None em caso de falha."""
     try:
         logger.info("Claude: iniciando análise independente...")
         client = anthropic.Anthropic(
@@ -564,7 +628,7 @@ def _analyze_with_claude(
             timeout=timeout_seconds,
         )
         logger.info("Claude: análise concluída.")
-        return message.content[0].text
+        return message.content[0].text, _extract_claude_usage("claude-sonnet-4-6", message)
     except Exception:
         logger.warning("Claude: análise falhou.", exc_info=True)
         return None
@@ -577,10 +641,12 @@ def _synthesize_analyses(
     exam_type: str,
     user_description: str,
     timeout_seconds: float = _CLAUDE_SYNTHESIS_TIMEOUT_SECONDS,
-) -> str:
+) -> tuple[str, dict | None]:
     """
     Sintetiza as análises do Gemini e do Claude em um relatório de consenso final.
     Achados convergentes recebem maior peso; divergentes são mantidos com qualificação moderada.
+    Retorna (texto, uso_de_tokens); uso_de_tokens é None se a síntese falhar
+    (caso em que o texto retornado é a análise do Gemini, sem custo adicional).
     """
     region_map = {
         "joelho":       "Joelho",
@@ -664,10 +730,10 @@ RELATÓRIO DE CONSENSO FINAL:"""
             timeout=timeout_seconds,
         )
         logger.info("Síntese: relatório de consenso concluído.")
-        return message.content[0].text
+        return message.content[0].text, _extract_claude_usage("claude-sonnet-4-6", message)
     except Exception:
         logger.warning("Síntese falhou. Retornando análise Gemini.", exc_info=True)
-        return gemini_analysis
+        return gemini_analysis, None
 
 
 def _run_dual_analysis(
@@ -681,14 +747,15 @@ def _run_dual_analysis(
     reference_images: list,
     deadline: float | None = None,
     validated_case_text: str | None = None,
-) -> tuple[str, str]:
+) -> tuple[str, str, list[dict]]:
     """
     Executa Gemini e Claude em paralelo.
-    Retorna (gemini_text, claude_text_or_empty).
+    Retorna (gemini_text, claude_text_or_empty, uso_de_tokens).
     """
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
     gemini_text = ""
     claude_result = ""
+    usage: list[dict] = []
     try:
         gemini_future = executor.submit(
             _generate_with_retry,
@@ -716,7 +783,11 @@ def _run_dual_analysis(
 
         if gemini_future in done:
             try:
-                gemini_text = gemini_future.result().text
+                gemini_response = gemini_future.result()
+                gemini_text = gemini_response.text
+                gemini_usage = _extract_gemini_usage(gemini_model, gemini_response)
+                if gemini_usage:
+                    usage.append(gemini_usage)
             except Exception:
                 logger.warning("Dual AI: Gemini falhou.", exc_info=True)
         else:
@@ -725,7 +796,11 @@ def _run_dual_analysis(
 
         if claude_future in done:
             try:
-                claude_result = claude_future.result() or ""
+                claude_pair = claude_future.result()
+                if claude_pair:
+                    claude_result, claude_usage_item = claude_pair
+                    if claude_usage_item:
+                        usage.append(claude_usage_item)
             except Exception:
                 logger.warning("Dual AI: Claude falhou.", exc_info=True)
         else:
@@ -737,7 +812,56 @@ def _run_dual_analysis(
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
 
-    return gemini_text, (claude_result or "")
+    return gemini_text, (claude_result or ""), usage
+
+
+def _produce_final_analysis(
+    gemini_client: genai.Client,
+    model_name: str,
+    content_parts: list,
+    anthropic_api_key: str,
+    exam_images: list[tuple[bytes, str]],
+    exam_type: str,
+    user_description: str,
+    reference_images: list,
+    deadline: float | None,
+    validated_case_text: str | None,
+) -> tuple[str, str, list[dict]]:
+    """
+    Executa a análise (dual Gemini+Claude quando anthropic_api_key é fornecida,
+    senão apenas Gemini) e retorna (texto_final, modelo_usado, uso_de_tokens).
+    """
+    if not anthropic_api_key:
+        response = _generate_with_retry(gemini_client, model_name, contents=content_parts, deadline=deadline)
+        usage = []
+        gemini_usage = _extract_gemini_usage(model_name, response)
+        if gemini_usage:
+            usage.append(gemini_usage)
+        return response.text, model_name, usage
+
+    logger.info("Dual AI: executando Gemini + Claude em paralelo...")
+    gemini_text, claude_text, usage = _run_dual_analysis(
+        gemini_client, model_name, content_parts,
+        anthropic_api_key, exam_images, exam_type, user_description, reference_images,
+        deadline, validated_case_text,
+    )
+    if gemini_text and claude_text and not _deadline_expired(deadline, reserve_seconds=12):
+        final_analysis, synthesis_usage = _synthesize_analyses(
+            anthropic_api_key, gemini_text, claude_text, exam_type, user_description,
+            timeout_seconds=_remaining_seconds(deadline, _CLAUDE_SYNTHESIS_TIMEOUT_SECONDS),
+        )
+        if synthesis_usage:
+            usage.append(synthesis_usage)
+        model_used = f"{model_name} + claude-sonnet-4-6 → consenso"
+    elif gemini_text:
+        final_analysis = gemini_text
+        model_used = f"{model_name} → consenso rápido"
+    elif claude_text:
+        final_analysis = claude_text
+        model_used = "claude-sonnet-4-6 → consenso rápido"
+    else:
+        raise TimeoutError("A análise excedeu o limite de tempo antes de gerar um laudo.")
+    return final_analysis, model_used, usage
 
 
 def analyze_exam(
@@ -761,15 +885,22 @@ def analyze_exam(
     if isinstance(exam_image_paths, str):
         exam_image_paths = [exam_image_paths]
 
-    deadline = time.monotonic() + _ANALYSIS_BUDGET_SECONDS
-    gemini_client = _make_gemini_client(api_key)
-
     exam_images = []
     for path in exam_image_paths:
         with open(path, "rb") as f:
             raw_bytes = f.read()
         processed_bytes, mime_type = _process_image_bytes(raw_bytes)
         exam_images.append((processed_bytes, mime_type))
+
+    cache_key = _analysis_cache_key(
+        [data for data, _ in exam_images], user_description, model_name, bool(anthropic_api_key)
+    )
+    cached_result = _get_cached_analysis(cache_key)
+    if cached_result:
+        return cached_result
+
+    deadline = time.monotonic() + _ANALYSIS_BUDGET_SECONDS
+    gemini_client = _make_gemini_client(api_key)
 
     first_filename = Path(exam_image_paths[0]).name
     keyword_type = detect_exam_type(first_filename, user_description)
@@ -798,40 +929,24 @@ def analyze_exam(
         reference_pdfs, reference_images, validated_case_text,
     )
 
-    if anthropic_api_key:
-        logger.info("Dual AI: executando Gemini + Claude em paralelo...")
-        gemini_text, claude_text = _run_dual_analysis(
-            gemini_client, model_name, content_parts,
-            anthropic_api_key, exam_images, exam_type, user_description, reference_images,
-            deadline, validated_case_text,
-        )
-        if gemini_text and claude_text and not _deadline_expired(deadline, reserve_seconds=12):
-            final_analysis = _synthesize_analyses(
-                anthropic_api_key, gemini_text, claude_text, exam_type, user_description,
-                timeout_seconds=_remaining_seconds(deadline, _CLAUDE_SYNTHESIS_TIMEOUT_SECONDS),
-            )
-            model_used = f"{model_name} + claude-sonnet-4-6 → consenso"
-        elif gemini_text:
-            final_analysis = gemini_text
-            model_used = f"{model_name} → consenso rápido"
-        elif claude_text:
-            final_analysis = claude_text
-            model_used = "claude-sonnet-4-6 → consenso rápido"
-        else:
-            raise TimeoutError("A análise excedeu o limite de tempo antes de gerar um laudo.")
-    else:
-        response = _generate_with_retry(gemini_client, model_name, contents=content_parts, deadline=deadline)
-        final_analysis = response.text
-        model_used = model_name
+    final_analysis, model_used, usage = _produce_final_analysis(
+        gemini_client, model_name, content_parts, anthropic_api_key,
+        exam_images, exam_type, user_description, reference_images,
+        deadline, validated_case_text,
+    )
 
-    return {
+    result = {
         "success": True,
         "exam_type": exam_type,
         "analysis": final_analysis,
         "references_used": refs_used,
         "model_used": model_used,
         "num_images": len(exam_images),
+        "usage": usage,
+        "cache_hit": False,
     }
+    _store_cached_analysis(cache_key, result)
+    return result
 
 
 def analyze_exam_from_bytes(
@@ -857,13 +972,20 @@ def analyze_exam_from_bytes(
     if isinstance(exam_images_data, tuple) and len(exam_images_data) == 2 and isinstance(exam_images_data[0], bytes):
         exam_images_data = [exam_images_data]
 
-    deadline = time.monotonic() + _ANALYSIS_BUDGET_SECONDS
-    gemini_client = _make_gemini_client(api_key)
-
     exam_images = []
     for raw_bytes, _ in exam_images_data:
         processed_bytes, mime_type = _process_image_bytes(raw_bytes)
         exam_images.append((processed_bytes, mime_type))
+
+    cache_key = _analysis_cache_key(
+        [data for data, _ in exam_images], user_description, model_name, bool(anthropic_api_key)
+    )
+    cached_result = _get_cached_analysis(cache_key)
+    if cached_result:
+        return cached_result
+
+    deadline = time.monotonic() + _ANALYSIS_BUDGET_SECONDS
+    gemini_client = _make_gemini_client(api_key)
 
     keyword_type = detect_exam_type(exam_filename, user_description)
     if keyword_type != "geral":
@@ -891,37 +1013,21 @@ def analyze_exam_from_bytes(
         reference_pdfs, reference_images, validated_case_text,
     )
 
-    if anthropic_api_key:
-        logger.info("Dual AI: executando Gemini + Claude em paralelo...")
-        gemini_text, claude_text = _run_dual_analysis(
-            gemini_client, model_name, content_parts,
-            anthropic_api_key, exam_images, exam_type, user_description, reference_images,
-            deadline, validated_case_text,
-        )
-        if gemini_text and claude_text and not _deadline_expired(deadline, reserve_seconds=12):
-            final_analysis = _synthesize_analyses(
-                anthropic_api_key, gemini_text, claude_text, exam_type, user_description,
-                timeout_seconds=_remaining_seconds(deadline, _CLAUDE_SYNTHESIS_TIMEOUT_SECONDS),
-            )
-            model_used = f"{model_name} + claude-sonnet-4-6 → consenso"
-        elif gemini_text:
-            final_analysis = gemini_text
-            model_used = f"{model_name} → consenso rápido"
-        elif claude_text:
-            final_analysis = claude_text
-            model_used = "claude-sonnet-4-6 → consenso rápido"
-        else:
-            raise TimeoutError("A análise excedeu o limite de tempo antes de gerar um laudo.")
-    else:
-        response = _generate_with_retry(gemini_client, model_name, contents=content_parts, deadline=deadline)
-        final_analysis = response.text
-        model_used = model_name
+    final_analysis, model_used, usage = _produce_final_analysis(
+        gemini_client, model_name, content_parts, anthropic_api_key,
+        exam_images, exam_type, user_description, reference_images,
+        deadline, validated_case_text,
+    )
 
-    return {
+    result = {
         "success": True,
         "exam_type": exam_type,
         "analysis": final_analysis,
         "references_used": refs_used,
         "model_used": model_used,
         "num_images": len(exam_images),
+        "usage": usage,
+        "cache_hit": False,
     }
+    _store_cached_analysis(cache_key, result)
+    return result
