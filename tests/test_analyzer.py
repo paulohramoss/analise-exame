@@ -74,6 +74,28 @@ def test_is_retryable_false_for_invalid_api_key():
     assert not analyzer._is_retryable(Exception("400 API key not valid"))
 
 
+def test_is_retryable_false_for_permission_denied_with_colliding_digits():
+    """Regressão: 403 PERMISSION_DENIED (ex.: billing bloqueado) não deve ser
+    tratado como retryable só porque a mensagem cita um project number do
+    Google Cloud que contém a substring '503' por coincidência (ex.:
+    'projects/50313458658'). O código HTTP real (`.code`) deve prevalecer
+    sobre a busca por dígitos na mensagem.
+    """
+    exc = Exception(
+        "403 PERMISSION_DENIED. {'error': {'code': 403, "
+        "'message': 'Lightning dunning decision is deny for project: "
+        "projects/50313458658', 'status': 'PERMISSION_DENIED'}}"
+    )
+    exc.code = 403
+    assert not analyzer._is_retryable(exc)
+
+
+def test_is_retryable_true_for_structured_503():
+    exc = Exception("503 UNAVAILABLE. {'error': {'code': 503}}")
+    exc.code = 503
+    assert analyzer._is_retryable(exc)
+
+
 def test_generate_with_retry_succeeds_after_transient_failure(monkeypatch):
     monkeypatch.setattr(analyzer.time, "sleep", lambda *_: None)
 

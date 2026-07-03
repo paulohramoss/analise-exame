@@ -1098,13 +1098,16 @@ def analyze():
         error_msg = str(e)
         logger.exception("Falha na análise de exame (%s)", type(e).__name__)
         error_lower = error_msg.lower()
+        error_code = getattr(e, "code", None)
         if "api key not valid" in error_lower or "invalid api key" in error_lower or "api_key_invalid" in error_lower:
             flash(_gemini_key_invalid_message(), "error")
+        elif error_code == 403 or "permission_denied" in error_lower:
+            flash("Erro de permissão na API de IA — verifique o billing/configuração do projeto Google Cloud. A equipe já foi notificada.", "error")
         elif "quota" in error_lower or "rate limit" in error_lower or "resource_exhausted" in error_lower:
             flash("Limite de requisições atingido. Aguarde alguns instantes e tente novamente.", "error")
-        elif "503" in error_lower or "unavailable" in error_lower or "overloaded" in error_lower:
+        elif error_code == 503 or "unavailable" in error_lower or "overloaded" in error_lower:
             flash("O serviço de IA está temporariamente sobrecarregado. Aguarde alguns segundos e tente novamente.", "error")
-        elif "404" in error_lower or "not found" in error_lower:
+        elif error_code == 404 or "not found" in error_lower:
             flash("Modelo de IA temporariamente indisponível. Tente novamente em instantes.", "error")
         else:
             flash("Não foi possível processar o exame. Tente novamente.", "error")
@@ -1276,13 +1279,16 @@ def trial_analyze():
         error_msg = str(e)
         logger.exception("Falha na análise trial (%s)", type(e).__name__)
         error_lower = error_msg.lower()
+        error_code = getattr(e, "code", None)
         if "api key not valid" in error_lower or "invalid api key" in error_lower:
             return jsonify({"error": "Serviço temporariamente indisponível."}), 503
+        elif error_code == 403 or "permission_denied" in error_lower:
+            return jsonify({"error": "Erro de permissão na API de IA — verifique o billing/configuração do projeto Google Cloud."}), 503
         elif "quota" in error_lower or "rate limit" in error_lower or "resource_exhausted" in error_lower:
             return jsonify({"error": "Limite de requisições atingido. Tente novamente em alguns instantes."}), 429
-        elif "503" in error_lower or "unavailable" in error_lower or "overloaded" in error_lower:
+        elif error_code == 503 or "unavailable" in error_lower or "overloaded" in error_lower:
             return jsonify({"error": "Serviço de IA sobrecarregado. Aguarde alguns segundos e tente novamente."}), 503
-        elif "404" in error_lower or "not found" in error_lower:
+        elif error_code == 404 or "not found" in error_lower:
             return jsonify({"error": "Serviço de IA temporariamente indisponível. Tente novamente."}), 503
         return jsonify({"error": "Não foi possível processar o exame. Tente novamente."}), 500
 

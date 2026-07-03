@@ -143,6 +143,16 @@ def _is_quota_exhausted(exc: Exception) -> bool:
 
 
 def _is_retryable(exc: Exception) -> bool:
+    # Erros da SDK do Gemini (google.genai.errors.APIError e subclasses) trazem
+    # o código HTTP real em `.code` — usar isso em vez de procurar dígitos na
+    # mensagem, que pode conter números de projeto do Google Cloud (ex.:
+    # "projects/50313458658") que colidem por coincidência com códigos HTTP
+    # como "503", fazendo um 403 PERMISSION_DENIED (não retryable, ex.: billing
+    # bloqueado) ser tratado como sobrecarga temporária.
+    code = getattr(exc, "code", None)
+    if isinstance(code, int):
+        return code in _RETRYABLE_CODES
+
     if _is_quota_exhausted(exc):
         return False
     msg = str(exc).lower()
