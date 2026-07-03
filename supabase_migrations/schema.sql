@@ -170,6 +170,13 @@ create index if not exists diagnosticos_validados_tipo_created_idx
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- LOGS DE ACESSO — uma linha por requisição HTTP (exceto /static)
+--
+-- Em produção esta tabela é particionada por mês (RANGE em created_at), com
+-- partições criadas automaticamente por um job pg_cron. RLS + a policy
+-- service_role_all são aplicadas em cada partição nova. Ver
+-- 2026-07-03-particoes-logs-rls-automatica.sql para a função, o job e a
+-- policy — o create table abaixo é só a definição de colunas de referência,
+-- não recria o particionamento.
 -- ─────────────────────────────────────────────────────────────────────────────
 create table if not exists public.logs_acesso (
     id                   uuid primary key default gen_random_uuid(),
