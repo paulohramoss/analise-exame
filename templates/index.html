@@ -240,6 +240,27 @@
         @media (max-width: 540px) {
             .form-row { flex-direction: column; gap: 0; }
         }
+
+        #thumbnails-container {
+            display: none;
+            padding: 0.75rem 0;
+        }
+
+        .add-more-images-label {
+            cursor: pointer;
+            font-size: 0.82rem;
+            color: #1B72E8;
+            text-decoration: underline;
+            display: block;
+            text-align: center;
+            margin-top: 0.4rem;
+        }
+
+        .clinical-toggle-hint {
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: #64748b;
+        }
     </style>
 </head>
 <body>
@@ -357,10 +378,10 @@
                         <span class="upload-text">Clique para selecionar ou arraste as imagens aqui</span>
                         <span class="upload-hint">RM · Raio-X · TC · DICOM, PNG, JPG, WEBP — Máximo 20MB por imagem · Até 5 imagens</span>
                     </label>
-                    <div id="thumbnails-container" style="display:none; padding: 0.75rem 0;">
+                    <div id="thumbnails-container">
                         <div class="image-thumbnails" id="image-thumbnails"></div>
                         <div class="thumb-count" id="thumb-count"></div>
-                        <label for="exam_images" style="cursor:pointer; font-size:0.82rem; color:#1B72E8; text-decoration:underline; display:block; text-align:center; margin-top:0.4rem;">
+                        <label for="exam_images" class="add-more-images-label">
                             + Adicionar mais imagens
                         </label>
                     </div>
@@ -369,7 +390,7 @@
                 <!-- Histórico Clínico do Paciente (colapsável) -->
                 <button type="button" class="clinical-toggle" id="clinical-toggle">
                     <span>➕ Adicionar Histórico Clínico do Paciente</span>
-                    <span style="font-size:0.75rem; font-weight:400; color:#64748b;">&nbsp;· melhora a precisão da análise</span>
+                    <span class="clinical-toggle-hint">&nbsp;· melhora a precisão da análise</span>
                     <span class="clinical-toggle-arrow">▼</span>
                 </button>
 
@@ -453,7 +474,7 @@
                     <small>Região anatômica, lateralidade e contexto clínico melhoram a precisão da análise.</small>
                 </div>
 
-                <label class="consent-check" for="privacy_consent">
+                <label class="consent-check">
                     <input type="checkbox" name="privacy_consent" id="privacy_consent" value="accepted" required>
                     <span>
                         Confirmo que tenho autorização/base legal para processar as imagens e informações clínicas,
@@ -567,7 +588,7 @@
                     `;
                     imageThumbnails.appendChild(item);
                     item.querySelector('.thumb-remove').addEventListener('click', function() {
-                        const idx = parseInt(this.getAttribute('data-index'));
+                        const idx = Number.parseInt(this.dataset.index, 10);
                         selectedFiles.splice(idx, 1);
                         syncFilesInput();
                         updateThumbnails();
@@ -585,7 +606,7 @@
                     imageThumbnails.appendChild(item);
 
                     item.querySelector('.thumb-remove').addEventListener('click', function() {
-                        const idx = parseInt(this.getAttribute('data-index'));
+                        const idx = Number.parseInt(this.dataset.index, 10);
                         selectedFiles.splice(idx, 1);
                         syncFilesInput();
                         updateThumbnails();
@@ -611,7 +632,7 @@
             newFiles.forEach(file => {
                 if (selectedFiles.length < MAX_FILES) {
                     // Evita duplicatas pelo nome
-                    if (!selectedFiles.find(f => f.name === file.name && f.size === file.size)) {
+                    if (!selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
                         selectedFiles.push(file);
                     }
                 }
@@ -640,7 +661,7 @@
             const droppedFiles = Array.from(e.dataTransfer.files);
             droppedFiles.forEach(file => {
                 if (selectedFiles.length < MAX_FILES) {
-                    if (!selectedFiles.find(f => f.name === file.name && f.size === file.size)) {
+                    if (!selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
                         selectedFiles.push(file);
                     }
                 }
@@ -682,6 +703,29 @@
             });
         }
 
+        function buildClinicalContext() {
+            const age        = document.getElementById('patient_age').value.trim();
+            const sex        = document.getElementById('patient_sex').value;
+            const laterality = document.getElementById('laterality').value;
+            const activity   = document.getElementById('activity_level').value;
+            const complaint  = document.getElementById('main_complaint').value.trim();
+            const duration   = document.getElementById('symptom_duration').value.trim();
+            const mechanism  = document.getElementById('injury_mechanism').value.trim();
+            const treatments = document.getElementById('previous_treatments').value.trim();
+            const extra      = document.getElementById('additional_info').value.trim();
+
+            const parts = [];
+            if (age || sex)        parts.push(`Paciente: ${[age ? age + ' anos' : '', sex].filter(Boolean).join(', ')}`);
+            if (laterality)        parts.push(`Lateralidade: ${laterality}`);
+            if (activity)          parts.push(`Atividade física: ${activity}`);
+            if (complaint)         parts.push(`Queixa principal: ${complaint}`);
+            if (duration)          parts.push(`Tempo de evolução: ${duration}`);
+            if (mechanism)         parts.push(`Mecanismo de lesão: ${mechanism}`);
+            if (treatments)        parts.push(`Tratamentos anteriores: ${treatments}`);
+            if (extra)             parts.push(`Informações adicionais: ${extra}`);
+            return parts.join(' | ');
+        }
+
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
             if (selectedFiles.length === 0) return;
@@ -705,27 +749,6 @@
             selectedFiles = await Promise.all(selectedFiles.map(f => compressImage(f)));
             syncFilesInput();
 
-            // Monta o contexto clínico estruturado a partir dos campos individuais
-            const age        = document.getElementById('patient_age').value.trim();
-            const sex        = document.getElementById('patient_sex').value;
-            const laterality = document.getElementById('laterality').value;
-            const activity   = document.getElementById('activity_level').value;
-            const complaint  = document.getElementById('main_complaint').value.trim();
-            const duration   = document.getElementById('symptom_duration').value.trim();
-            const mechanism  = document.getElementById('injury_mechanism').value.trim();
-            const treatments = document.getElementById('previous_treatments').value.trim();
-            const extra      = document.getElementById('additional_info').value.trim();
-
-            const parts = [];
-            if (age || sex)        parts.push(`Paciente: ${[age ? age + ' anos' : '', sex].filter(Boolean).join(', ')}`);
-            if (laterality)        parts.push(`Lateralidade: ${laterality}`);
-            if (activity)          parts.push(`Atividade física: ${activity}`);
-            if (complaint)         parts.push(`Queixa principal: ${complaint}`);
-            if (duration)          parts.push(`Tempo de evolução: ${duration}`);
-            if (mechanism)         parts.push(`Mecanismo de lesão: ${mechanism}`);
-            if (treatments)        parts.push(`Tratamentos anteriores: ${treatments}`);
-            if (extra)             parts.push(`Informações adicionais: ${extra}`);
-
             // Injeta em um campo hidden que o backend já lê
             let hidden = document.getElementById('description_combined');
             if (!hidden) {
@@ -735,7 +758,7 @@
                 hidden.id = 'description_combined';
                 form.appendChild(hidden);
             }
-            hidden.value = parts.join(' | ');
+            hidden.value = buildClinicalContext();
 
             loadingOverlay.style.display = 'flex';
             form.submit();
