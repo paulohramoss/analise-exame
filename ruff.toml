@@ -3,4 +3,9 @@ line-length = 200
 [lint]
 # Foco em bugs reais (erros de sintaxe, nomes indefinidos, imports não usados),
 # não em estilo — o projeto ainda não adotou uma convenção de formatação única.
-select = ["E9", "F"]
+# C901 entra com limite alto (acima dos handlers de rota mais complexos hoje,
+# ex. checkout_pay) só para travar crescimento futuro, sem exigir refatoração agora.
+select = ["E9", "F", "C901"]
+
+[lint.mccabe]
+max-complexity = 30

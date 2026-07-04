@@ -26,10 +26,39 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from core import jobs
+from core.build_info import get_build_version
 from core.logging_config import configure_logging
 
 configure_logging()
 logger = logging.getLogger("worker")
+
+BUILD_VERSION = get_build_version()
+
+# Mesmo processo web (app.py) reporta pro Sentry com release=BUILD_VERSION;
+# o worker é um processo separado (Railway/Render) e sem isso, exceções nos
+# jobs de análise (core/jobs.py:run_analysis_job) não apareciam em lugar
+# nenhum nem eram correlacionadas ao commit que as introduziu.
+_SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+if _SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.rq import RqIntegration
+        from sentry_sdk.integrations.logging import LoggingIntegration
+
+        sentry_sdk.init(
+            dsn=_SENTRY_DSN,
+            environment=os.environ.get("SENTRY_ENVIRONMENT", "").strip() or "production",
+            release=BUILD_VERSION,
+            integrations=[
+                RqIntegration(),
+                LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
+            ],
+            traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0")),
+            send_default_pii=False,
+        )
+        logger.info("Sentry inicializado no worker (release=%s)", BUILD_VERSION)
+    except ImportError:  # pragma: no cover - dependência instalada em produção via requirements.txt
+        logger.warning("SENTRY_DSN definido, mas o pacote sentry-sdk não está instalado.")
 
 
 def main() -> None:

@@ -72,6 +72,24 @@ def get_queue():
     return rq.Queue(_QUEUE_NAME, connection=connection)
 
 
+def health_check_redis() -> bool:
+    """
+    True se a fila assíncrona está configurada e o Redis responde a um ping
+    agora. Usa uma conexão própria e de vida curta (em vez do singleton
+    cacheado em _get_redis_connection) para não reportar "down" indefinidamente
+    caso o Redis estivesse fora do ar só no boot do processo.
+    """
+    url = _queue_redis_url()
+    if not url.startswith(("redis://", "rediss://")):
+        return False
+    try:
+        import redis
+        redis.from_url(url, socket_connect_timeout=2, socket_timeout=2).ping()
+        return True
+    except Exception:
+        return False
+
+
 def enqueue_analysis(**kwargs) -> str | None:
     """Enfileira uma análise. Retorna o job_id, ou None se a fila não está disponível."""
     queue = get_queue()

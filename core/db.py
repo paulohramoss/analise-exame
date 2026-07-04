@@ -40,6 +40,19 @@ def _get_client():
         return None
 
 
+def health_check() -> bool:
+    """True se o Supabase está configurado e responde a uma query mínima agora."""
+    client = _get_client()
+    if not client:
+        return False
+    try:
+        client.table("clientes").select("id").limit(1).execute()
+        return True
+    except Exception:
+        logger.warning("Health check do Supabase falhou.", exc_info=True)
+        return False
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CLIENTES
 # ─────────────────────────────────────────────────────────────────────────────

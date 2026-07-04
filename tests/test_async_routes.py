@@ -3,8 +3,7 @@ Testes de integração das rotas de análise quando a fila assíncrona está
 disponível (fake_redis_conn) — cobre o caminho "feliz" de enfileirar,
 processar com um worker síncrono (burst mode) e consultar o resultado.
 
-O fallback síncrono (sem Redis) já é exercitado pelo resto da suíte, já que
-os testes não habilitam fila por padrão.
+O fallback síncrono (sem Redis) é coberto em tests/test_analysis_routes.py.
 """
 
 import io

@@ -13,7 +13,6 @@ import secrets
 import tempfile
 import time
 import uuid
-import subprocess
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -44,6 +43,7 @@ except ImportError:  # pragma: no cover - dependência instalada em produção v
 
 from core.analyzer import analyze_exam_from_bytes
 from core import asaas, cost_tracking, db, jobs
+from core.build_info import get_build_version
 from core.logging_config import configure_logging, new_trace_id
 
 load_dotenv()
@@ -213,19 +213,7 @@ def premium_required(f):
     return decorated
 
 
-# Versão do build
-def _get_build_version() -> str:
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            stderr=subprocess.DEVNULL,
-            cwd=Path(__file__).parent,
-        ).decode().strip()
-    except Exception:
-        return os.environ.get("VERCEL_GIT_COMMIT_SHA", "")[:7] or "dev"
-
-
-BUILD_VERSION = _get_build_version()
+BUILD_VERSION = get_build_version()
 app.jinja_env.globals["BUILD_VERSION"] = BUILD_VERSION
 
 _SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
@@ -935,6 +923,41 @@ def _enqueue_analysis_job(
         persist=persist,
         display_extra=display_extra,
     )
+
+
+# ── Health check ──────────────────────────────────────────────────────────────
+
+@app.route("/health")
+def health():
+    """
+    Verifica conectividade com as dependências externas (Redis da fila
+    assíncrona e Supabase). Usado por monitoramento externo do worker
+    (Railway/Render), que roda como processo separado sem endpoint próprio.
+    Cada dependência é "disabled" se não configurada, "ok"/"down" se configurada.
+    """
+    checks = {}
+    degraded = False
+
+    if jobs.is_async_enabled():
+        redis_ok = jobs.health_check_redis()
+        checks["redis"] = "ok" if redis_ok else "down"
+        degraded = degraded or not redis_ok
+    else:
+        checks["redis"] = "disabled"
+
+    if os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"):
+        supabase_ok = db.health_check()
+        checks["supabase"] = "ok" if supabase_ok else "down"
+        degraded = degraded or not supabase_ok
+    else:
+        checks["supabase"] = "disabled"
+
+    body = {
+        "status": "degraded" if degraded else "ok",
+        "build_version": BUILD_VERSION,
+        "checks": checks,
+    }
+    return jsonify(body), 503 if degraded else 200
 
 
 # ── Rotas principais ──────────────────────────────────────────────────────────

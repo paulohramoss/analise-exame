@@ -102,12 +102,14 @@ GEMINI_API_KEY=sua_chave_aqui
 Se você já usa a nomenclatura da documentação do Google, `GOOGLE_API_KEY`
 também é aceito como alias local.
 
-Para manter a geração do consenso abaixo de 90 segundos, o app usa por padrão
-um orçamento de tempo e não faz upload do atlas PDF em toda análise:
+O app usa um orçamento de tempo para manter a geração do consenso abaixo de
+90 segundos. O atlas PDF (`reference_data/docs/`) é enviado em toda análise
+quando `INCLUDE_REFERENCE_PDF=true` — isso adiciona latência de upload, então
+reavalie `ANALYSIS_BUDGET_SECONDS` se notar timeouts:
 
 ```env
 ANALYSIS_BUDGET_SECONDS=90
-INCLUDE_REFERENCE_PDF=false
+INCLUDE_REFERENCE_PDF=true
 ```
 
 ### 5. Iniciar a aplicação
@@ -148,6 +150,20 @@ processos em background entre invocações. Se você deploia só na Vercel sem
 um worker rodando em outro lugar, não configure `ANALYSIS_QUEUE_REDIS_URL`
 (ou deixe `RATELIMIT_STORAGE_URI=memory://`) para permanecer no caminho
 síncrono.
+
+Como o worker é um processo separado sem interface HTTP própria, use o
+endpoint `GET /health` do processo web para monitorar as duas dependências
+externas que ele compartilha com o app: retorna `200` com
+`{"status": "ok", "checks": {"redis": "ok"|"disabled", "supabase": "ok"|"disabled"}}`,
+ou `503`/`"status": "degraded"` se alguma dependência configurada não
+responder. Configure seu monitor de uptime (Railway/Render/UptimeRobot) para
+esse endpoint.
+
+Se `SENTRY_DSN` estiver definido, o worker também reporta exceções dos jobs
+de análise ao Sentry com `release` = SHA curto do commit (mesmo valor que o
+processo web usa) — permite ver exatamente qual deploy introduziu um erro.
+Defina `SENTRY_DSN` também nas variáveis de ambiente de onde o worker roda
+(Railway/Render), não só na Vercel.
 
 Detalhes de implementação em [`core/jobs.py`](core/jobs.py).
 

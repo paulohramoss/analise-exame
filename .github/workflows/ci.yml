@@ -30,3 +30,10 @@ jobs:
           ADMIN_KEY: ci-test-admin-key
           ASAAS_API_KEY: ci-test-asaas-key
         run: pytest -q
+
+      - name: Scan de vulnerabilidades em dependências (pip-audit)
+        # Não bloqueia o build ainda: há CVEs conhecidos em deps pinadas
+        # (flask, Werkzeug, requests, python-dotenv) pendentes de bump avaliado
+        # separadamente. Reporta no log até isso ser resolvido.
+        continue-on-error: true
+        run: pip-audit -r requirements.txt
