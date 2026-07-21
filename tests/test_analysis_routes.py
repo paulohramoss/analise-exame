@@ -127,10 +127,10 @@ def test_analyze_sync_analyzer_failure_flashes_and_redirects(client, monkeypatch
 
 # ── /trial e /trial/analyze ───────────────────────────────────────────────────
 
-def test_trial_get_redirects_home(client):
+def test_trial_get_renders_trial_page(client):
     resp = client.get("/trial")
-    assert resp.status_code == 301
-    assert resp.headers["Location"] == "/"
+    assert resp.status_code == 200
+    assert b"trial-form" in resp.data
 
 
 def test_trial_analyze_missing_privacy_consent_returns_400(client):

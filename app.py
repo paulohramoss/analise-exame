@@ -1183,8 +1183,8 @@ def analyze_resultado(job_id: str):
 
 @app.route("/trial")
 def trial():
-    """Redireciona para a página principal."""
-    return redirect(url_for("index"), 301)
+    """Página de teste gratuito, embutida via iframe na landing page (WordPress)."""
+    return render_template("trial.html")
 
 
 @app.route("/trial/analyze", methods=["POST"])
