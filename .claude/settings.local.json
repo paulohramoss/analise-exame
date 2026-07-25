@@ -1,7 +1,27 @@
 {
   "permissions": {
     "allow": [
-      "Bash(winget upgrade:*)"
+      "Bash(winget upgrade:*)",
+      "Bash(python3 -c \"import flask; print\\('flask', flask.__version__\\)\")",
+      "Bash(grep -n -iA3 -e \"python app.py\" -e \"flask run\" -e \"## Como\" -e \"instal\" README.md)",
+      "Bash(python3 -m venv .venv)",
+      "Bash(./.venv/bin/pip install *)",
+      "Bash(./.venv/bin/python -c \"import flask; print\\('flask ok', flask.__version__\\)\")",
+      "Bash(rm -rf .venv)",
+      "Bash(sudo apt install -y python3.14-venv)",
+      "Bash(grep -nvE \"^#|^$\" .env.example)",
+      "Bash(cp .env.example .env)",
+      "Bash(./.venv/bin/python -c \"import secrets; print\\(secrets.token_hex\\(32\\)\\)\")",
+      "Bash(sed -i 's|^FLASK_SECRET_KEY=.*|FLASK_SECRET_KEY=__TRACKED_VAR__|' .env)",
+      "Bash(sed -i \"s|^FLASK_DEBUG=.*|FLASK_DEBUG=true|\" .env)",
+      "Bash(timeout 12 ./.venv/bin/python app.py)",
+      "Bash(./.venv/bin/python app.py)",
+      "Bash(echo \"PID $!\")",
+      "Bash(curl -s -o /dev/null -w \"status=%{http_code}\\\\n\" http://localhost:5000/)",
+      "Bash(pkill -f \"python app.py\")",
+      "Bash(echo \"exit=$?\")",
+      "Bash(sed -i -e 's|^SUPABASE_URL=.*|SUPABASE_URL=|' -e 's|^SUPABASE_SERVICE_KEY=.*|SUPABASE_SERVICE_KEY=|' -e 's|^ASAAS_API_KEY=.*|ASAAS_API_KEY=|' -e 's|^GEMINI_API_KEY=.*|GEMINI_API_KEY=|' .env)",
+      "Bash(curl -s -o /dev/null -w \"GET / -> status=%{http_code}\\\\n\" http://localhost:5000/)"
     ]
   }
 }
