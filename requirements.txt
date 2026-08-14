@@ -8,8 +8,11 @@ pydicom>=2.4.4
 numpy>=1.26.0
 requests==2.32.3
 Werkzeug==3.0.4
-supabase==2.15.0
+# >=2.16: até a 2.15.x o cliente validava a chave com uma regex de JWT e
+# rejeitava as chaves novas do Supabase (sb_secret_… / sb_publishable_…).
+supabase==2.31.0
 httpx>=0.28.1
+dnspython>=2.6.1
 redis>=5.0.0
 rq>=1.16.0
 sentry-sdk[flask]>=2.0.0

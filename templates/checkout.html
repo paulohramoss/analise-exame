@@ -434,7 +434,13 @@ input::placeholder { color: #9ca3af; }
 
       <div class="field-group">
         <label for="email">E-mail</label>
-        <input type="email" id="email" name="email" placeholder="seu@email.com" required autocomplete="email">
+        <!-- O pattern espelha a regex do servidor (core/email_validation.py): exige
+             TLD de 2+ letras, que o type="email" do navegador sozinho não cobre
+             (ele aceitaria "a@b"). A validação que vale é a do servidor. -->
+        <input type="email" id="email" name="email" placeholder="seu@email.com" required autocomplete="email"
+               maxlength="254"
+               pattern="[A-Za-z0-9!#$%&amp;'*+/=?^_`{|}~.-]+@[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}"
+               title="Informe um e-mail válido, ex.: nome@clinica.com.br">
       </div>
 
       <div class="field-group">

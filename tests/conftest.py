@@ -17,6 +17,9 @@ os.environ.setdefault("ASAAS_WEBHOOK_TOKEN", "")
 os.environ.setdefault("SUPABASE_URL", "")
 os.environ.setdefault("SUPABASE_SERVICE_KEY", "")
 os.environ.setdefault("SENTRY_DSN", "")
+# Desliga a consulta DNS da validação de e-mail: nenhum teste pode depender de
+# rede. Os testes do validador ligam a checagem explicitamente com stub de DNS.
+os.environ.setdefault("EMAIL_MX_CHECK", "0")
 
 import fakeredis
 import pytest

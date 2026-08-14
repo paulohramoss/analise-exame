@@ -10,6 +10,7 @@ core.asaas nunca faz requisições HTTP reais nestes testes.
 
 from unittest.mock import MagicMock
 
+import pytest
 from werkzeug.security import generate_password_hash
 
 import app as flask_app_module
@@ -147,6 +148,27 @@ def test_checkout_pay_missing_name_or_email_returns_400(client):
     resp = client.post("/checkout/pay", data=_valid_pix_form(name=""))
     assert resp.status_code == 400
     assert resp.get_json()["success"] is False
+
+
+@pytest.mark.parametrize("email", [
+    "",
+    "sem-arroba",
+    "fulano@dominio",
+    "fulano..silva@clinica.com.br",
+    "fulano@mailinator.com",
+])
+def test_checkout_pay_invalid_email_returns_400(client, email):
+    resp = client.post("/checkout/pay", data=_valid_pix_form(email=email))
+    assert resp.status_code == 400
+    assert resp.get_json()["success"] is False
+
+
+def test_checkout_pay_rejects_domain_without_mx(client, monkeypatch):
+    monkeypatch.setattr(flask_app_module, "validar_email_cadastro",
+                        lambda e: ("", "O domínio deste e-mail não existe ou não recebe mensagens."))
+    resp = client.post("/checkout/pay", data=_valid_pix_form(email="arroz@arroz.com"))
+    assert resp.status_code == 400
+    assert "domínio" in resp.get_json()["error"]
 
 
 def test_checkout_pay_missing_cpf_returns_400(client):

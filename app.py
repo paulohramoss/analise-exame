@@ -44,6 +44,7 @@ except ImportError:  # pragma: no cover - dependência instalada em produção v
 from core.analyzer import analyze_exam_from_bytes
 from core import asaas, cost_tracking, db, jobs
 from core.build_info import get_build_version
+from core.email_validation import validar_email_cadastro
 from core.logging_config import configure_logging, new_trace_id
 
 load_dotenv()
@@ -1762,8 +1763,14 @@ def checkout_pay():
         billing_type = "PIX"
 
     # ── Validações básicas ────────────────────────────────────────────────────
-    if not name or not email or "@" not in email:
-        return jsonify({"success": False, "error": "Preencha nome e e-mail válidos."}), 400
+    if not name:
+        return jsonify({"success": False, "error": "Preencha o nome."}), 400
+
+    # Sintaxe + blocklist de descartáveis + DNS do domínio. Também normaliza
+    # (minúsculo) — o login e o /acesso já buscam pelo e-mail em minúsculo.
+    email, erro_email = validar_email_cadastro(email)
+    if erro_email:
+        return jsonify({"success": False, "error": erro_email}), 400
 
     if not cpf_cnpj:
         return jsonify({"success": False, "error": "Preencha o CPF ou CNPJ."}), 400

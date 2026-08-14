@@ -21,7 +21,20 @@
       "Bash(pkill -f \"python app.py\")",
       "Bash(echo \"exit=$?\")",
       "Bash(sed -i -e 's|^SUPABASE_URL=.*|SUPABASE_URL=|' -e 's|^SUPABASE_SERVICE_KEY=.*|SUPABASE_SERVICE_KEY=|' -e 's|^ASAAS_API_KEY=.*|ASAAS_API_KEY=|' -e 's|^GEMINI_API_KEY=.*|GEMINI_API_KEY=|' .env)",
-      "Bash(curl -s -o /dev/null -w \"GET / -> status=%{http_code}\\\\n\" http://localhost:5000/)"
+      "Bash(curl -s -o /dev/null -w \"GET / -> status=%{http_code}\\\\n\" http://localhost:5000/)",
+      "Bash(.venv/bin/python -c \"import dns.resolver, dns.version; print\\('dnspython', dns.version.version\\)\")",
+      "Bash(.venv/bin/python -m pytest tests/test_email_validation.py -q)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(EMAIL_MX_CHECK=1 .venv/bin/python -c ' *)",
+      "Bash(.venv/bin/python -m pytest tests/ -q)",
+      "Bash(.venv/bin/python scripts/auditar_emails.py)",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Bash(.venv/bin/python -m ruff check .)",
+      "Bash(.venv/bin/pip index *)",
+      "Bash(.venv/bin/pip check *)",
+      "Bash(.venv/bin/python -c \"import supabase; print\\('supabase', supabase.__version__ if hasattr\\(supabase,'__version__'\\) else 'ok'\\)\")",
+      "Bash(.venv/bin/python scripts/auditar_emails.py --sem-dns)"
     ]
   }
 }

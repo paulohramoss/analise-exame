@@ -88,6 +88,25 @@ def buscar_cliente_id_por_email(email: str) -> str | None:
         return None
 
 
+def listar_clientes(limite: int = 1000) -> list[dict]:
+    """Lista clientes (id, nome, email, created_at) para auditoria. [] em erro."""
+    db = _get_client()
+    if not db:
+        return []
+    try:
+        res = (
+            db.table("clientes")
+            .select("id,nome,email,created_at")
+            .order("created_at", desc=False)
+            .limit(limite)
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        logger.exception("Erro em listar_clientes")
+        return []
+
+
 def salvar_senha_cliente(email: str, senha_hash: str) -> bool:
     """Salva o hash bcrypt da senha de acesso do cliente. Retorna True se bem-sucedido."""
     db = _get_client()
