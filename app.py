@@ -870,13 +870,18 @@ def _record_analysis_cost(mode: str, result: dict) -> None:
 # caminho síncrono existente — nada muda para quem não configurar a fila.
 
 def _read_upload_bytes(upload_items: list[dict]) -> tuple[list[tuple[bytes, str]], list[dict]]:
-    """Lê os bytes de cada upload (para enviar ao job) e os metadados de persistência."""
+    """Lê os bytes de cada upload (para enviar ao job) e os metadados de persistência.
+
+    Usa sempre a imagem já convertida ("filepath"): para DICOM o arquivo original
+    (.dcm) não é uma imagem que os modelos consigam decodificar, então enviar
+    "original_path" quebrava toda análise de exame DICOM.
+    """
     images = []
     image_meta = []
     for upload_item in upload_items:
-        source_path = Path(upload_item.get("original_path") or upload_item["filepath"])
+        source_path = Path(upload_item["filepath"])
         raw = source_path.read_bytes()
-        images.append((raw, upload_item.get("storage_mime") or upload_item["display_mime"]))
+        images.append((raw, upload_item["display_mime"]))
         image_meta.append({
             "origem": upload_item.get("source") or "upload",
             "arquivo_original": upload_item.get("original_name") or "",
