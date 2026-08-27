@@ -41,6 +41,18 @@ _CLAUDE_SYNTHESIS_MAX_TOKENS = int(os.environ.get("CLAUDE_SYNTHESIS_MAX_TOKENS",
 _SYNTHESIS_INPUT_MAX_CHARS = int(os.environ.get("SYNTHESIS_INPUT_MAX_CHARS", "6000"))
 _INCLUDE_REFERENCE_PDF = os.environ.get("INCLUDE_REFERENCE_PDF", "false").strip().lower() in {"1", "true", "yes", "on"}
 
+# Reserva de tempo exigida antes de gastar uma chamada extra na detecção visual
+# do tipo de exame. Antes era um literal de 70s, calibrado para
+# ANALYSIS_BUDGET_SECONDS=90 (.env.example): com o default de 22s a condição
+# nunca passava e a detecção visual virava código morto. Agora escala com o
+# orçamento — só pulamos a detecção quando o budget já foi majoritariamente
+# consumido (cache lento, cold start).
+_DETECTION_RESERVE_RATIO = float(os.environ.get("DETECTION_RESERVE_RATIO", "0.7"))
+_DETECTION_RESERVE_SECONDS = _ANALYSIS_BUDGET_SECONDS * _DETECTION_RESERVE_RATIO
+# Teto próprio da chamada de detecção: sem ele, a detecção herdaria o deadline
+# inteiro da análise e uma chamada lenta consumiria todo o orçamento antes do laudo.
+_DETECTION_TIMEOUT_SECONDS = float(os.environ.get("DETECTION_TIMEOUT_SECONDS", "6"))
+
 # Cache do resultado completo de uma análise, por hash do conteúdo (imagens +
 # descrição + modelo). Evita reprocessar a mesma imagem duas vezes — mesma
 # limitação de escopo por processo que o _pdf_uri_cache abaixo.
@@ -448,6 +460,8 @@ def detect_exam_type_from_image(
     deadline: float | None = None,
 ) -> str | None:
     """Detecta a região anatômica analisando visualmente a imagem via Gemini."""
+    own_deadline = time.monotonic() + _DETECTION_TIMEOUT_SECONDS
+    deadline = min(deadline, own_deadline) if deadline else own_deadline
     prompt = (
         "Você é um especialista em radiologia musculoesquelética com vasta experiência em RM, TC e Raio-X.\n\n"
         "TAREFA: Identifique a região anatômica mostrada neste exame de imagem.\n\n"
@@ -920,7 +934,7 @@ def analyze_exam(
     else:
         visual_type = detect_exam_type_from_image(
             gemini_client, exam_images[0][0], exam_images[0][1], model_name, deadline
-        ) if exam_images and not _deadline_expired(deadline, reserve_seconds=70) else None
+        ) if exam_images and not _deadline_expired(deadline, reserve_seconds=_DETECTION_RESERVE_SECONDS) else None
         if visual_type and visual_type != "geral":
             exam_type = visual_type
             logger.debug("Tipo de exame detectado visualmente: %s", exam_type)
@@ -1004,7 +1018,7 @@ def analyze_exam_from_bytes(
     else:
         visual_type = detect_exam_type_from_image(
             gemini_client, exam_images[0][0], exam_images[0][1], model_name, deadline
-        ) if exam_images and not _deadline_expired(deadline, reserve_seconds=70) else None
+        ) if exam_images and not _deadline_expired(deadline, reserve_seconds=_DETECTION_RESERVE_SECONDS) else None
         if visual_type and visual_type != "geral":
             exam_type = visual_type
             logger.debug("Tipo de exame detectado visualmente: %s", exam_type)

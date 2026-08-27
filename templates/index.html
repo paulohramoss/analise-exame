@@ -332,16 +332,16 @@
                         <span>👤</span>
                         <span>Responsável pelo laudo</span>
                     </div>
-                    <small class="responsible-section-hint">Essas informações aparecerão no cabeçalho do laudo e do PDF.</small>
+                    <small class="responsible-section-hint">Opcional. Se preenchidas, aparecerão no cabeçalho do laudo e do PDF.</small>
 
                     <div class="form-row">
                         <div class="form-group form-group-half">
                             <label for="responsible_name">Nome do responsável</label>
-                            <input type="text" name="responsible_name" id="responsible_name" placeholder="Ex: Dra. Ana Souza" required>
+                            <input type="text" name="responsible_name" id="responsible_name" placeholder="Ex: Dra. Ana Souza">
                         </div>
                         <div class="form-group form-group-half">
                             <label for="responsible_role">Perfil profissional</label>
-                            <select name="responsible_role" id="responsible_role" required>
+                            <select name="responsible_role" id="responsible_role">
                                 <option value="">— Selecione —</option>
                                 <option value="Médico">Médico</option>
                                 <option value="Laudista">Laudista</option>
@@ -535,8 +535,7 @@
         <div class="loading-content">
             <div class="spinner"></div>
             <h3>Analisando exame...</h3>
-            <p>Gerando laudo com consenso otimizado entre os modelos de IA.</p>
-            <p>Meta de resposta: até 90 segundos.</p>
+            <p>Meta de resposta: até 90 segundos</p>
         </div>
     </div>
 
@@ -729,14 +728,6 @@
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
             if (selectedFiles.length === 0) return;
-
-            const responsibleName = document.getElementById('responsible_name');
-            const responsibleRole = document.getElementById('responsible_role');
-            if (!responsibleName.value.trim() || !responsibleRole.value) {
-                (responsibleName.value.trim() ? responsibleRole : responsibleName).focus();
-                alert('Informe o nome e o perfil profissional do responsável pela análise.');
-                return;
-            }
 
             const privacyConsent = document.getElementById('privacy_consent');
             if (!privacyConsent.checked) {

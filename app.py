@@ -984,10 +984,9 @@ def analyze():
         flash("Confirme o consentimento LGPD e a ciência de que a IA é ferramenta de apoio antes de enviar o exame.", "error")
         return redirect(url_for("index"))
 
+    # Dados do responsável são opcionais: quando vazios, laudo e PDF caem no
+    # texto neutro ("Responsável não informado") já previsto nos templates.
     responsible_info = _responsible_info_from_form()
-    if not responsible_info["name"] or not responsible_info["role"]:
-        flash("Informe o nome e o perfil profissional do responsável pela análise.", "error")
-        return redirect(url_for("index"))
 
     api_key = get_api_key()
     if not api_key:
