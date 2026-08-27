@@ -510,6 +510,9 @@ UPLOAD_FOLDER.mkdir(exist_ok=True)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "dcm"}
 MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20MB
 MAX_IMAGES_PER_ANALYSIS = 5
+# Acesso admin (/admin/entrar) é usado para testes internos com séries DICOM
+# inteiras, onde 5 imagens não cobrem os planos relevantes.
+MAX_IMAGES_PER_ANALYSIS_ADMIN = int(os.environ.get("MAX_IMAGES_PER_ANALYSIS_ADMIN", "20"))
 
 app.config["UPLOAD_FOLDER"] = str(UPLOAD_FOLDER)
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
@@ -517,6 +520,13 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def _max_images_for_request() -> int:
+    """Limite de imagens por análise; admin interno recebe o teto ampliado."""
+    if g.get("is_admin"):
+        return MAX_IMAGES_PER_ANALYSIS_ADMIN
+    return MAX_IMAGES_PER_ANALYSIS
 
 
 def _hash_sensitive_value(value: str | None) -> str:
@@ -970,7 +980,11 @@ def health():
 
 @app.route("/")
 def index():
-    return render_template("index.html", premium=is_premium(request))
+    return render_template(
+        "index.html",
+        premium=is_premium(request),
+        max_images=_max_images_for_request(),
+    )
 
 
 @app.route("/analyze", methods=["POST"])
@@ -1010,7 +1024,7 @@ def analyze():
             return redirect(url_for("index"))
 
     # Limita ao máximo de imagens permitidas
-    files = [f for f in files if f.filename != ""][:MAX_IMAGES_PER_ANALYSIS]
+    files = [f for f in files if f.filename != ""][:_max_images_for_request()]
 
     if not files:
         flash("Nenhuma imagem válida enviada.", "error")
@@ -1368,7 +1382,7 @@ def api_analyze():
             return jsonify({"error": "Nenhuma imagem enviada"}), 400
 
     files = [f for f in files if f and f.filename != "" and allowed_file(f.filename)]
-    files = files[:MAX_IMAGES_PER_ANALYSIS]
+    files = files[:_max_images_for_request()]
 
     if not files:
         return jsonify({"error": "Formato de arquivo não suportado"}), 400

@@ -323,7 +323,7 @@
 
             <div class="multi-image-info">
                 <span>📎</span>
-                <span>Você pode enviar <strong>até 5 imagens</strong> por análise — diferentes planos, incidências ou sequências do mesmo exame.</span>
+                <span>Você pode enviar <strong>até {{ max_images|default(5) }} imagens</strong> por análise — diferentes planos, incidências ou sequências do mesmo exame.</span>
             </div>
 
             <form action="/analyze" method="POST" enctype="multipart/form-data" id="upload-form">
@@ -376,7 +376,7 @@
                     <label for="exam_images" class="upload-label" id="upload-label">
                         <span class="upload-icon">📷</span>
                         <span class="upload-text">Clique para selecionar ou arraste as imagens aqui</span>
-                        <span class="upload-hint">RM · Raio-X · TC · DICOM, PNG, JPG, WEBP — Máximo 20MB por imagem · Até 5 imagens</span>
+                        <span class="upload-hint">RM · Raio-X · TC · DICOM, PNG, JPG, WEBP — Máximo 20MB por imagem · Até {{ max_images|default(5) }} imagens</span>
                     </label>
                     <div id="thumbnails-container">
                         <div class="image-thumbnails" id="image-thumbnails"></div>
@@ -550,7 +550,7 @@
                 isOpen ? '➖ Histórico Clínico do Paciente' : '➕ Adicionar Histórico Clínico do Paciente';
         });
 
-        const MAX_FILES = 5;
+        const MAX_FILES = {{ max_images|default(5) }};
         const fileInput = document.getElementById('exam_images');
         const uploadArea = document.getElementById('upload-area');
         const uploadLabel = document.getElementById('upload-label');
