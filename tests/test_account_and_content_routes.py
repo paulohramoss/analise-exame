@@ -9,6 +9,7 @@ conftest.py) — listagens retornam [] e buscas retornam None sem precisar de
 mock; quando o teste depende de um retorno específico, a função é mockada.
 """
 
+import re
 from unittest.mock import MagicMock
 
 import app as flask_app_module
@@ -296,6 +297,53 @@ def test_validacao_clinica_success_json(client, monkeypatch):
 def test_index_renders(client):
     resp = client.get("/")
     assert resp.status_code == 200
+
+
+def test_static_assets_have_content_hash(client):
+    """CSS/JS em /static ficam em cache por 1 ano; a URL precisa mudar quando o arquivo muda."""
+    html = client.get("/").get_data(as_text=True)
+    assert re.search(r'/static/base\.css\?v=[0-9a-f]{10}"', html)
+    assert re.search(r'/static/style\.css\?v=[0-9a-f]{10}"', html)
+    assert re.search(r'/static/ui\.js\?v=[0-9a-f]{10}"', html)
+
+
+def _local_runtime(monkeypatch, *, testing=False):
+    for var in ("VERCEL", "VERCEL_ENV", "FLASK_ENV", "ENV", "APP_ENV", "LOCAL_PREMIUM_BYPASS"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(flask_app_module.app, "testing", testing)
+
+
+def test_localhost_gets_premium_access_in_local_runtime(client, monkeypatch):
+    _local_runtime(monkeypatch)
+    with flask_app_module.app.test_request_context("/", environ_base={"REMOTE_ADDR": "127.0.0.1"}):
+        assert flask_app_module.is_premium(flask_app_module.request) is True
+
+
+def test_local_bypass_ignores_remote_clients(client, monkeypatch):
+    _local_runtime(monkeypatch)
+    with flask_app_module.app.test_request_context(
+        "/", environ_base={"REMOTE_ADDR": "203.0.113.7"}, headers={"Host": "localhost:5000"}
+    ):
+        assert flask_app_module.is_premium(flask_app_module.request) is False
+
+
+def test_local_bypass_disabled_on_vercel_and_production(client, monkeypatch):
+    _local_runtime(monkeypatch)
+    monkeypatch.setenv("VERCEL", "1")
+    with flask_app_module.app.test_request_context("/", environ_base={"REMOTE_ADDR": "127.0.0.1"}):
+        assert flask_app_module.is_premium(flask_app_module.request) is False
+
+    monkeypatch.delenv("VERCEL")
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    with flask_app_module.app.test_request_context("/", environ_base={"REMOTE_ADDR": "127.0.0.1"}):
+        assert flask_app_module.is_premium(flask_app_module.request) is False
+
+
+def test_local_bypass_can_be_turned_off(client, monkeypatch):
+    _local_runtime(monkeypatch)
+    monkeypatch.setenv("LOCAL_PREMIUM_BYPASS", "0")
+    with flask_app_module.app.test_request_context("/", environ_base={"REMOTE_ADDR": "127.0.0.1"}):
+        assert flask_app_module.is_premium(flask_app_module.request) is False
 
 
 def test_analyze_processando_requires_premium(client):

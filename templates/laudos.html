@@ -3,17 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three Health — Histórico</title>
-    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Histórico de laudos — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <style>
-        .header-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.55rem;
-            flex-wrap: wrap;
-        }
-
         .history-head {
             display: flex;
             justify-content: space-between;
@@ -30,7 +24,7 @@
         }
 
         .history-subtitle {
-            color: #64748b;
+            color: var(--text-muted);
             margin-top: 0.35rem;
             font-size: 0.94rem;
         }
@@ -45,7 +39,7 @@
             grid-template-columns: minmax(0, 1fr) auto;
             gap: 1rem;
             align-items: center;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border);
             border-radius: 10px;
             padding: 1rem 1.1rem;
             background: #fff;
@@ -62,7 +56,7 @@
             display: flex;
             flex-wrap: wrap;
             gap: 0.45rem;
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 0.82rem;
             font-weight: 700;
         }
@@ -71,16 +65,16 @@
             display: inline-flex;
             align-items: center;
             border-radius: 999px;
-            background: #eff6ff;
-            color: #155FC4;
-            border: 1px solid #bfdbfe;
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            border: 1px solid var(--primary-border);
             padding: 0.22rem 0.55rem;
             font-size: 0.74rem;
             font-weight: 800;
         }
 
         .history-snippet {
-            color: #475569;
+            color: var(--text-muted);
             font-size: 0.86rem;
             margin-top: 0.45rem;
             max-width: 760px;
@@ -89,13 +83,13 @@
         .empty-state {
             text-align: center;
             padding: 2.5rem 1rem;
-            color: #64748b;
+            color: var(--text-muted);
         }
 
         .admin-note {
-            border: 1px solid #fde68a;
+            border: 1px solid var(--warning-border);
             background: #fffbeb;
-            color: #92400e;
+            color: var(--warning-dark);
             border-radius: 10px;
             padding: 0.75rem 1rem;
             margin-bottom: 1rem;
@@ -117,33 +111,16 @@
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <div class="logo">
-                <div class="logo-row">
-                    <div class="logo-lines">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
-                    <span class="logo-wordmark">health</span>
-                </div>
-                <div class="logo-underline"></div>
-            </div>
-            <div class="header-actions">
-                <a href="/clinica/dashboard" class="btn-secondary">Dashboard</a>
-                <a href="/" class="btn-secondary">Nova Análise</a>
-                <a href="/premium/logout" class="btn-secondary">Sair</a>
-            </div>
-        </div>
-    </header>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("historico") }}
+    {% endcall %}
 
     <main class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
                     <div class="alert alert-{{ category }}">
-                        <span>{{ '❌' if category == 'error' else '✅' }}</span>
+                        {{ layout.icon('x-circle' if category == 'error' else 'check-circle') }}
                         {{ message }}
                     </div>
                 {% endfor %}
@@ -155,7 +132,6 @@
                 <h1 class="history-title">Histórico de laudos</h1>
                 <p class="history-subtitle">Acesse análises salvas, exporte novamente o PDF e registre validações médicas.</p>
             </div>
-            <a href="/" class="btn-primary">Analisar novo exame</a>
         </div>
 
         {% if is_admin %}
@@ -191,9 +167,12 @@
             <div class="empty-state">
                 <h2>Nenhum laudo salvo ainda</h2>
                 <p>Quando uma análise for concluída, ela aparecerá aqui automaticamente.</p>
+                <a href="/" class="btn-primary" style="margin-top:1rem">Analisar primeiro exame</a>
             </div>
             {% endif %}
         </div>
     </main>
+
+    {{ layout.site_footer() }}
 </body>
 </html>

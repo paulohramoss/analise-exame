@@ -4,14 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Processando análise — Three Health</title>
-    <link
-      rel="icon"
-      type="image/svg+xml"
-      href="{{ url_for('static', filename='favicon.svg') }}"
-    >
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
     <link
       rel="stylesheet"
-      href="{{ url_for('static', filename='style.css') }}"
+      href="{{ static_url('style.css') }}"
     >
     <style>
       .processing-container {
@@ -53,25 +50,9 @@
     </style>
   </head>
   <body>
-    <header>
-      <div class="header-content">
-        <div class="logo">
-          <div class="logo-row">
-            <div class="logo-lines">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <span class="logo-wordmark">health</span>
-          </div>
-          <div class="logo-underline"></div>
-        </div>
-        <div class="header-actions">
-          <a href="/clinica/dashboard" class="btn-secondary">Dashboard</a>
-          <a href="/laudos" class="btn-secondary">Histórico</a>
-        </div>
-      </div>
-    </header>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("") }}
+    {% endcall %}
 
     <main class="container processing-container">
       <div class="card processing-card" id="processing-content">
@@ -84,6 +65,8 @@
         </p>
       </div>
     </main>
+
+    {{ layout.site_footer() }}
 
     <script>
       const statusUrl = "{{ status_url }}";
@@ -114,7 +97,7 @@
       function showError(message) {
           document.getElementById('processing-content').innerHTML =
               '<h2>Não foi possível concluir a análise</h2>' +
-              '<div class="alert alert-error"><span>❌</span>' + message + '</div>' +
+              '<div class="alert alert-error">{{ layout.icon('x-circle') }}' + message + '</div>' +
               '<a href="/" class="btn-primary">Voltar e tentar novamente</a>';
       }
 

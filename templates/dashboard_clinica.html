@@ -3,17 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three Health — Dashboard da Clínica</title>
-    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Dashboard da clínica — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <style>
-        .header-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.55rem;
-            flex-wrap: wrap;
-        }
-
         .dashboard-head {
             display: flex;
             justify-content: space-between;
@@ -30,7 +24,7 @@
         }
 
         .dashboard-subtitle {
-            color: #64748b;
+            color: var(--text-muted);
             margin-top: 0.35rem;
             font-size: 0.94rem;
         }
@@ -44,14 +38,14 @@
 
         .metric-card {
             background: #fff;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border);
             border-radius: 10px;
             padding: 1rem;
             box-shadow: var(--shadow);
         }
 
         .metric-label {
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 0.74rem;
             font-weight: 800;
             letter-spacing: 0.06em;
@@ -68,7 +62,7 @@
         }
 
         .metric-note {
-            color: #475569;
+            color: var(--text-muted);
             font-size: 0.82rem;
             margin-top: 0.45rem;
         }
@@ -90,14 +84,14 @@
             grid-template-columns: minmax(120px, 0.65fr) 1fr auto;
             align-items: center;
             gap: 0.7rem;
-            color: #475569;
+            color: var(--text-muted);
             font-size: 0.86rem;
             font-weight: 700;
         }
 
         .bar-track {
             height: 9px;
-            background: #e2e8f0;
+            background: var(--border);
             border-radius: 999px;
             overflow: hidden;
         }
@@ -105,7 +99,7 @@
         .bar-fill {
             height: 100%;
             min-width: 8px;
-            background: #1B72E8;
+            background: var(--primary);
             border-radius: inherit;
         }
 
@@ -119,7 +113,7 @@
             display: flex;
             justify-content: space-between;
             gap: 1rem;
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid var(--border);
             padding-bottom: 0.7rem;
         }
 
@@ -135,7 +129,7 @@
         }
 
         .compact-meta {
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 0.8rem;
             margin-top: 0.15rem;
         }
@@ -144,9 +138,9 @@
             display: inline-flex;
             align-items: center;
             height: fit-content;
-            border: 1px solid #bfdbfe;
-            color: #155FC4;
-            background: #eff6ff;
+            border: 1px solid var(--primary-border);
+            color: var(--primary-dark);
+            background: var(--primary-light);
             border-radius: 999px;
             padding: 0.22rem 0.55rem;
             font-size: 0.72rem;
@@ -155,9 +149,9 @@
         }
 
         .admin-note {
-            border: 1px solid #fde68a;
+            border: 1px solid var(--warning-border);
             background: #fffbeb;
-            color: #92400e;
+            color: var(--warning-dark);
             border-radius: 10px;
             padding: 0.75rem 1rem;
             margin-bottom: 1rem;
@@ -183,22 +177,9 @@
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <div class="logo">
-                <div class="logo-row">
-                    <div class="logo-lines"><span></span><span></span><span></span></div>
-                    <span class="logo-wordmark">health</span>
-                </div>
-                <div class="logo-underline"></div>
-            </div>
-            <div class="header-actions">
-                <a href="/laudos" class="btn-secondary">Histórico</a>
-                <a href="/" class="btn-secondary">Nova Análise</a>
-                <a href="/premium/logout" class="btn-secondary">Sair</a>
-            </div>
-        </div>
-    </header>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("dashboard") }}
+    {% endcall %}
 
     <main class="container">
         <div class="dashboard-head">
@@ -206,7 +187,6 @@
                 <h1 class="dashboard-title">Dashboard da clínica</h1>
                 <p class="dashboard-subtitle">Volume, consenso, pendências de validação e desempenho clínico dos laudos.</p>
             </div>
-            <a href="/" class="btn-primary">Analisar novo exame</a>
         </div>
 
         {% if is_admin %}
@@ -227,7 +207,7 @@
             <div class="metric-card">
                 <span class="metric-label">Concordância média</span>
                 <strong class="metric-value">{{ metrics.media_concordancia }}%</strong>
-                <p class="metric-note">{{ metrics.concordancia_plena }} validação{% if metrics.concordancia_plena != 1 %}es{% endif %} com concordância plena.</p>
+                <p class="metric-note">{{ metrics.concordancia_plena }} {{ 'validação' if metrics.concordancia_plena == 1 else 'validações' }} com concordância plena.</p>
             </div>
             <div class="metric-card">
                 <span class="metric-label">Consenso dual</span>
@@ -310,5 +290,7 @@
             </div>
         </section>
     </main>
+
+    {{ layout.site_footer() }}
 </body>
 </html>

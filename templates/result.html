@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three Health — Laudo</title>
-    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Resultado da análise — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <script src="{{ static_url('laudo-pdf.js') }}" defer></script>
     <style>
         .exam-images-gallery {
             display: flex;
@@ -24,7 +26,7 @@
 
         .exam-image-label {
             font-size: 0.72rem;
-            color: #64748b;
+            color: var(--text-muted);
             text-align: center;
             margin-top: 0.2rem;
             font-weight: 600;
@@ -34,7 +36,7 @@
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
-            background: #16a34a;
+            background: var(--success);
             color: white;
             border: none;
             border-radius: 8px;
@@ -61,7 +63,7 @@
             font-weight: 800;
             letter-spacing: 0.08em;
             text-transform: uppercase;
-            color: #64748b;
+            color: var(--text-muted);
             margin-bottom: 0.3rem;
         }
 
@@ -73,25 +75,21 @@
         }
 
         .professional-details {
-            color: #475569;
+            color: var(--text-muted);
             font-size: 0.94rem;
             margin-top: 0.35rem;
         }
 
         .professional-status {
-            text-align: right;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.3rem;
             min-width: 150px;
         }
 
-        .header-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.55rem;
-            flex-wrap: wrap;
-        }
-
         .consensus-card {
-            border: 1px solid #bfdbfe;
+            border: 1px solid var(--primary-border);
             background: #f8fbff;
             border-radius: 10px;
             padding: 1rem 1.1rem;
@@ -112,7 +110,7 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: #1B72E8;
+            background: var(--primary);
             color: #fff;
             font-weight: 800;
             font-size: 0.82rem;
@@ -128,7 +126,7 @@
 
         .consensus-subtitle,
         .consensus-description {
-            color: #475569;
+            color: var(--text-muted);
             font-size: 0.86rem;
             margin: 0;
         }
@@ -143,7 +141,7 @@
         .consensus-pill {
             border: 1px solid #dbeafe;
             background: #fff;
-            color: #155FC4;
+            color: var(--primary-dark);
             border-radius: 999px;
             padding: 0.28rem 0.65rem;
             font-size: 0.76rem;
@@ -189,9 +187,9 @@
 
         .feedback-option:hover,
         .feedback-option.selected {
-            border-color: #1B72E8;
-            color: #155FC4;
-            background: #eff6ff;
+            border-color: var(--primary);
+            color: var(--primary-dark);
+            background: var(--primary-light);
         }
 
         .feedback-card textarea {
@@ -214,12 +212,12 @@
 
         .feedback-status {
             font-size: 0.86rem;
-            color: #475569;
+            color: var(--text-muted);
             font-weight: 700;
         }
 
         .feedback-status.success { color: #15803d; }
-        .feedback-status.error { color: #dc2626; }
+        .feedback-status.error { color: var(--danger); }
 
         @media (max-width: 720px) {
             .professional-summary {
@@ -227,7 +225,7 @@
             }
 
             .professional-status {
-                text-align: left;
+                align-items: flex-start;
             }
 
             .feedback-option {
@@ -244,26 +242,9 @@
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <div class="logo">
-                <div class="logo-row">
-                    <div class="logo-lines">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
-                    <span class="logo-wordmark">health</span>
-                </div>
-                <div class="logo-underline"></div>
-            </div>
-            <div class="header-actions">
-                <a href="/clinica/dashboard" class="btn-secondary">Dashboard</a>
-                <a href="/laudos" class="btn-secondary">Histórico</a>
-                <a href="/" class="btn-secondary">Nova Análise</a>
-            </div>
-        </div>
-    </header>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("") }}
+    {% endcall %}
 
     <main class="container">
         {% set responsible = responsible|default({}) %}
@@ -273,7 +254,7 @@
         {% set responsible_organization = responsible.organization|default('', true) %}
         <!-- Aviso médico -->
         <div class="disclaimer-banner">
-            <span class="disclaimer-icon">⚕️</span>
+            <span class="disclaimer-icon">{{ layout.icon("shield", 22) }}</span>
             <p>
                 <strong>Aviso CFM/LGPD:</strong> Este laudo foi gerado por IA como ferramenta de apoio à decisão clínica.
                 <strong>Não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
@@ -285,7 +266,7 @@
             {% if messages %}
                 {% for category, message in messages %}
                     <div class="alert alert-{{ category }}">
-                        <span>{{ '❌' if category == 'error' else '✅' }}</span>
+                        {{ layout.icon('x-circle' if category == 'error' else 'check-circle') }}
                         {{ message }}
                     </div>
                 {% endfor %}
@@ -311,7 +292,7 @@
                 </div>
                 <div class="professional-status">
                     <span class="meta-label">Status</span>
-                    <span class="meta-value status-ok">✅ Análise Concluída</span>
+                    <span class="meta-value status-ok">{{ layout.icon("check-circle", 16) }} Análise concluída</span>
                 </div>
             </div>
 
@@ -328,7 +309,7 @@
 
             <!-- Imagens do exame -->
             <div class="card exam-image-card">
-                <h2>🔬 Exame{% if num_images|int > 1 %}s{% endif %} Analisado{% if num_images|int > 1 %}s{% endif %}</h2>
+                <h2>Exame{% if num_images|int > 1 %}s{% endif %} Analisado{% if num_images|int > 1 %}s{% endif %}</h2>
                 <div class="exam-images-gallery">
                     {% for img in images %}
                     <div>
@@ -348,11 +329,10 @@
             <!-- Laudo da análise -->
             <div class="card report-card">
                 <div class="report-header">
-                    <h2>📋 Laudo de Análise por IA</h2>
+                    <h2>Laudo de análise por IA</h2>
                     <div class="report-actions">
-                        <button type="button" onclick="downloadPDF()" class="btn-pdf">⬇️ Baixar PDF</button>
-                        <button type="button" onclick="window.print()" class="btn-secondary btn-small">🖨️ Imprimir</button>
-                        <button type="button" onclick="copyReport()" class="btn-secondary btn-small">📋 Copiar</button>
+                        <button type="button" onclick="downloadPDF()" class="btn-pdf">{{ layout.icon("printer", 16) }} Imprimir / PDF</button>
+                                                <button type="button" onclick="copyReport()" class="btn-secondary btn-small">{{ layout.icon("copy", 16) }} Copiar</button>
                     </div>
                 </div>
 
@@ -391,13 +371,16 @@
 
         <!-- Ações -->
         <div class="result-actions">
-            <a href="/" class="btn-primary">🔬 Analisar Novo Exame</a>
+            <a href="/" class="btn-primary">{{ layout.icon("scan", 18, "btn-icon") }} Analisar novo exame</a>
         </div>
     </main>
+
+    {{ layout.site_footer() }}
 
     <script type="application/json" id="data-user-desc">{{ user_description|default('', true)|tojson }}</script>
     <script type="application/json" id="data-responsible">{{ responsible|tojson }}</script>
     <script type="application/json" id="data-consensus">{{ consensus|default({})|tojson }}</script>
+    <script type="application/json" id="data-exam-meta">{{ {"exam_type": exam_type, "references_used": references_used, "analysis_id": analysis_id}|tojson }}</script>
     <script type="application/json" id="data-analysis-id">{{ (analysis_id or '')|tojson }}</script>
     <script>
         // Converte markdown para HTML simples para o laudo
@@ -433,174 +416,33 @@
         renderMarkdown(reportContent);
 
         function copyReport() {
-            const text = reportContent.innerText;
-            navigator.clipboard.writeText(text).then(() => {
-                alert('Laudo copiado para a área de transferência!');
-            }).catch(() => {
-                const ta = document.createElement('textarea');
-                ta.value = text;
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-                alert('Laudo copiado!');
-            });
+            copyToClipboard(reportContent.innerText)
+                .then(() => showToast('Laudo copiado para a área de transferência.'))
+                .catch(() => showToast('Não foi possível copiar o laudo. Selecione o texto e copie manualmente.', 'error', 5000));
         }
 
         function downloadPDF() {
-            const now = new Date();
-            const dateStr = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-            // Coleta imagens do exame como base64
-            const examImages = document.querySelectorAll('.exam-images-gallery img');
-            let imagesHTML = '';
-            examImages.forEach((img, i) => {
-                imagesHTML += `
-                    <div class="pdf-img-item">
-                        <img src="${img.src}" alt="Imagem ${i + 1}" style="max-width:100%; max-height:240px; object-fit:contain; border-radius:6px; border:1px solid #ddd; background:#0a0a0a;">
-                        ${examImages.length > 1 ? `<div style="text-align:center;font-size:11px;color:#666;margin-top:4px;">Imagem ${i + 1}</div>` : ''}
-                    </div>`;
-            });
-
-            const reportHTML = reportContent.innerHTML;
-
-            const userDesc = JSON.parse(document.getElementById('data-user-desc').textContent || 'null');
             const responsible = JSON.parse(document.getElementById('data-responsible').textContent || 'null');
-            const consensus = JSON.parse(document.getElementById('data-consensus').textContent || 'null');
-            const responsibleName = responsible?.name || 'Responsável não informado';
-            const responsibleDetails = [responsible?.role, responsible?.register, responsible?.organization].filter(Boolean).join(' · ') || 'Dados profissionais não informados';
-            const examImagesTitle = examImages.length === 1 ? 'Imagem do Exame' : 'Imagens do Exame';
-            const escapeHtml = value => String(value || '').replace(/[&<>"']/g, char => ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#39;'
-            }[char]));
+            const userDesc = JSON.parse(document.getElementById('data-user-desc').textContent || 'null');
+            const examMeta = JSON.parse(document.getElementById('data-exam-meta').textContent || '{}');
+            const analysisId = examMeta.analysis_id;
+            const refs = Number(examMeta.references_used || 0);
+            const images = Array.from(document.querySelectorAll('.exam-images-gallery img'))
+                .map((img, i) => ({ src: img.src, label: `Imagem ${i + 1}` }));
 
-            const pdfContent = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<title>Laudo Three Health — ${dateStr}</title>
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Nunito', Arial, sans-serif; font-size: 13px; color: #1e293b; background: white; padding: 0; }
-    .page { max-width: 780px; margin: 0 auto; padding: 32px 36px; }
-
-    /* Header */
-    .pdf-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1B72E8; padding-bottom: 16px; margin-bottom: 20px; }
-    .pdf-logo { display: flex; flex-direction: column; align-items: flex-start; }
-    .pdf-logo-row { display: flex; align-items: center; gap: 8px; }
-    .pdf-logo-lines { display: flex; flex-direction: column; gap: 3px; }
-    .pdf-logo-lines span { display: block; height: 3px; border-radius: 2px; background: #22C97A; }
-    .pdf-logo-lines span:nth-child(1) { width: 22px; }
-    .pdf-logo-lines span:nth-child(2) { width: 16px; }
-    .pdf-logo-lines span:nth-child(3) { width: 11px; }
-    .pdf-logo-wordmark { font-size: 22px; font-weight: 800; color: #1B72E8; letter-spacing: -0.5px; line-height: 1; }
-    .pdf-logo-underline { width: 100%; height: 2px; background: #1B72E8; margin-top: 3px; }
-    .pdf-title-block { text-align: right; }
-    .pdf-title { font-size: 15px; font-weight: 800; color: #1B72E8; }
-    .pdf-subtitle { font-size: 11px; color: #64748b; margin-top: 2px; }
-
-    .pdf-professional { background: #eff6ff; border-left: 4px solid #1B72E8; border-radius: 0 8px 8px 0; padding: 12px 14px; margin-bottom: 14px; }
-    .pdf-professional-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #1B72E8; font-weight: 800; margin-bottom: 3px; }
-    .pdf-professional-name { font-size: 17px; font-weight: 800; color: #0f172a; line-height: 1.25; }
-    .pdf-professional-details { font-size: 11.5px; color: #475569; margin-top: 2px; }
-    .pdf-consensus { border: 1px solid #bfdbfe; border-left: 4px solid #1B72E8; border-radius: 0 8px 8px 0; padding: 10px 12px; margin-bottom: 14px; background: #f8fbff; }
-    .pdf-consensus-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #1B72E8; font-weight: 800; margin-bottom: 3px; }
-    .pdf-consensus-title { font-size: 13px; font-weight: 800; color: #0f172a; }
-    .pdf-consensus-text { font-size: 11px; color: #475569; line-height: 1.45; margin-top: 2px; }
-
-    /* Clinical info */
-    .pdf-clinical { background: #eff6ff; border-left: 3px solid #1B72E8; border-radius: 0 6px 6px 0; padding: 8px 12px; margin-bottom: 16px; font-size: 12px; color: #1e40af; }
-    .pdf-clinical strong { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; color: #1B72E8; }
-
-    /* Images */
-    .pdf-images-section { margin-bottom: 16px; }
-    .pdf-images-section h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 8px; font-weight: 700; }
-    .pdf-images-grid { display: flex; flex-wrap: wrap; gap: 10px; }
-    .pdf-img-item { flex: 0 0 auto; }
-
-    /* Report */
-    .pdf-report-section { margin-bottom: 20px; }
-    .pdf-report-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 10px; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
-    .pdf-report-content { line-height: 1.7; font-size: 12.5px; }
-    .pdf-report-content h2 { font-size: 14px; color: #1B72E8; margin: 14px 0 5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
-    .pdf-report-content h3 { font-size: 13px; color: #1B72E8; margin: 12px 0 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
-    .pdf-report-content h4 { font-size: 12px; color: #155FC4; margin: 8px 0 3px; }
-    .pdf-report-content ul, .pdf-report-content ol { padding-left: 18px; margin: 4px 0; }
-    .pdf-report-content li { margin-bottom: 2px; }
-    .pdf-report-content p { margin: 4px 0; }
-    .pdf-report-content strong { color: #0f172a; }
-
-    /* Footer */
-    .pdf-footer { border-top: 2px solid #1B72E8; padding-top: 14px; margin-top: 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
-    .pdf-footer-sig { font-size: 12px; color: #1B72E8; font-weight: 700; }
-    .pdf-footer-sig span { display: block; font-size: 10px; color: #64748b; font-weight: 400; margin-top: 2px; }
-    .pdf-disclaimer { font-size: 10px; color: #78350f; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 8px 10px; flex: 1; line-height: 1.5; }
-
-    @media print {
-        body { padding: 0; }
-        .page { padding: 20px 24px; }
-    }
-</style>
-</head>
-<body>
-<div class="page">
-    <div class="pdf-header">
-        <div class="pdf-logo">
-            <div class="pdf-logo-row">
-                <div class="pdf-logo-lines"><span></span><span></span><span></span></div>
-                <span class="pdf-logo-wordmark">health</span>
-            </div>
-            <div class="pdf-logo-underline"></div>
-        </div>
-        <div class="pdf-title-block">
-            <div class="pdf-title">LAUDO DE ANÁLISE POR INTELIGÊNCIA ARTIFICIAL</div>
-            <div class="pdf-subtitle">Data: ${dateStr} · Hora: ${timeStr} · Three Health Platform</div>
-        </div>
-    </div>
-
-    <div class="pdf-professional">
-        <div class="pdf-professional-label">Responsável pela análise</div>
-        <div class="pdf-professional-name">${escapeHtml(responsibleName)}</div>
-        <div class="pdf-professional-details">${escapeHtml(responsibleDetails)}</div>
-    </div>
-
-    ${userDesc ? `<div class="pdf-clinical"><strong>Informações Clínicas Fornecidas</strong>${userDesc}</div>` : ''}
-
-    <div class="pdf-images-section">
-        <h3>${examImagesTitle}</h3>
-        <div class="pdf-images-grid">${imagesHTML}</div>
-    </div>
-
-    <div class="pdf-report-section">
-        <div class="pdf-report-title">Laudo Ortopédico — Análise por IA</div>
-        <div class="pdf-report-content">${reportHTML}</div>
-    </div>
-
-    <div class="pdf-footer">
-        <div class="pdf-footer-sig">
-            Three Health AI Assistant
-            <span>Gerado automaticamente por IA · ${dateStr}</span>
-        </div>
-        <div class="pdf-disclaimer">
-            ⚕️ <strong>AVISO CFM/LGPD:</strong> Este laudo foi gerado por Inteligência Artificial como ferramenta de apoio à decisão clínica.
-            <strong>Não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
-            O uso da IA deve ser informado ao paciente, os dados devem ser tratados conforme a LGPD e a decisão final deve ser registrada pelo profissional habilitado.
-        </div>
-    </div>
-</div>
-<script>window.onload = function() { window.print(); }<\/script>
-</body>
-</html>`;
-
-            const printWindow = window.open('', '_blank', 'width=900,height=700');
-            printWindow.document.write(pdfContent);
-            printWindow.document.close();
+            openLaudoPdf({
+                reportHTML: reportContent.innerHTML,
+                generatedAt: laudoNowBR(),
+                documentId: analysisId ? String(analysisId).slice(0, 8).toUpperCase() : '',
+                responsible,
+                meta: [
+                    { label: 'Região', value: examMeta.exam_type },
+                    { label: 'Referências usadas', value: refs > 0 ? `${refs} ${refs === 1 ? 'imagem' : 'imagens'}` : 'Sem referência' },
+                    { label: 'Imagens analisadas', value: String(images.length) },
+                ],
+                clinicalInfo: userDesc,
+                images,
+            });
         }
 
         const feedbackCard = document.getElementById('feedback-card');

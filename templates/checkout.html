@@ -3,55 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Three Health –
-  {%- if default_plan == 'mensal' %} Plano Mensal
-  {%- elif default_plan == 'semestral' %} Plano Semestral
-  {%- else %} Plano Anual
-  {%- endif %}</title>
-<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap">
+<title>
+  {%- if default_plan == 'mensal' %}Contratar plano mensal
+  {%- elif default_plan == 'semestral' %}Contratar plano semestral
+  {%- else %}Contratar plano anual
+  {%- endif %} — Three Health</title>
+{% import "_layout.html" as layout %}
+{{ layout.head_assets() }}
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #f0f4f8;
-  min-height: 100vh;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 2rem 1rem;
-}
-
-.card {
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 4px 24px rgba(0,0,0,.10);
-  max-width: 520px;
-  width: 100%;
-  padding: 2.5rem 2rem;
-}
-
-/* ── Logo ── */
-.logo { display: inline-flex; flex-direction: column; align-items: flex-start; margin-bottom: 1.5rem; text-decoration: none; }
-.logo-row { display: flex; align-items: center; gap: 10px; }
-.logo-lines { display: flex; flex-direction: column; gap: 5px; padding-bottom: 2px; }
-.logo-lines span { display: block; height: 5px; border-radius: 3px; background: #22C97A; }
-.logo-lines span:nth-child(1) { width: 34px; }
-.logo-lines span:nth-child(2) { width: 27px; }
-.logo-lines span:nth-child(3) { width: 20px; }
-.logo-wordmark { font-size: 2rem; font-weight: 800; color: #1B72E8; letter-spacing: -0.5px; line-height: 1; }
-.logo-underline { width: 100%; height: 2px; background: #1B72E8; border-radius: 1px; margin-top: 5px; }
-
-h1 { font-size: 1.4rem; font-weight: 800; color: #1e293b; margin-bottom: .3rem; }
-.subtitle { color: #64748b; font-size: .9rem; margin-bottom: 1.25rem; }
+.auth-page { justify-content: flex-start; padding: 2rem 1rem; }
+.auth-card { max-width: 520px; }
+.auth-card .subtitle { font-size: .9rem; margin-bottom: 1.25rem; }
+.auth-card label { font-size: .82rem; }
+.auth-card input[type="text"], .auth-card input[type="email"],
+.auth-card input[type="tel"], .auth-card input[type="password"] { padding: .65rem .9rem; font-size: .92rem; }
 
 /* ── Section label ── */
 .sec-label {
   font-size: .75rem;
   font-weight: 800;
-  color: #94a3b8;
+  color: var(--text-subtle);
   text-transform: uppercase;
   letter-spacing: .7px;
   margin-bottom: .55rem;
@@ -62,7 +33,7 @@ h1 { font-size: 1.4rem; font-weight: 800; color: #1e293b; margin-bottom: .3rem; 
 @media (max-width: 420px) { .plans { grid-template-columns: 1fr; } }
 
 .plan-card {
-  border: 2px solid #e5e7eb;
+  border: 2px solid var(--border);
   border-radius: 12px;
   padding: .85rem .65rem;
   cursor: pointer;
@@ -71,106 +42,92 @@ h1 { font-size: 1.4rem; font-weight: 800; color: #1e293b; margin-bottom: .3rem; 
   text-align: center;
   user-select: none;
 }
-.plan-card:hover { border-color: #93c5fd; }
-.plan-card.selected { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.14); background: #eff6ff; }
+.plan-card:hover { border-color: var(--primary-border); }
+.plan-card.selected { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); background: var(--primary-light); }
 
 .plan-badge {
   position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
-  background: #16a34a; color: #fff; font-size: .62rem; font-weight: 800;
+  background: var(--success); color: #fff; font-size: .62rem; font-weight: 800;
   letter-spacing: .5px; text-transform: uppercase; padding: 2px 8px;
   border-radius: 20px; white-space: nowrap;
 }
-.plan-badge.popular { background: #2563eb; }
+.plan-badge.popular { background: var(--primary); }
 
-.plan-title { font-size: .75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: .3rem; }
-.plan-price { font-size: 1.4rem; font-weight: 800; color: #1e293b; line-height: 1; margin-bottom: .15rem; }
-.plan-price span { font-size: .8rem; font-weight: 600; color: #64748b; }
-.plan-per-month { font-size: .72rem; color: #16a34a; font-weight: 700; }
-.plan-duration { font-size: .68rem; color: #94a3b8; margin-top: .2rem; }
+.plan-title { font-size: .75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: .3rem; }
+.plan-price { font-size: 1.4rem; font-weight: 800; color: var(--text); line-height: 1; margin-bottom: .15rem; }
+.plan-price span { font-size: .8rem; font-weight: 600; color: var(--text-muted); }
+.plan-per-month { font-size: .72rem; color: var(--success); font-weight: 700; }
+.plan-duration { font-size: .68rem; color: var(--text-subtle); margin-top: .2rem; }
 
 /* ── Payment method selector ── */
 .payment-methods { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .6rem; margin-bottom: 1.25rem; }
 
 .pm-card {
-  border: 2px solid #e5e7eb; border-radius: 10px; padding: .7rem .5rem;
+  border: 2px solid var(--border); border-radius: 10px; padding: .7rem .5rem;
   cursor: pointer; text-align: center;
   transition: border-color .18s, box-shadow .18s; user-select: none;
 }
-.pm-card:hover { border-color: #93c5fd; }
-.pm-card.selected { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.14); background: #eff6ff; }
-.pm-icon { font-size: 1.4rem; display: block; margin-bottom: .25rem; }
-.pm-name { font-size: .8rem; font-weight: 700; color: #374151; }
-.pm-desc { font-size: .67rem; color: #94a3b8; margin-top: .1rem; }
+.pm-card:hover { border-color: var(--primary-border); }
+.pm-card.selected { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); background: var(--primary-light); }
+.pm-icon { display: flex; justify-content: center; color: var(--primary); margin-bottom: .35rem; }
+.pm-name { font-size: .8rem; font-weight: 700; color: var(--text-label); }
+.pm-desc { font-size: .67rem; color: var(--text-subtle); margin-top: .1rem; }
 
 /* ── Features ── */
 .features {
   display: grid; grid-template-columns: 1fr 1fr; gap: .35rem;
   margin-bottom: 1.25rem; padding: .9rem 1rem;
-  background: #f8fafc; border-radius: 10px;
+  background: var(--surface-muted); border-radius: 10px;
 }
-.feature { font-size: .8rem; color: #374151; display: flex; align-items: center; gap: .3rem; }
-.feature::before { content: "✅"; font-size: .72rem; }
-
-/* ── Divider ── */
-.divider { border: none; border-top: 1px solid #e5e7eb; margin: 1.1rem 0; }
+.feature { font-size: .8rem; color: var(--text-label); display: flex; align-items: center; gap: .3rem; }
+.feature::before { content: "✓"; color: var(--success); font-weight: 800; }
 
 /* ── Form fields ── */
 .field-group { margin-bottom: .9rem; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 
-label { display: block; font-size: .82rem; font-weight: 700; color: #374151; margin-bottom: .3rem; }
-
-input[type="text"], input[type="email"], input[type="tel"], input[type="password"] {
-  width: 100%; padding: .65rem .9rem;
-  border: 1.5px solid #d1d5db; border-radius: 8px;
-  font-size: .92rem; color: #1e293b;
-  transition: border-color .18s; outline: none;
-  font-family: inherit;
-}
-input:focus { border-color: #3b82f6; }
-input::placeholder { color: #9ca3af; }
 
 /* ── Seção de senha ── */
 .senha-section {
-  background: #f8fafc;
-  border: 1.5px solid #e2e8f0;
+  background: var(--surface-muted);
+  border: 1.5px solid var(--border);
   border-radius: 12px;
   padding: 1rem;
   margin-bottom: 1rem;
 }
 .senha-hint {
   font-size: .78rem;
-  color: #64748b;
+  color: var(--text-muted);
   margin-bottom: .85rem;
   line-height: 1.45;
 }
 .pw-wrap { position: relative; }
-.pw-wrap input { padding-right: 2.8rem; }
+.auth-card .pw-wrap input { padding-right: 2.8rem; }
 .pw-toggle-co {
   position: absolute; right: .75rem; top: 50%; transform: translateY(-50%);
-  background: none; border: none; cursor: pointer; color: #94a3b8;
+  background: none; border: none; cursor: pointer; color: var(--text-subtle);
   font-size: .88rem; padding: 0; line-height: 1;
 }
-.pw-toggle-co:hover { color: #64748b; }
+.pw-toggle-co:hover { color: var(--text-muted); }
 .strength-bar-co {
   height: 3px; border-radius: 2px; margin-top: .35rem;
-  background: #e5e7eb; overflow: hidden;
+  background: var(--border); overflow: hidden;
 }
 .strength-fill-co {
   height: 100%; border-radius: 2px;
   transition: width .3s, background .3s;
   width: 0%;
 }
-.strength-label-co { font-size: .7rem; color: #94a3b8; margin-top: .2rem; display: block; }
+.strength-label-co { font-size: .7rem; color: var(--text-subtle); margin-top: .2rem; display: block; }
 .match-hint-co { font-size: .7rem; margin-top: .2rem; display: block; min-height: .9rem; }
-.match-ok-co  { color: #16a34a; }
-.match-err-co { color: #dc2626; }
+.match-ok-co  { color: var(--success); }
+.match-err-co { color: var(--danger); }
 
 /* ── Card section ── */
 #card-section {
   display: none;
-  background: #f8fafc;
-  border: 1.5px solid #e2e8f0;
+  background: var(--surface-muted);
+  border: 1.5px solid var(--border);
   border-radius: 12px;
   padding: 1rem;
   margin-bottom: 1rem;
@@ -178,93 +135,74 @@ input::placeholder { color: #9ca3af; }
 #card-section.visible { display: block; }
 
 .card-section-title {
-  font-size: .8rem; font-weight: 800; color: #64748b;
+  font-size: .8rem; font-weight: 800; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: .5px;
   margin-bottom: .85rem;
   display: flex; align-items: center; gap: .4rem;
 }
 
-/* ── Buttons ── */
-.btn-pay {
-  width: 100%; padding: .85rem;
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  color: #fff; font-size: 1rem; font-weight: 700;
-  border: none; border-radius: 10px; cursor: pointer;
-  transition: opacity .2s, transform .1s; font-family: inherit;
-}
-.btn-pay:hover { opacity: .92; transform: translateY(-1px); }
-.btn-pay:active { transform: translateY(0); }
-.btn-pay:disabled { opacity: .55; cursor: not-allowed; transform: none; }
-
-/* ── Flash / error ── */
-.flash {
-  background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c;
-  border-radius: 8px; padding: .7rem 1rem; font-size: .85rem;
-  margin-bottom: 1rem;
-}
-
 /* ── Trust bar ── */
 .trust-bar {
   display: flex; align-items: center; justify-content: center;
-  gap: .4rem; margin-top: .9rem; color: #6b7280; font-size: .75rem;
+  gap: .4rem; margin-top: .9rem; color: var(--text-muted); font-size: .75rem;
 }
-.trust-bar svg { flex-shrink: 0; color: #9ca3af; }
+.trust-bar svg { flex-shrink: 0; color: var(--text-subtle); }
 .trust-bar .methods { display: flex; align-items: center; gap: .3rem; margin-left: .2rem; }
 .method-badge {
-  background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 4px;
-  padding: 1px 5px; font-size: .67rem; font-weight: 700; color: #374151;
+  background: var(--surface-muted); border: 1px solid var(--border); border-radius: 4px;
+  padding: 1px 5px; font-size: .67rem; font-weight: 700; color: var(--text-label);
 }
 
 /* ── Footer links ── */
 .footer-links {
-  border-top: 1px solid #f1f5f9; margin-top: 1.1rem; padding-top: 1rem;
+  border-top: 1px solid var(--border); margin-top: 1.1rem; padding-top: 1rem;
   display: flex; flex-direction: column; gap: .5rem; align-items: center;
 }
-.link-recover { font-size: .82rem; color: #1d4ed8; text-decoration: none; font-weight: 600; }
+.link-recover { font-size: .82rem; color: var(--primary); text-decoration: none; font-weight: 600; }
 .link-recover:hover { text-decoration: underline; }
-.link-back { font-size: .78rem; color: #9ca3af; text-decoration: none; }
-.link-back:hover { color: #6b7280; }
+.link-back { font-size: .78rem; color: var(--text-subtle); text-decoration: none; }
+.link-back:hover { color: var(--text-muted); }
 
 /* ═══════════════════════════════════════════════════════════
    TELA DE RESULTADO DO PAGAMENTO
    ═══════════════════════════════════════════════════════════ */
 #result-section { display: none; }
 
-.result-icon { font-size: 3rem; text-align: center; margin-bottom: .75rem; }
-.result-title { font-size: 1.3rem; font-weight: 800; color: #1e293b; text-align: center; margin-bottom: .4rem; }
-.result-subtitle { font-size: .9rem; color: #64748b; text-align: center; margin-bottom: 1.25rem; line-height: 1.5; }
+.result-icon { text-align: center; margin-bottom: .75rem; }
+.result-title { font-size: 1.3rem; font-weight: 800; color: var(--text); text-align: center; margin-bottom: .4rem; }
+.result-subtitle { font-size: .9rem; color: var(--text-muted); text-align: center; margin-bottom: 1.25rem; line-height: 1.5; }
 
 /* PIX */
 .pix-qr-wrap { text-align: center; margin-bottom: 1rem; }
-.pix-qr-wrap img { width: 180px; height: 180px; border-radius: 8px; border: 1px solid #e5e7eb; }
+.pix-qr-wrap img { width: 180px; height: 180px; border-radius: 8px; border: 1px solid var(--border); }
 
 .copy-box {
-  background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px;
+  background: var(--surface-muted); border: 1.5px solid var(--border); border-radius: 10px;
   padding: .7rem .9rem; margin-bottom: 1rem;
   display: flex; align-items: center; gap: .6rem;
 }
 .copy-box .copy-text {
-  flex: 1; font-size: .72rem; color: #475569;
+  flex: 1; font-size: .72rem; color: var(--text-muted);
   word-break: break-all; font-family: monospace; line-height: 1.4;
 }
 .btn-copy {
   flex-shrink: 0; padding: .4rem .75rem;
-  background: #1d4ed8; color: #fff; font-size: .75rem; font-weight: 700;
+  background: var(--primary); color: #fff; font-size: .75rem; font-weight: 700;
   border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;
   font-family: inherit; transition: opacity .18s;
 }
 .btn-copy:hover { opacity: .85; }
-.btn-copy.copied { background: #16a34a; }
+.btn-copy.copied { background: var(--success); }
 
 /* Boleto */
 .btn-boleto-pdf {
-  display: block; width: 100%; padding: .75rem;
-  background: #f1f5f9; color: #1e293b; font-size: .9rem; font-weight: 700;
-  border: 1.5px solid #e2e8f0; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; gap: .4rem; width: 100%; padding: .75rem;
+  background: var(--border); color: var(--text); font-size: .9rem; font-weight: 700;
+  border: 1.5px solid var(--border); border-radius: 10px;
   text-align: center; text-decoration: none; cursor: pointer;
   margin-bottom: 1rem; font-family: inherit; transition: background .18s;
 }
-.btn-boleto-pdf:hover { background: #e2e8f0; }
+.btn-boleto-pdf:hover { background: var(--border); }
 
 /* Status polling */
 .status-box {
@@ -272,9 +210,9 @@ input::placeholder { color: #9ca3af; }
   font-size: .85rem; font-weight: 600; margin-bottom: 1rem;
   display: flex; align-items: center; gap: .5rem;
 }
-.status-waiting { background: #fefce8; border: 1px solid #fde68a; color: #92400e; }
-.status-confirmed { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
-.status-error { background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; }
+.status-waiting { background: var(--warning-light); border: 1px solid var(--warning-border); color: var(--warning-dark); }
+.status-confirmed { background: var(--success-light); border: 1px solid var(--success-border); color: var(--success-dark); }
+.status-error { background: var(--danger-light); border: 1px solid var(--danger-border); color: var(--danger-dark); }
 
 .spinner {
   width: 14px; height: 14px; border: 2px solid currentColor;
@@ -283,19 +221,13 @@ input::placeholder { color: #9ca3af; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.note-small { font-size: .75rem; color: #94a3b8; text-align: center; line-height: 1.5; }
+.note-small { font-size: .75rem; color: var(--text-subtle); text-align: center; line-height: 1.5; }
 </style>
 </head>
-<body>
+<body class="auth-page">
 
-<div class="card">
-  <div class="logo">
-    <div class="logo-row">
-      <div class="logo-lines"><span></span><span></span><span></span></div>
-      <span class="logo-wordmark">health</span>
-    </div>
-    <div class="logo-underline"></div>
-  </div>
+<div class="auth-card">
+  {{ layout.logo() }}
 
   <!-- ═══════════ TELA DE CHECKOUT ═══════════ -->
   <div id="checkout-section">
@@ -323,33 +255,33 @@ input::placeholder { color: #9ca3af; }
       justify-content: space-between;
       gap: .75rem;
       {% if default_plan == 'semestral' %}
-        background: #eff6ff; border: 2px solid #2563eb;
+        background: var(--primary-light); border: 2px solid var(--primary);
       {% elif default_plan == 'anual' %}
-        background: #f0fdf4; border: 2px solid #16a34a;
+        background: var(--success-light); border: 2px solid var(--success);
       {% else %}
-        background: #f8fafc; border: 2px solid #e2e8f0;
+        background: var(--surface-muted); border: 2px solid var(--border);
       {% endif %}
     ">
       <div>
-        <div style="font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.6px; color:#94a3b8; margin-bottom:.2rem;">
+        <div style="font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.6px; color:var(--text-subtle); margin-bottom:.2rem;">
           {% if default_plan == 'mensal' %}Mensal
           {% elif default_plan == 'semestral' %}Semestral · Mais popular
           {% else %}Anual · Melhor valor
           {% endif %}
         </div>
-        <div style="font-size:1.5rem; font-weight:800; color:#1e293b; line-height:1;">
-          {% if default_plan == 'mensal' %}R$&nbsp;60,00 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/mês</span>
-          {% elif default_plan == 'semestral' %}R$&nbsp;50,00 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/mês</span>
-          {% else %}R$&nbsp;34,90 <span style="font-size:.85rem; font-weight:600; color:#64748b;">/mês</span>
+        <div style="font-size:1.5rem; font-weight:800; color:var(--text); line-height:1;">
+          {% if default_plan == 'mensal' %}R$&nbsp;60,00 <span style="font-size:.85rem; font-weight:600; color:var(--text-muted);">/mês</span>
+          {% elif default_plan == 'semestral' %}R$&nbsp;50,00 <span style="font-size:.85rem; font-weight:600; color:var(--text-muted);">/mês</span>
+          {% else %}R$&nbsp;34,90 <span style="font-size:.85rem; font-weight:600; color:var(--text-muted);">/mês</span>
           {% endif %}
         </div>
         {% if default_plan == 'semestral' %}
-          <div style="font-size:.75rem; color:#94a3b8; font-weight:600; margin-top:.15rem; text-decoration:line-through;">R$ 300,00 / 6 meses</div>
+          <div style="font-size:.75rem; color:var(--text-subtle); font-weight:600; margin-top:.15rem; text-decoration:line-through;">R$ 300,00 / 6 meses</div>
         {% elif default_plan == 'anual' %}
-          <div style="font-size:.75rem; color:#94a3b8; font-weight:600; margin-top:.15rem; text-decoration:line-through;">R$ 418,00 / ano</div>
+          <div style="font-size:.75rem; color:var(--text-subtle); font-weight:600; margin-top:.15rem; text-decoration:line-through;">R$ 418,00 / ano</div>
         {% endif %}
       </div>
-      <a href="/planos" style="font-size:.78rem; color:#6b7280; text-decoration:none; white-space:nowrap; flex-shrink:0;">
+      <a href="/planos" style="font-size:.78rem; color:var(--text-muted); text-decoration:none; white-space:nowrap; flex-shrink:0;">
         Trocar plano →
       </a>
     </div>
@@ -367,14 +299,14 @@ input::placeholder { color: #9ca3af; }
           <div class="plan-badge popular">Mais popular</div>
           <div class="plan-title">Semestral</div>
           <div class="plan-price">R$&nbsp;50<span>/mês</span></div>
-          <div class="plan-per-month" style="color:#94a3b8;text-decoration:line-through;font-weight:600;">R$ 300/6 meses</div>
+          <div class="plan-per-month" style="color:var(--text-subtle);text-decoration:line-through;font-weight:600;">R$ 300/6 meses</div>
           <div class="plan-duration">6 meses · economia 17%</div>
         </div>
         <div class="plan-card" data-plan="anual" onclick="selectPlan('anual')">
           <div class="plan-badge">Melhor valor</div>
           <div class="plan-title">Anual</div>
           <div class="plan-price">R$&nbsp;34,90<span>/mês</span></div>
-          <div class="plan-per-month" style="color:#94a3b8;text-decoration:line-through;font-weight:600;">R$ 418/ano</div>
+          <div class="plan-per-month" style="color:var(--text-subtle);text-decoration:line-through;font-weight:600;">R$ 418/ano</div>
           <div class="plan-duration">12 meses · economia 42%</div>
         </div>
       </div>
@@ -384,17 +316,17 @@ input::placeholder { color: #9ca3af; }
     <p class="sec-label">Forma de pagamento</p>
     <div class="payment-methods" id="payment-selector">
       <div class="pm-card" data-billing="PIX" onclick="selectBilling('PIX')">
-        <span class="pm-icon">⚡</span>
+        <span class="pm-icon">{{ layout.icon("zap", 22) }}</span>
         <div class="pm-name">PIX</div>
         <div class="pm-desc">Aprovação imediata</div>
       </div>
       <div class="pm-card" data-billing="BOLETO" onclick="selectBilling('BOLETO')">
-        <span class="pm-icon">🏦</span>
+        <span class="pm-icon">{{ layout.icon("landmark", 22) }}</span>
         <div class="pm-name">Boleto</div>
         <div class="pm-desc">Até 3 dias úteis</div>
       </div>
       <div class="pm-card" data-billing="CREDIT_CARD" onclick="selectBilling('CREDIT_CARD')">
-        <span class="pm-icon">💳</span>
+        <span class="pm-icon">{{ layout.icon("credit-card", 22) }}</span>
         <div class="pm-name">Cartão</div>
         <div class="pm-desc">Crédito ou débito</div>
       </div>
@@ -418,7 +350,7 @@ input::placeholder { color: #9ca3af; }
       {% endfor %}
     {% endwith %}
 
-    <div id="form-error" class="flash" style="display:none"></div>
+    <div id="form-error" class="flash flash-error" style="display:none"></div>
 
     <form id="pay-form" autocomplete="on">
       <input type="hidden" name="plan" id="plan-input" value="{{ default_plan }}">
@@ -451,7 +383,7 @@ input::placeholder { color: #9ca3af; }
 
       <!-- Senha de acesso -->
       <div class="senha-section">
-        <p class="sec-label" style="margin-bottom:.6rem">🔑 Sua senha de acesso</p>
+        <p class="sec-label" style="margin-bottom:.6rem">{{ layout.icon("lock", 14) }} Sua senha de acesso</p>
         <p class="senha-hint">Crie uma senha para entrar na plataforma sempre que quiser, sem precisar do e-mail de compra.</p>
 
         <div class="field-group">
@@ -461,7 +393,7 @@ input::placeholder { color: #9ca3af; }
                    placeholder="Mínimo 8 caracteres"
                    minlength="8" required autocomplete="new-password"
                    oninput="updateStrengthCO(this.value); checkMatchCO()">
-            <button type="button" class="pw-toggle-co" onclick="togglePwCO('senha_acesso', this)" tabindex="-1">👁</button>
+            <button type="button" class="pw-toggle-co pw-toggle" onclick="togglePwCO('senha_acesso', this)" tabindex="-1" aria-label="Mostrar senha">{{ layout.icon("eye", 18, "icon-show") }}{{ layout.icon("eye-off", 18, "icon-hide") }}</button>
           </div>
           <div class="strength-bar-co"><div class="strength-fill-co" id="co-strength-fill"></div></div>
           <span class="strength-label-co" id="co-strength-label"></span>
@@ -474,7 +406,7 @@ input::placeholder { color: #9ca3af; }
                    placeholder="Repita a senha"
                    minlength="8" required autocomplete="new-password"
                    oninput="checkMatchCO()">
-            <button type="button" class="pw-toggle-co" onclick="togglePwCO('senha_confirmar', this)" tabindex="-1">👁</button>
+            <button type="button" class="pw-toggle-co pw-toggle" onclick="togglePwCO('senha_confirmar', this)" tabindex="-1" aria-label="Mostrar senha">{{ layout.icon("eye", 18, "icon-show") }}{{ layout.icon("eye-off", 18, "icon-hide") }}</button>
           </div>
           <span class="match-hint-co" id="co-match-hint"></span>
         </div>
@@ -482,7 +414,7 @@ input::placeholder { color: #9ca3af; }
 
       <!-- Dados do cartão (visível só quando Cartão for selecionado) -->
       <div id="card-section">
-        <div class="card-section-title">💳 Dados do cartão</div>
+        <div class="card-section-title">{{ layout.icon("credit-card", 16) }} Dados do cartão</div>
 
         <div class="field-group">
           <label for="card_number">Número do cartão</label>
@@ -531,7 +463,7 @@ input::placeholder { color: #9ca3af; }
         </div>
       </div>
 
-      <button type="submit" class="btn-pay" id="btn-pay">
+      <button type="submit" class="btn-primary btn-block" id="btn-pay">
         Contratar Plano
       </button>
     </form>
@@ -560,7 +492,7 @@ input::placeholder { color: #9ca3af; }
 
     <!-- PIX -->
     <div id="pix-result" style="display:none">
-      <div class="result-icon">⚡</div>
+      <div class="result-icon"><span class="icon-badge">{{ layout.icon("zap", 26) }}</span></div>
       <div class="result-title">Pague via PIX</div>
       <div class="result-subtitle">Escaneie o QR code ou copie o código abaixo.<br>A confirmação é <strong>imediata</strong> após o pagamento.</div>
 
@@ -583,7 +515,7 @@ input::placeholder { color: #9ca3af; }
 
     <!-- Boleto -->
     <div id="boleto-result" style="display:none">
-      <div class="result-icon">🏦</div>
+      <div class="result-icon"><span class="icon-badge">{{ layout.icon("landmark", 26) }}</span></div>
       <div class="result-title">Boleto gerado!</div>
       <div class="result-subtitle">Copie a linha digitável ou abra o boleto para imprimir/pagar pelo app do banco.</div>
 
@@ -594,7 +526,7 @@ input::placeholder { color: #9ca3af; }
       </div>
 
       <a id="boleto-pdf-link" href="#" target="_blank" rel="noopener" class="btn-boleto-pdf">
-        🖨️ Abrir / Imprimir boleto
+        {{ layout.icon("printer", 16) }} Abrir / imprimir boleto
       </a>
 
       <div class="status-box status-waiting" id="boleto-status">
@@ -606,7 +538,7 @@ input::placeholder { color: #9ca3af; }
 
     <!-- Cartão: aguardando -->
     <div id="card-result" style="display:none">
-      <div class="result-icon" id="card-icon">⏳</div>
+      <div class="result-icon" id="card-icon"><span class="icon-badge">{{ layout.icon("clock", 26) }}</span></div>
       <div class="result-title" id="card-title">Processando pagamento…</div>
       <div class="result-subtitle" id="card-subtitle">Aguarde enquanto confirmamos seu cartão.</div>
     </div>
@@ -769,17 +701,17 @@ function showBoletoResult(data) {
 function showCardResult(data) {
   document.getElementById('card-result').style.display = 'block';
   if (data.confirmed) {
-    document.getElementById('card-icon').textContent = '🎉';
+    document.getElementById('card-icon').innerHTML = {{ ('<span class="icon-badge is-success">'|safe ~ layout.icon("check-circle", 26) ~ '</span>'|safe)|tojson }};
     document.getElementById('card-title').textContent = 'Pagamento aprovado!';
     document.getElementById('card-subtitle').textContent = 'Seu acesso foi liberado. Redirecionando…';
     const dest = _setupToken ? '/login/definir-senha?t=' + encodeURIComponent(_setupToken) : '/';
     setTimeout(() => { window.location.href = dest; }, 2000);
   } else {
-    document.getElementById('card-icon').textContent = '❌';
+    document.getElementById('card-icon').innerHTML = {{ ('<span class="icon-badge is-danger">'|safe ~ layout.icon("x-circle", 26) ~ '</span>'|safe)|tojson }};
     document.getElementById('card-title').textContent = 'Pagamento não aprovado';
     document.getElementById('card-subtitle').innerHTML =
       'Verifique os dados do cartão e tente novamente.<br>' +
-      '<a href="/checkout" style="color:#1d4ed8;font-weight:700">← Voltar ao checkout</a>';
+      '<a href="/checkout" style="color:var(--primary);font-weight:700">← Voltar ao checkout</a>';
   }
 }
 
@@ -794,7 +726,7 @@ function startPolling(paymentId, statusBoxId) {
         if (data.setup_token) _setupToken = data.setup_token;
         const box = document.getElementById(statusBoxId);
         box.className = 'status-box status-confirmed';
-        box.innerHTML = '✅ Pagamento confirmado! Redirecionando…';
+        box.innerHTML = {{ layout.icon("check-circle", 16)|tojson }} + '<span>Pagamento confirmado! Redirecionando…</span>';
         const dest = _setupToken ? '/login/definir-senha?t=' + encodeURIComponent(_setupToken) : '/';
         setTimeout(() => { window.location.href = dest; }, 2000);
       }
@@ -823,8 +755,10 @@ function copyText(textElId, btnId) {
 // ── Senha de acesso ──────────────────────────────────────────────────────────
 function togglePwCO(inputId, btn) {
   const inp = document.getElementById(inputId);
-  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
-  else { inp.type = 'password'; btn.textContent = '👁'; }
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  btn.classList.toggle('is-visible', show);
+  btn.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
 }
 
 function updateStrengthCO(val) {

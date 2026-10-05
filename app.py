@@ -183,9 +183,28 @@ def _is_admin(req) -> bool:
         return False
 
 
+_LOOPBACK_ADDRS = {"127.0.0.1", "::1"}
+
+
+def _is_local_dev_request(req) -> bool:
+    """Desenvolvimento local: acesso liberado sem plano.
+
+    Só vale fora da Vercel e de produção (_is_local_runtime) e para requisições
+    vindas da própria máquina — nunca pelo cabeçalho Host, que pode ser forjado.
+    LOCAL_PREMIUM_BYPASS=0 desativa (útil para testar o fluxo de planos localmente).
+    """
+    if app.testing or not _is_local_runtime():
+        return False
+    if os.environ.get("LOCAL_PREMIUM_BYPASS", "1").strip().lower() in {"0", "false", "no"}:
+        return False
+    return (req.remote_addr or "") in _LOOPBACK_ADDRS
+
+
 def is_premium(req) -> bool:
     # Acesso admin também passa pela verificação de premium
     if _is_admin(req):
+        return True
+    if _is_local_dev_request(req):
         return True
     token = req.cookies.get(PREMIUM_COOKIE)
     if not token:
@@ -207,7 +226,7 @@ def premium_required(f):
             # Demais requisições: flash + redireciona para a homepage
             from markupsafe import Markup
             flash(Markup(
-                'Para analisar exames, <a href="/planos" style="color:#1d4ed8;font-weight:700;">contrate um plano</a>.'
+                'Para analisar exames, <a href="/planos" style="font-weight:700;">contrate um plano</a>.'
             ), "error")
             return redirect(url_for("index"))
         return f(*args, **kwargs)
@@ -216,6 +235,29 @@ def premium_required(f):
 
 BUILD_VERSION = get_build_version()
 app.jinja_env.globals["BUILD_VERSION"] = BUILD_VERSION
+
+
+_static_hashes: dict[str, str] = {}
+
+
+def static_url(filename: str) -> str:
+    """URL de um arquivo estático com ?v=<hash do conteúdo>.
+
+    O vercel.json manda o navegador guardar /static/* por 1 ano (immutable);
+    o hash muda a URL a cada alteração do arquivo e evita CSS/JS desatualizado.
+    """
+    version = None if app.debug else _static_hashes.get(filename)
+    if version is None:
+        try:
+            content = Path(app.static_folder, filename).read_bytes()
+        except OSError:
+            return url_for("static", filename=filename)
+        version = hashlib.sha256(content).hexdigest()[:10]
+        _static_hashes[filename] = version
+    return url_for("static", filename=filename, v=version)
+
+
+app.jinja_env.globals["static_url"] = static_url
 
 _SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
 if _SENTRY_DSN and _sentry_sdk:

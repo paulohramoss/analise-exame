@@ -3,23 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three Health — Análise de Exames por IA</title>
-    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Análise de exames por IA — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <style>
-        .multi-image-info {
-            background: #eaf2fd;
-            border: 1px solid #1B72E8;
-            border-radius: 8px;
-            padding: 0.6rem 0.9rem;
-            font-size: 0.82rem;
-            color: #155FC4;
-            margin-bottom: 0.75rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
         .image-thumbnails {
             display: flex;
             flex-wrap: wrap;
@@ -34,7 +22,7 @@
             height: 90px;
             border-radius: 8px;
             overflow: hidden;
-            border: 2px solid #1B72E8;
+            border: 2px solid var(--primary);
             background: #0a0a0a;
             flex-shrink: 0;
         }
@@ -52,7 +40,7 @@
             align-items: center;
             justify-content: center;
             background: #0f172a;
-            color: #bfdbfe;
+            color: var(--primary-border);
             font-size: 0.78rem;
             font-weight: 800;
             letter-spacing: 0.08em;
@@ -79,89 +67,121 @@
 
         .thumb-count {
             font-size: 0.78rem;
-            color: #64748b;
+            color: var(--text-muted);
             text-align: center;
             margin-top: 0.4rem;
         }
 
         .upload-area.has-files {
-            border-color: #1B72E8;
+            border-color: var(--primary);
             background: #f0f7ff;
         }
 
-        .header-actions {
+        /* ── Etapas do formulário ── */
+        .form-step {
+            padding: 1.25rem 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .form-step:first-of-type {
+            border-top: none;
+            padding-top: 0.25rem;
+        }
+
+        .form-step-head {
             display: flex;
-            align-items: center;
-            gap: 0.55rem;
-            flex-wrap: wrap;
+            align-items: flex-start;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
         }
 
-        .responsible-section {
-            border: 1px solid #bfdbfe;
-            border-radius: 10px;
-            padding: 1rem 1.1rem;
-            margin: 0.85rem 0 1rem;
-            background: #f8fafc;
-        }
-
-        .responsible-section-title {
-            display: flex;
-            align-items: center;
-            gap: 0.45rem;
-            color: #155FC4;
-            font-size: 0.95rem;
-            font-weight: 800;
-            margin-bottom: 0.25rem;
-        }
-
-        .responsible-section-hint {
-            display: block;
-            color: #64748b;
-            font-size: 0.78rem;
-            margin-bottom: 0.85rem;
-        }
-
-        .clinical-toggle {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: none;
-            border: 1.5px dashed #1B72E8;
-            border-radius: 8px;
-            padding: 0.55rem 1rem;
+        .form-step-toggle {
             width: 100%;
-            cursor: pointer;
-            font-family: inherit;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: #1B72E8;
-            margin-bottom: 0.6rem;
-            transition: background 0.18s, border-color 0.18s;
+            background: none;
+            border: none;
+            padding: 0;
+            margin-bottom: 0;
+            font: inherit;
+            color: inherit;
             text-align: left;
+            cursor: pointer;
         }
 
-        .clinical-toggle:hover {
-            background: #eaf2fd;
-            border-style: solid;
+        .form-step-toggle[aria-expanded="true"] {
+            margin-bottom: 1rem;
         }
 
-        .clinical-toggle-arrow {
+        .form-step-num {
+            flex: 0 0 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: #fff;
+            font-size: 0.85rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .form-step-title {
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .form-step-heading {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--text);
+            line-height: 1.75rem;
+        }
+
+        .form-step-toggle:hover .form-step-heading {
+            color: var(--primary);
+        }
+
+        .form-step-hint {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+
+        .form-step-tag {
+            font-size: 0.66rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            background: var(--surface-muted);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 0 0.5rem;
+            line-height: 1.5rem;
+        }
+
+        .form-step-arrow {
             margin-left: auto;
-            font-size: 0.75rem;
+            align-self: center;
+            display: inline-flex;
+            color: var(--primary);
             transition: transform 0.25s;
-            display: inline-block;
         }
 
-        .clinical-toggle.open .clinical-toggle-arrow {
+        .form-step-toggle[aria-expanded="true"] .form-step-arrow {
             transform: rotate(180deg);
         }
 
+        .form-step-body {
+            padding-left: calc(28px + 0.75rem);
+        }
+
         .clinical-section {
-            border: 1px solid #bfdbfe;
-            border-radius: 10px;
-            padding: 1rem 1.1rem;
-            margin-bottom: 1rem;
-            background: #f8fafc;
             display: none;
             animation: fadeSlideIn 0.22s ease;
         }
@@ -175,13 +195,6 @@
             to   { opacity: 1; transform: translateY(0); }
         }
 
-        .clinical-section-hint {
-            display: block;
-            color: #64748b;
-            font-size: 0.78rem;
-            margin-bottom: 0.85rem;
-        }
-
         .form-row {
             display: flex;
             gap: 0.75rem;
@@ -192,49 +205,73 @@
             min-width: 0;
         }
 
-        .responsible-section .form-group,
-        .clinical-section .form-group {
+        .form-step-body .form-group {
             margin-bottom: 0.75rem;
         }
 
-        .responsible-section label,
-        .clinical-section label {
+        .form-step-body .form-group label {
             display: block;
             font-weight: 600;
             font-size: 0.82rem;
             margin-bottom: 0.25rem;
-            color: #334155;
+            color: var(--text-label);
         }
 
-        .responsible-section input[type="text"],
-        .responsible-section select,
-        .clinical-section input[type="text"],
-        .clinical-section input[type="number"],
-        .clinical-section select,
-        .clinical-section textarea {
+        .form-step-body input[type="text"],
+        .form-step-body input[type="number"],
+        .form-step-body select,
+        .form-step-body textarea {
             width: 100%;
             padding: 0.5rem 0.65rem;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border-input);
             border-radius: 7px;
             font-family: inherit;
             font-size: 0.85rem;
-            background: #fff;
-            color: #1e293b;
-            transition: border-color 0.2s;
+            background: var(--surface);
+            color: var(--text);
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
 
-        .responsible-section input:focus,
-        .responsible-section select:focus,
-        .clinical-section input:focus,
-        .clinical-section select:focus,
-        .clinical-section textarea:focus {
+        .form-step-body input:focus,
+        .form-step-body select:focus,
+        .form-step-body textarea:focus {
             outline: none;
-            border-color: #1B72E8;
-            box-shadow: 0 0 0 3px #eaf2fd;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-ring);
         }
 
-        .clinical-section textarea {
+        .form-step-body textarea {
             resize: vertical;
+        }
+
+        .form-submit {
+            border-top: 1px solid var(--border);
+            padding-top: 1.25rem;
+        }
+
+        .form-submit .consent-check {
+            margin-bottom: 0;
+        }
+
+        .form-submit .field-error {
+            margin-bottom: 0.25rem;
+        }
+
+        #submit-btn {
+            margin-top: 1.25rem;
+        }
+
+        .consent-check.has-error {
+            border-color: var(--danger-border);
+            background: var(--danger-light);
+        }
+
+        .upload-area.has-error {
+            border-color: var(--danger-border);
+        }
+
+        @media (max-width: 540px) {
+            .form-step-body { padding-left: 0; }
         }
 
         @media (max-width: 540px) {
@@ -249,56 +286,40 @@
         .add-more-images-label {
             cursor: pointer;
             font-size: 0.82rem;
-            color: #1B72E8;
+            color: var(--primary);
             text-decoration: underline;
             display: block;
             text-align: center;
             margin-top: 0.4rem;
         }
 
-        .clinical-toggle-hint {
-            font-size: 0.75rem;
-            font-weight: 400;
-            color: #64748b;
-        }
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <div class="logo">
-                <div class="logo-row">
-                    <div class="logo-lines">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
-                    <span class="logo-wordmark">health</span>
-                </div>
-                <div class="logo-underline"></div>
-            </div>
-            <div class="header-actions">
-                {% if premium %}
-                <a href="/clinica/dashboard" class="btn-secondary">Dashboard</a>
-                <a href="/laudos" class="btn-secondary">Histórico</a>
-                <a href="/premium/logout" class="btn-secondary">Sair</a>
-                {% else %}
-                <a href="/login" class="btn-secondary">Entrar</a>
-                <a href="/planos" class="btn-secondary">Planos</a>
-                {% endif %}
-            </div>
-        </div>
-    </header>
+    {% call layout.site_header() %}
+        {% if premium %}
+            {{ layout.app_nav("analise") }}
+        {% else %}
+            <a href="/login" class="btn-secondary">Entrar</a>
+            <a href="/planos" class="btn-primary">Ver planos</a>
+        {% endif %}
+    {% endcall %}
 
     <main class="container">
         <!-- Aviso médico -->
         <div class="disclaimer-banner">
-            <span class="disclaimer-icon">⚕️</span>
-            <p>
-                <strong>Aviso CFM/LGPD:</strong> Esta ferramenta usa IA apenas como apoio à decisão clínica.
-                O resultado <strong>não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
-                Use somente com ciência do paciente e base legal adequada para o tratamento dos dados de saúde.
-            </p>
+            <span class="disclaimer-icon">{{ layout.icon("shield", 20) }}</span>
+            <div class="disclaimer-body">
+                <p><strong>Ferramenta de apoio à decisão clínica.</strong> O resultado não substitui a avaliação do médico responsável.</p>
+                <details class="disclaimer-details">
+                    <summary>Ler aviso CFM/LGPD completo</summary>
+                    <p>
+                        Esta ferramenta usa IA apenas como apoio à decisão clínica.
+                        O resultado <strong>não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
+                        Use somente com ciência do paciente e base legal adequada para o tratamento dos dados de saúde.
+                    </p>
+                </details>
+            </div>
         </div>
 
         <!-- Alertas Flash -->
@@ -306,7 +327,7 @@
             {% if messages %}
                 {% for category, message in messages %}
                     <div class="alert alert-{{ category }}">
-                        <span>{{ '❌' if category == 'error' else '✅' }}</span>
+                        {{ layout.icon('x-circle' if category == 'error' else 'check-circle') }}
                         {{ message }}
                     </div>
                 {% endfor %}
@@ -315,221 +336,226 @@
 
         <!-- Formulário de upload -->
         <div class="card upload-card">
-            <h2>Enviar Exame Ortopédico para Análise</h2>
+            <h2>Enviar exame para análise</h2>
             <p class="card-description">
-                Faça upload de uma ou mais imagens do exame ortopédico (RM, Raio-X, TC). O sistema compara com
-                referências anatômicas normais e gera um laudo musculoesquelético estruturado.
+                Envie imagens de RM, raio-X ou TC. A IA compara o exame com referências anatômicas normais
+                e gera um laudo musculoesquelético estruturado.
             </p>
 
-            <div class="multi-image-info">
-                <span>📎</span>
-                <span>Você pode enviar <strong>até {{ max_images|default(5) }} imagens</strong> por análise — diferentes planos, incidências ou sequências do mesmo exame.</span>
-            </div>
-
-            <form action="/analyze" method="POST" enctype="multipart/form-data" id="upload-form">
-                <div class="responsible-section">
-                    <div class="responsible-section-title">
-                        <span>👤</span>
-                        <span>Responsável pelo laudo</span>
-                    </div>
-                    <small class="responsible-section-hint">Opcional. Se preenchidas, aparecerão no cabeçalho do laudo e do PDF.</small>
-
-                    <div class="form-row">
-                        <div class="form-group form-group-half">
-                            <label for="responsible_name">Nome do responsável</label>
-                            <input type="text" name="responsible_name" id="responsible_name" placeholder="Ex: Dra. Ana Souza">
-                        </div>
-                        <div class="form-group form-group-half">
-                            <label for="responsible_role">Perfil profissional</label>
-                            <select name="responsible_role" id="responsible_role">
-                                <option value="">— Selecione —</option>
-                                <option value="Médico">Médico</option>
-                                <option value="Laudista">Laudista</option>
-                                <option value="Fisioterapeuta">Fisioterapeuta</option>
-                                <option value="Outro profissional de saúde">Outro profissional de saúde</option>
-                            </select>
+            <form action="/analyze" method="POST" enctype="multipart/form-data" id="upload-form" novalidate>
+                <!-- Etapa 1: imagens -->
+                <section class="form-step">
+                    <div class="form-step-head">
+                        <span class="form-step-num">1</span>
+                        <div class="form-step-title">
+                            <h3 class="form-step-heading">Imagens do exame</h3>
+                            <span class="form-step-hint">Até {{ max_images|default(5) }} imagens por análise: planos, incidências ou sequências do mesmo exame.</span>
                         </div>
                     </div>
-
-                    <div class="form-row">
-                        <div class="form-group form-group-half">
-                            <label for="responsible_register">Registro profissional</label>
-                            <input type="text" name="responsible_register" id="responsible_register" placeholder="Ex: CRM-SP 000000, CREFITO-3 000000-F">
+                    <div class="form-step-body">
+                        <div class="upload-area" id="upload-area">
+                            <input
+                                type="file"
+                                name="exam_images"
+                                id="exam_images"
+                                accept=".png,.jpg,.jpeg,.webp,.gif,.dcm"
+                                class="file-input"
+                                multiple
+                                required
+                            >
+                            <label for="exam_images" class="upload-label" id="upload-label">
+                                <span class="upload-icon icon-badge">{{ layout.icon("upload", 26) }}</span>
+                                <span class="upload-text">Clique para selecionar ou arraste as imagens aqui</span>
+                                <span class="upload-hint">RM · Raio-X · TC · DICOM, PNG, JPG, WEBP — Máximo 20MB por imagem · Até {{ max_images|default(5) }} imagens</span>
+                            </label>
+                            <div id="thumbnails-container">
+                                <div class="image-thumbnails" id="image-thumbnails"></div>
+                                <div class="thumb-count" id="thumb-count"></div>
+                                <label for="exam_images" class="add-more-images-label">
+                                    + Adicionar mais imagens
+                                </label>
+                            </div>
                         </div>
-                        <div class="form-group form-group-half">
-                            <label for="responsible_organization">Clínica ou instituição</label>
-                            <input type="text" name="responsible_organization" id="responsible_organization" placeholder="Ex: Clínica Movimento">
+                        <p class="field-error" id="images-error" hidden>{{ layout.icon("alert-triangle", 16) }} <span>Selecione pelo menos uma imagem do exame.</span></p>
+                    </div>
+                </section>
+
+                <!-- Etapa 2: contexto clínico (colapsável) -->
+                <section class="form-step">
+                    <button type="button" class="form-step-head form-step-toggle" id="clinical-toggle" aria-expanded="false" aria-controls="clinical-section">
+                        <span class="form-step-num">2</span>
+                        <span class="form-step-title">
+                            <span class="form-step-heading">Contexto clínico <span class="form-step-tag">Opcional</span></span>
+                            <span class="form-step-hint">Idade, queixa, lateralidade e histórico melhoram a precisão da análise.</span>
+                        </span>
+                        <span class="form-step-arrow">{{ layout.icon("chevron-down", 18) }}</span>
+                    </button>
+
+                    <div class="form-step-body clinical-section" id="clinical-section">
+                        <div class="form-row">
+                            <div class="form-group form-group-half">
+                                <label for="patient_age">Idade</label>
+                                <input type="number" name="patient_age" id="patient_age" min="1" max="120" placeholder="Ex: 38">
+                            </div>
+                            <div class="form-group form-group-half">
+                                <label for="patient_sex">Sexo</label>
+                                <select name="patient_sex" id="patient_sex">
+                                    <option value="">— Selecione —</option>
+                                    <option value="Masculino">Masculino</option>
+                                    <option value="Feminino">Feminino</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group form-group-half">
+                                <label for="laterality">Lateralidade</label>
+                                <select name="laterality" id="laterality">
+                                    <option value="">— Selecione —</option>
+                                    <option value="Direito">Direito (D)</option>
+                                    <option value="Esquerdo">Esquerdo (E)</option>
+                                    <option value="Bilateral">Bilateral</option>
+                                    <option value="Não aplicável">Não aplicável</option>
+                                </select>
+                            </div>
+                            <div class="form-group form-group-half">
+                                <label for="activity_level">Nível de atividade física</label>
+                                <select name="activity_level" id="activity_level">
+                                    <option value="">— Selecione —</option>
+                                    <option value="Sedentário">Sedentário</option>
+                                    <option value="Leve (caminhada, atividades domésticas)">Leve</option>
+                                    <option value="Moderado (exercício 2-3x/semana)">Moderado</option>
+                                    <option value="Ativo (exercício 4-5x/semana)">Ativo</option>
+                                    <option value="Atleta / Alta performance">Atleta / Alta performance</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="main_complaint">Queixa principal e sintomas</label>
+                            <textarea
+                                name="main_complaint"
+                                id="main_complaint"
+                                placeholder="Descreva a dor, limitação de movimento, instabilidade, estalos, inchaço — onde exatamente, quando piora, o que alivia..."
+                                rows="2"
+                            ></textarea>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group form-group-half">
+                                <label for="symptom_duration">Tempo de evolução dos sintomas</label>
+                                <input type="text" name="symptom_duration" id="symptom_duration" placeholder="Ex: 3 semanas, 6 meses, 2 anos">
+                            </div>
+                            <div class="form-group form-group-half">
+                                <label for="injury_mechanism">Mecanismo de lesão (se trauma)</label>
+                                <input type="text" name="injury_mechanism" id="injury_mechanism" placeholder="Ex: torção em valgo, queda, impacto direto, esforço repetitivo">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="previous_treatments">Tratamentos anteriores</label>
+                            <input type="text" name="previous_treatments" id="previous_treatments" placeholder="Ex: fisioterapia (3 meses), infiltração (2x), uso de anti-inflamatório, cirurgia anterior...">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="additional_info">Outras informações</label>
+                            <textarea
+                                name="additional_info"
+                                id="additional_info"
+                                placeholder="Ex: RM do joelho direito. Suspeita de lesão meniscal. Comorbidades, hipóteses diagnósticas..."
+                                rows="3"
+                            ></textarea>
                         </div>
                     </div>
-                </div>
+                </section>
 
-                <div class="upload-area" id="upload-area">
-                    <input
-                        type="file"
-                        name="exam_images"
-                        id="exam_images"
-                        accept=".png,.jpg,.jpeg,.webp,.gif,.dcm"
-                        class="file-input"
-                        multiple
-                        required
-                    >
-                    <label for="exam_images" class="upload-label" id="upload-label">
-                        <span class="upload-icon">📷</span>
-                        <span class="upload-text">Clique para selecionar ou arraste as imagens aqui</span>
-                        <span class="upload-hint">RM · Raio-X · TC · DICOM, PNG, JPG, WEBP — Máximo 20MB por imagem · Até {{ max_images|default(5) }} imagens</span>
+                <!-- Etapa 3: responsável -->
+                <section class="form-step">
+                    <div class="form-step-head">
+                        <span class="form-step-num">3</span>
+                        <div class="form-step-title">
+                            <h3 class="form-step-heading">Responsável pelo laudo <span class="form-step-tag">Opcional</span></h3>
+                            <span class="form-step-hint">Se preenchido, aparece no cabeçalho do laudo e do PDF.</span>
+                        </div>
+                    </div>
+                    <div class="form-step-body">
+                        <div class="form-row">
+                            <div class="form-group form-group-half">
+                                <label for="responsible_name">Nome do responsável</label>
+                                <input type="text" name="responsible_name" id="responsible_name" placeholder="Ex: Dra. Ana Souza">
+                            </div>
+                            <div class="form-group form-group-half">
+                                <label for="responsible_role">Perfil profissional</label>
+                                <select name="responsible_role" id="responsible_role">
+                                    <option value="">— Selecione —</option>
+                                    <option value="Médico">Médico</option>
+                                    <option value="Laudista">Laudista</option>
+                                    <option value="Fisioterapeuta">Fisioterapeuta</option>
+                                    <option value="Outro profissional de saúde">Outro profissional de saúde</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group form-group-half">
+                                <label for="responsible_register">Registro profissional</label>
+                                <input type="text" name="responsible_register" id="responsible_register" placeholder="Ex: CRM-SP 000000, CREFITO-3 000000-F">
+                            </div>
+                            <div class="form-group form-group-half">
+                                <label for="responsible_organization">Clínica ou instituição</label>
+                                <input type="text" name="responsible_organization" id="responsible_organization" placeholder="Ex: Clínica Movimento">
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="form-submit">
+                    <label class="consent-check">
+                        <input type="checkbox" name="privacy_consent" id="privacy_consent" value="accepted" required>
+                        <span>
+                            Confirmo que tenho autorização/base legal para processar as imagens e informações clínicas,
+                            que o paciente foi informado sobre o uso de IA como apoio, e que o resultado será revisado por médico responsável.
+                        </span>
                     </label>
-                    <div id="thumbnails-container">
-                        <div class="image-thumbnails" id="image-thumbnails"></div>
-                        <div class="thumb-count" id="thumb-count"></div>
-                        <label for="exam_images" class="add-more-images-label">
-                            + Adicionar mais imagens
-                        </label>
-                    </div>
+                    <p class="field-error" id="consent-error" hidden>{{ layout.icon("alert-triangle", 16) }} <span>Confirme o consentimento para enviar o exame.</span></p>
+
+                    <button type="submit" class="btn-primary" id="submit-btn">
+                        {{ layout.icon("scan", 18, "btn-icon") }}
+                        <span class="submit-label">Analisar exame</span>
+                    </button>
                 </div>
-
-                <!-- Histórico Clínico do Paciente (colapsável) -->
-                <button type="button" class="clinical-toggle" id="clinical-toggle">
-                    <span>➕ Adicionar Histórico Clínico do Paciente</span>
-                    <span class="clinical-toggle-hint">&nbsp;· melhora a precisão da análise</span>
-                    <span class="clinical-toggle-arrow">▼</span>
-                </button>
-
-                <div class="clinical-section" id="clinical-section">
-                    <small class="clinical-section-hint">Quanto mais informação, mais precisa e assertiva será a análise.</small>
-
-                    <div class="form-row">
-                        <div class="form-group form-group-half">
-                            <label for="patient_age">Idade</label>
-                            <input type="number" name="patient_age" id="patient_age" min="1" max="120" placeholder="Ex: 38">
-                        </div>
-                        <div class="form-group form-group-half">
-                            <label for="patient_sex">Sexo</label>
-                            <select name="patient_sex" id="patient_sex">
-                                <option value="">— Selecione —</option>
-                                <option value="Masculino">Masculino</option>
-                                <option value="Feminino">Feminino</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group form-group-half">
-                            <label for="laterality">Lateralidade</label>
-                            <select name="laterality" id="laterality">
-                                <option value="">— Selecione —</option>
-                                <option value="Direito">Direito (D)</option>
-                                <option value="Esquerdo">Esquerdo (E)</option>
-                                <option value="Bilateral">Bilateral</option>
-                                <option value="Não aplicável">Não aplicável</option>
-                            </select>
-                        </div>
-                        <div class="form-group form-group-half">
-                            <label for="activity_level">Nível de Atividade Física</label>
-                            <select name="activity_level" id="activity_level">
-                                <option value="">— Selecione —</option>
-                                <option value="Sedentário">Sedentário</option>
-                                <option value="Leve (caminhada, atividades domésticas)">Leve</option>
-                                <option value="Moderado (exercício 2-3x/semana)">Moderado</option>
-                                <option value="Ativo (exercício 4-5x/semana)">Ativo</option>
-                                <option value="Atleta / Alta performance">Atleta / Alta performance</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="main_complaint">Queixa Principal e Sintomas</label>
-                        <textarea
-                            name="main_complaint"
-                            id="main_complaint"
-                            placeholder="Descreva a dor, limitação de movimento, instabilidade, estalos, inchaço — onde exatamente, quando piora, o que alivia..."
-                            rows="2"
-                        ></textarea>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group form-group-half">
-                            <label for="symptom_duration">Tempo de Evolução dos Sintomas</label>
-                            <input type="text" name="symptom_duration" id="symptom_duration" placeholder="Ex: 3 semanas, 6 meses, 2 anos">
-                        </div>
-                        <div class="form-group form-group-half">
-                            <label for="injury_mechanism">Mecanismo de Lesão (se trauma)</label>
-                            <input type="text" name="injury_mechanism" id="injury_mechanism" placeholder="Ex: torção em valgo, queda, impacto direto, esforço repetitivo">
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="previous_treatments">Tratamentos Anteriores</label>
-                        <input type="text" name="previous_treatments" id="previous_treatments" placeholder="Ex: fisioterapia (3 meses), infiltração (2x), uso de anti-inflamatório, cirurgia anterior...">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="additional_info">Informações Adicionais (opcional)</label>
-                    <textarea
-                        name="additional_info"
-                        id="additional_info"
-                        placeholder="Ex: RM do joelho direito. Dor ao flexionar, mecanismo torção. Suspeita lesão menisco. Comorbidades, suspeita diagnóstica..."
-                        rows="3"
-                    ></textarea>
-                    <small>Região anatômica, lateralidade e contexto clínico melhoram a precisão da análise.</small>
-                </div>
-
-                <label class="consent-check">
-                    <input type="checkbox" name="privacy_consent" id="privacy_consent" value="accepted" required>
-                    <span>
-                        Confirmo que tenho autorização/base legal para processar as imagens e informações clínicas,
-                        que o paciente foi informado sobre o uso de IA como apoio, e que o resultado será revisado por médico responsável.
-                    </span>
-                </label>
-
-                <button type="submit" class="btn-primary" id="submit-btn">
-                    <span class="btn-icon">🦴</span>
-                    Analisar Exame Ortopédico
-                </button>
             </form>
         </div>
 
         <!-- Como funciona -->
         <div class="how-it-works">
-            <h2>Como Funciona</h2>
+            <h2>Como funciona</h2>
             <div class="steps-grid">
                 <div class="step">
-                    <div class="step-icon">📤</div>
+                    <div class="step-icon icon-badge">{{ layout.icon("upload", 24) }}</div>
                     <h3>1. Upload</h3>
                     <p>Envie uma ou mais imagens do exame ortopédico (RM, Raio-X ou TC) — diferentes planos e incidências</p>
                 </div>
                 <div class="step">
-                    <div class="step-icon">🔍</div>
+                    <div class="step-icon icon-badge">{{ layout.icon("search", 24) }}</div>
                     <h3>2. Referência</h3>
                     <p>O sistema carrega nosso banco de dados anatômico com imagens de referência da região correspondente</p>
                 </div>
                 <div class="step">
-                    <div class="step-icon">🤖</div>
+                    <div class="step-icon icon-badge">{{ layout.icon("cpu", 24) }}</div>
                     <h3>3. Análise IA</h3>
                     <p>Nossa IA compara as estruturas biológicas com o padrão normal, avaliando ossos, ligamentos, cartilagem e partes moles</p>
                 </div>
                 <div class="step">
-                    <div class="step-icon">📋</div>
+                    <div class="step-icon icon-badge">{{ layout.icon("file-text", 24) }}</div>
                     <h3>4. Laudo PDF</h3>
                     <p>Laudo ortopédico estruturado com achados, classificações e sugestões de conduta — disponível para download em PDF</p>
                 </div>
             </div>
         </div>
-
-        <!-- Regiões anatômicas suportadas -->
-        <div class="card supported-exams">
-            <h2>Regiões Anatômicas</h2>
-            <div class="exam-tags">
-                <span class="tag">Joelho</span>
-                <span class="tag">Coluna Vertebral</span>
-                <span class="tag">Ombro</span>
-                <span class="tag">Quadril</span>
-                <span class="tag">Pé e Tornozelo</span>
-                <span class="tag">Mão e Punho</span>
-                <span class="tag">Cotovelo</span>
-            </div>
-        </div>
     </main>
+
+    {{ layout.site_footer() }}
 
     <div class="loading-overlay" id="loading-overlay" style="display:none;">
         <div class="loading-content">
@@ -545,9 +571,7 @@
         const clinicalSection = document.getElementById('clinical-section');
         clinicalToggle.addEventListener('click', function() {
             const isOpen = clinicalSection.classList.toggle('open');
-            clinicalToggle.classList.toggle('open', isOpen);
-            clinicalToggle.querySelector('span:first-child').textContent =
-                isOpen ? '➖ Histórico Clínico do Paciente' : '➕ Adicionar Histórico Clínico do Paciente';
+            clinicalToggle.setAttribute('aria-expanded', String(isOpen));
         });
 
         const MAX_FILES = {{ max_images|default(5) }};
@@ -626,22 +650,44 @@
             fileInput.files = dt.files;
         }
 
-        fileInput.addEventListener('change', function() {
-            const newFiles = Array.from(this.files);
-            newFiles.forEach(file => {
+        const imagesError = document.getElementById('images-error');
+        const privacyConsent = document.getElementById('privacy_consent');
+        const consentError = document.getElementById('consent-error');
+        const consentLabel = privacyConsent.closest('.consent-check');
+        const submitBtn = document.getElementById('submit-btn');
+        const submitLabel = submitBtn.querySelector('.submit-label');
+
+        function setImagesError(show) {
+            imagesError.hidden = !show;
+            uploadArea.classList.toggle('has-error', show);
+        }
+
+        function setConsentError(show) {
+            consentError.hidden = !show;
+            consentLabel.classList.toggle('has-error', show);
+        }
+
+        // Adiciona arquivos respeitando o limite e ignorando duplicatas
+        function addFiles(files) {
+            let skipped = 0;
+            files.forEach(file => {
+                if (selectedFiles.some(f => f.name === file.name && f.size === file.size)) return;
                 if (selectedFiles.length < MAX_FILES) {
-                    // Evita duplicatas pelo nome
-                    if (!selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
-                        selectedFiles.push(file);
-                    }
+                    selectedFiles.push(file);
+                } else {
+                    skipped++;
                 }
             });
-            if (selectedFiles.length > MAX_FILES) {
-                selectedFiles = selectedFiles.slice(0, MAX_FILES);
-                alert(`Máximo de ${MAX_FILES} imagens por análise. Apenas as primeiras ${MAX_FILES} foram mantidas.`);
+            if (skipped > 0) {
+                showToast(`Limite de ${MAX_FILES} imagens por análise. ${skipped} ${skipped === 1 ? 'imagem não foi adicionada' : 'imagens não foram adicionadas'}.`, 'warning', 5000);
             }
+            if (selectedFiles.length > 0) setImagesError(false);
             syncFilesInput();
             updateThumbnails();
+        }
+
+        fileInput.addEventListener('change', function() {
+            addFiles(Array.from(this.files));
         });
 
         // Drag and drop
@@ -657,19 +703,7 @@
         uploadArea.addEventListener('drop', function(e) {
             e.preventDefault();
             this.classList.remove('drag-over');
-            const droppedFiles = Array.from(e.dataTransfer.files);
-            droppedFiles.forEach(file => {
-                if (selectedFiles.length < MAX_FILES) {
-                    if (!selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
-                        selectedFiles.push(file);
-                    }
-                }
-            });
-            if (selectedFiles.length > MAX_FILES) {
-                selectedFiles = selectedFiles.slice(0, MAX_FILES);
-            }
-            syncFilesInput();
-            updateThumbnails();
+            addFiles(Array.from(e.dataTransfer.files));
         });
 
         // Compressão de imagem via Canvas (evita 413 no Vercel)
@@ -727,14 +761,22 @@
 
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
-            if (selectedFiles.length === 0) return;
 
-            const privacyConsent = document.getElementById('privacy_consent');
-            if (!privacyConsent.checked) {
-                privacyConsent.focus();
-                alert('Confirme o consentimento LGPD e a ciência de que a IA é ferramenta de apoio antes de enviar o exame.');
+            const missingImages = selectedFiles.length === 0;
+            const missingConsent = !privacyConsent.checked;
+            setImagesError(missingImages);
+            setConsentError(missingConsent);
+            if (missingImages) {
+                uploadArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
+            if (missingConsent) {
+                privacyConsent.focus();
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitLabel.textContent = 'Enviando…';
 
             // Comprime todas as imagens antes de enviar
             selectedFiles = await Promise.all(selectedFiles.map(f => compressImage(f)));
@@ -753,6 +795,19 @@
 
             loadingOverlay.style.display = 'flex';
             form.submit();
+        });
+
+        privacyConsent.addEventListener('change', function() {
+            if (this.checked) setConsentError(false);
+        });
+
+        // Ao voltar pelo botão "voltar" do navegador, a página pode vir do cache já no estado de envio
+        window.addEventListener('pageshow', function(e) {
+            if (e.persisted) {
+                submitBtn.disabled = false;
+                submitLabel.textContent = 'Analisar exame';
+                loadingOverlay.style.display = 'none';
+            }
         });
     </script>
 </body>

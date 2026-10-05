@@ -3,191 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Three Health – Recuperar Acesso</title>
-<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap">
+<title>Recuperar acesso — Three Health</title>
+{% import "_layout.html" as layout %}
+{{ layout.head_assets() }}
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.info-box {
+  background: var(--primary-light);
+  border: 1.5px solid var(--primary-border);
+  border-radius: 10px;
+  padding: .9rem 1.1rem;
+  font-size: .85rem;
+  color: var(--primary-dark);
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+.info-box a { color: var(--primary-dark); font-weight: 700; }
 
-  body {
-    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #f0f4f8;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1.5rem;
-  }
-
-  .card {
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 4px 24px rgba(0,0,0,.10);
-    max-width: 440px;
-    width: 100%;
-    padding: 2.5rem 2rem;
-  }
-
-  .logo {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: flex-start;
-    margin-bottom: 1.75rem;
-    text-decoration: none;
-  }
-  .logo-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .logo-lines {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    padding-bottom: 2px;
-  }
-  .logo-lines span {
-    display: block;
-    height: 5px;
-    border-radius: 3px;
-    background: #22C97A;
-  }
-  .logo-lines span:nth-child(1) { width: 34px; }
-  .logo-lines span:nth-child(2) { width: 27px; }
-  .logo-lines span:nth-child(3) { width: 20px; }
-  .logo-wordmark {
-    font-family: 'Nunito', sans-serif;
-    font-size: 2rem;
-    font-weight: 800;
-    color: #1B72E8;
-    letter-spacing: -0.5px;
-    line-height: 1;
-  }
-  .logo-underline {
-    width: 100%;
-    height: 2px;
-    background: #1B72E8;
-    border-radius: 1px;
-    margin-top: 5px;
-  }
-
-  h1 {
-    font-size: 1.4rem;
-    font-weight: 800;
-    color: #1e293b;
-    margin-bottom: .5rem;
-  }
-
-  .subtitle {
-    color: #64748b;
-    font-size: .93rem;
-    margin-bottom: 1.75rem;
-    line-height: 1.5;
-  }
-
-  .info-box {
-    background: #eff6ff;
-    border: 1.5px solid #bfdbfe;
-    border-radius: 10px;
-    padding: .9rem 1.1rem;
-    font-size: .85rem;
-    color: #1d4ed8;
-    margin-bottom: 1.5rem;
-    line-height: 1.5;
-  }
-
-  label {
-    display: block;
-    font-size: .85rem;
-    font-weight: 600;
-    color: #374151;
-    margin-bottom: .35rem;
-  }
-
-  input[type="email"] {
-    width: 100%;
-    padding: .7rem 1rem;
-    border: 1.5px solid #d1d5db;
-    border-radius: 8px;
-    font-size: .95rem;
-    color: #1e293b;
-    margin-bottom: 1.25rem;
-    transition: border-color .2s;
-    outline: none;
-  }
-
-  input:focus { border-color: #3b82f6; }
-
-  .btn-acesso {
-    width: 100%;
-    padding: .85rem;
-    background: linear-gradient(135deg, #1d4ed8, #2563eb);
-    color: #fff;
-    font-size: 1rem;
-    font-weight: 700;
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: opacity .2s, transform .1s;
-  }
-
-  .btn-acesso:hover { opacity: .92; transform: translateY(-1px); }
-  .btn-acesso:active { transform: translateY(0); }
-  .btn-acesso:disabled { opacity: .6; cursor: not-allowed; transform: none; }
-
-  .flash-error {
-    background: #fef2f2;
-    border: 1px solid #fca5a5;
-    color: #b91c1c;
-    border-radius: 8px;
-    padding: .75rem 1rem;
-    font-size: .88rem;
-    margin-bottom: 1.25rem;
-  }
-
-  .links {
-    margin-top: 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-    align-items: center;
-  }
-
-  .links a {
-    font-size: .85rem;
-    color: #6b7280;
-    text-decoration: none;
-  }
-
-  .links a:hover { color: #374151; }
+.auth-card input[type="email"] { margin-bottom: 1.25rem; }
+.auth-links { margin-top: 1.25rem; }
 </style>
 </head>
-<body>
+<body class="auth-page">
 
-<div class="card">
-  <div class="logo">
-    <div class="logo-row">
-      <div class="logo-lines">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-      <span class="logo-wordmark">health</span>
-    </div>
-    <div class="logo-underline"></div>
-  </div>
+<div class="auth-card">
+  {{ layout.logo() }}
 
-  <h1>Recuperar Acesso</h1>
+  <h1>Recuperar acesso</h1>
   <p class="subtitle">Informe o e-mail usado na compra para verificar seu plano. Se você ainda não tem senha definida, poderá criar uma após a verificação.</p>
 
   <div class="info-box">
-    Tem senha cadastrada? <a href="/login" style="color:#1d4ed8; font-weight:700;">Fazer login diretamente →</a>
+    Tem senha cadastrada? <a href="/login">Fazer login diretamente →</a>
   </div>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}
-      <div class="flash-error">{{ msg }}</div>
+      <div class="flash flash-{{ cat }}">{{ msg }}</div>
     {% endfor %}
   {% endwith %}
 
@@ -196,12 +46,12 @@
     <input type="email" id="email" name="email" placeholder="seu@email.com"
            required autocomplete="email" autofocus>
 
-    <button type="submit" class="btn-acesso" id="btn-acesso">
+    <button type="submit" class="btn-primary btn-block" id="btn-acesso">
       Verificar e liberar acesso
     </button>
   </form>
 
-  <div class="links">
+  <div class="auth-links">
     <a href="/login">← Voltar ao login</a>
     <a href="/checkout">Ainda não comprou? Contratar plano</a>
     <a href="/trial">← Voltar ao teste gratuito</a>

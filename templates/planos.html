@@ -3,52 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Three Health – Planos e Preços</title>
-<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap">
+<title>Planos e preços — Three Health</title>
+{% import "_layout.html" as layout %}
+{{ layout.head_assets() }}
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #f0f4f8;
-  min-height: 100vh;
+.plans-main {
+  flex: 1;
+  width: 100%;
   padding: 2.5rem 1rem 4rem;
-  color: #1e293b;
 }
 
-/* ── Header ── */
+/* ── Cabeçalho da página ── */
 .page-header {
   text-align: center;
   margin-bottom: 2.5rem;
 }
 
-.logo {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  margin-bottom: 1.5rem;
-  text-decoration: none;
-}
-.logo-row { display: flex; align-items: center; gap: 10px; }
-.logo-lines { display: flex; flex-direction: column; gap: 5px; padding-bottom: 2px; }
-.logo-lines span { display: block; height: 5px; border-radius: 3px; background: #22C97A; }
-.logo-lines span:nth-child(1) { width: 34px; }
-.logo-lines span:nth-child(2) { width: 27px; }
-.logo-lines span:nth-child(3) { width: 20px; }
-.logo-wordmark { font-size: 2rem; font-weight: 800; color: #1B72E8; letter-spacing: -0.5px; line-height: 1; }
-.logo-underline { width: 100%; height: 2px; background: #1B72E8; border-radius: 1px; margin-top: 5px; }
-
 .page-title {
   font-size: 2rem;
   font-weight: 800;
-  color: #1e293b;
+  color: var(--text);
   margin-bottom: .5rem;
 }
 .page-subtitle {
   font-size: 1.05rem;
-  color: #64748b;
+  color: var(--text-muted);
   max-width: 480px;
   margin: 0 auto;
   line-height: 1.6;
@@ -70,7 +49,7 @@ body {
 .plan-card {
   background: #fff;
   border-radius: 16px;
-  border: 2px solid #e2e8f0;
+  border: 2px solid var(--border);
   padding: 2rem 1.5rem;
   display: flex;
   flex-direction: column;
@@ -80,13 +59,13 @@ body {
 }
 
 .plan-card:hover {
-  border-color: #1B72E8;
+  border-color: var(--primary);
   box-shadow: 0 8px 32px rgba(27, 114, 232, .12);
   transform: translateY(-3px);
 }
 
 .plan-card.featured {
-  border-color: #1B72E8;
+  border-color: var(--primary);
   box-shadow: 0 6px 28px rgba(27, 114, 232, .15);
 }
 
@@ -95,7 +74,7 @@ body {
   top: -13px;
   left: 50%;
   transform: translateX(-50%);
-  background: linear-gradient(135deg, #1B72E8, #22C97A);
+  background: linear-gradient(135deg, var(--primary), var(--green));
   color: #fff;
   font-size: .72rem;
   font-weight: 800;
@@ -111,7 +90,7 @@ body {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: .7px;
-  color: #1B72E8;
+  color: var(--primary);
 }
 
 .plan-price {
@@ -119,15 +98,15 @@ body {
   align-items: baseline;
   gap: .25rem;
 }
-.plan-price .currency { font-size: 1.1rem; font-weight: 700; color: #475569; }
-.plan-price .amount   { font-size: 2.5rem; font-weight: 800; color: #1e293b; line-height: 1; }
-.plan-price .period   { font-size: .85rem; color: #64748b; }
+.plan-price .currency { font-size: 1.1rem; font-weight: 700; color: var(--text-muted); }
+.plan-price .amount   { font-size: 2.5rem; font-weight: 800; color: var(--text); line-height: 1; }
+.plan-price .period   { font-size: .85rem; color: var(--text-muted); }
 
 .plan-desc {
   font-size: .85rem;
-  color: #64748b;
+  color: var(--text-muted);
   line-height: 1.5;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--border);
   padding-top: .75rem;
 }
 
@@ -141,7 +120,7 @@ body {
 
 .plan-features li {
   font-size: .88rem;
-  color: #334155;
+  color: var(--text);
   display: flex;
   align-items: flex-start;
   gap: .5rem;
@@ -150,44 +129,30 @@ body {
 
 .plan-features li::before {
   content: "✓";
-  color: #22C97A;
+  color: var(--green);
   font-weight: 800;
   flex-shrink: 0;
   margin-top: .05rem;
 }
 
-.btn-assinar {
-  display: block;
+.plan-card .btn-primary,
+.plan-card .btn-secondary {
   width: 100%;
   padding: .85rem 1rem;
-  background: linear-gradient(135deg, #1B72E8, #155FC4);
-  color: #fff;
-  font-family: inherit;
   font-size: 1rem;
   font-weight: 800;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  text-align: center;
-  text-decoration: none;
-  transition: opacity .2s, transform .15s;
   margin-top: auto;
-}
-
-.btn-assinar:hover { opacity: .9; transform: translateY(-1px); }
-.btn-assinar.featured-btn {
-  background: linear-gradient(135deg, #22C97A, #16a34a);
 }
 
 /* ── Rodapé informativo ── */
 .footer-info {
   text-align: center;
-  color: #94a3b8;
+  color: var(--text-subtle);
   font-size: .82rem;
   line-height: 1.6;
 }
 
-.footer-info a { color: #1B72E8; text-decoration: none; }
+.footer-info a { color: var(--primary); text-decoration: none; }
 .footer-info a:hover { text-decoration: underline; }
 
 /* ── Seção "Já tem conta" ── */
@@ -195,25 +160,21 @@ body {
   text-align: center;
   margin-top: 1.5rem;
   font-size: .9rem;
-  color: #64748b;
+  color: var(--text-muted);
 }
-.already-have a { color: #1B72E8; font-weight: 700; text-decoration: none; }
+.already-have a { color: var(--primary); font-weight: 700; text-decoration: none; }
 .already-have a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
 
-<div class="page-header">
-  <a href="/" class="logo">
-    <div class="logo-row">
-      <div class="logo-lines">
-        <span></span><span></span><span></span>
-      </div>
-      <span class="logo-wordmark">health</span>
-    </div>
-    <div class="logo-underline"></div>
-  </a>
+{% call layout.site_header() %}
+  <a href="/trial" class="btn-secondary">Teste gratuito</a>
+  <a href="/login" class="btn-secondary">Entrar</a>
+{% endcall %}
 
+<main class="plans-main">
+<div class="page-header">
   <h1 class="page-title">Escolha seu Plano</h1>
   <p class="page-subtitle">Acesso completo à análise de exames ortopédicos por IA — laudos estruturados em segundos.</p>
 </div>
@@ -235,7 +196,7 @@ body {
       <li>Suporte Técnico</li>
       <li>Atualizações constantes</li>
     </ul>
-    <a href="/checkout?plan=mensal" class="btn-assinar">Começar agora</a>
+    <a href="/checkout?plan=mensal" class="btn-secondary">Começar agora</a>
   </div>
 
   <!-- Semestral — destaque -->
@@ -247,7 +208,7 @@ body {
       <span class="amount">50</span>
       <span class="period">/ mês</span>
     </div>
-    <p class="plan-desc" style="font-size:.8rem;color:#94a3b8;text-decoration:line-through;padding-top:0;border-top:none;margin-top:-.25rem;">R$ 300,00 / 6 meses</p>
+    <p class="plan-desc" style="font-size:.8rem;color:var(--text-subtle);text-decoration:line-through;padding-top:0;border-top:none;margin-top:-.25rem;">R$ 300,00 / 6 meses</p>
     <p class="plan-desc">Melhor custo-benefício para profissionais.</p>
     <ul class="plan-features">
       <li>Tudo do plano Mensal</li>
@@ -255,20 +216,20 @@ body {
       <li>Suporte Técnico</li>
       <li>Atualizações constantes</li>
     </ul>
-    <a href="/checkout?plan=semestral" class="btn-assinar featured-btn">Começar agora</a>
+    <a href="/checkout?plan=semestral" class="btn-primary">Começar agora</a>
   </div>
 
   <!-- Anual -->
   <div class="plan-card">
-    <div class="badge" style="background: linear-gradient(135deg,#22C97A,#16a34a);">Melhor Custo Benefício</div>
+    <div class="badge" style="background: linear-gradient(135deg,var(--green),var(--success));">Melhor Custo Benefício</div>
     <div class="plan-name">Anual</div>
     <div class="plan-price">
       <span class="currency">R$</span>
       <span class="amount">34</span>
-      <span style="font-size:1.4rem;font-weight:800;color:#1e293b;line-height:1;align-self:flex-end;padding-bottom:.2rem">,90</span>
+      <span style="font-size:1.4rem;font-weight:800;color:var(--text);line-height:1;align-self:flex-end;padding-bottom:.2rem">,90</span>
       <span class="period">/ mês</span>
     </div>
-    <p class="plan-desc" style="font-size:.8rem;color:#94a3b8;text-decoration:line-through;padding-top:0;border-top:none;margin-top:-.25rem;">R$ 418,00/ano</p>
+    <p class="plan-desc" style="font-size:.8rem;color:var(--text-subtle);text-decoration:line-through;padding-top:0;border-top:none;margin-top:-.25rem;">R$ 418,00/ano</p>
     <p class="plan-desc">Máxima economia para uso contínuo.</p>
     <ul class="plan-features">
       <li>Tudo do Semestral</li>
@@ -276,7 +237,7 @@ body {
       <li>Suporte Técnico</li>
       <li>Acesso antecipado a novos recursos</li>
     </ul>
-    <a href="/checkout?plan=anual" class="btn-assinar">Começar agora</a>
+    <a href="/checkout?plan=anual" class="btn-secondary">Começar agora</a>
   </div>
 
 </div>
@@ -289,6 +250,9 @@ body {
 <div class="already-have">
   Já tem uma conta? <a href="/login">Fazer login →</a>
 </div>
+</main>
+
+{{ layout.site_footer() }}
 
 </body>
 </html>

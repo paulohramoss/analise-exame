@@ -3,70 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Three Health – Aguardando Pagamento</title>
-<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<title>Aguardando pagamento — Three Health</title>
+{% import "_layout.html" as layout %}
+{{ layout.head_assets() }}
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #f0f4f8;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1.5rem;
-  }
-
-  .card {
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 4px 24px rgba(0,0,0,.10);
+  .auth-card {
     max-width: 480px;
-    width: 100%;
-    padding: 2.5rem 2rem;
     text-align: center;
   }
 
   .status-icon {
-    font-size: 3.5rem;
     margin-bottom: 1rem;
-    display: block;
   }
 
-  h1 {
-    font-size: 1.4rem;
-    font-weight: 800;
-    color: #1e293b;
-    margin-bottom: .6rem;
-  }
+  .auth-card h1 { margin-bottom: .6rem; }
 
-  p {
-    color: #64748b;
+  .auth-card p {
+    color: var(--text-muted);
     font-size: .95rem;
     line-height: 1.55;
     margin-bottom: 1rem;
   }
 
-  .invoice-btn {
-    display: inline-block;
-    padding: .8rem 2rem;
-    background: linear-gradient(135deg, #1d4ed8, #2563eb);
-    color: #fff;
-    font-size: 1rem;
-    font-weight: 700;
-    border-radius: 10px;
-    text-decoration: none;
-    margin-bottom: 1.5rem;
-    transition: opacity .2s;
-  }
-  .invoice-btn:hover { opacity: .9; }
+  #invoice-link { margin-bottom: 1.5rem; }
 
-  .divider {
-    border: none;
-    border-top: 1px solid #e5e7eb;
-    margin: 1.5rem 0;
-  }
+  .auth-card .divider { margin: 1.5rem 0; }
 
   /* Status dinâmico */
   #status-box {
@@ -79,28 +40,28 @@
   }
 
   .status-waiting {
-    background: #fefce8;
-    border: 1px solid #fde68a;
-    color: #92400e;
+    background: var(--warning-light);
+    border: 1px solid var(--warning-border);
+    color: var(--warning-dark);
   }
 
   .status-confirmed {
-    background: #f0fdf4;
-    border: 1px solid #86efac;
-    color: #166534;
+    background: var(--success-light);
+    border: 1px solid var(--success-border);
+    color: var(--success-dark);
   }
 
   .status-error {
-    background: #fef2f2;
-    border: 1px solid #fca5a5;
-    color: #b91c1c;
+    background: var(--danger-light);
+    border: 1px solid var(--danger-border);
+    color: var(--danger-dark);
   }
 
   .spinner {
     display: inline-block;
     width: 14px;
     height: 14px;
-    border: 2px solid #92400e;
+    border: 2px solid var(--warning-dark);
     border-top-color: transparent;
     border-radius: 50%;
     animation: spin .7s linear infinite;
@@ -110,25 +71,12 @@
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .btn-check {
-    width: 100%;
-    padding: .75rem;
-    background: #f1f5f9;
-    color: #1e293b;
-    font-size: .95rem;
-    font-weight: 600;
-    border: 1.5px solid #e2e8f0;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: background .2s;
-    margin-bottom: .75rem;
-  }
-  .btn-check:hover { background: #e2e8f0; }
-  .btn-check:disabled { opacity: .5; cursor: not-allowed; }
+  #btn-check { margin-bottom: .75rem; }
+  #btn-check:disabled { opacity: .5; cursor: not-allowed; }
 
-  .note {
+  .auth-card .note {
     font-size: .8rem;
-    color: #9ca3af;
+    color: var(--text-subtle);
     margin-top: .5rem;
   }
 
@@ -136,26 +84,28 @@
     display: block;
     margin-top: 1.25rem;
     font-size: .85rem;
-    color: #6b7280;
+    color: var(--text-muted);
     text-decoration: none;
   }
-  .back-link:hover { color: #374151; }
+  .back-link:hover { color: var(--text-label); }
 </style>
 </head>
-<body>
+<body class="auth-page">
 
-<div class="card">
-  <span class="status-icon" id="main-icon">⏳</span>
+<div class="auth-card">
+  {{ layout.logo() }}
+
+  <div class="status-icon" id="main-icon"><span class="icon-badge is-warning">{{ layout.icon("clock", 26) }}</span></div>
   <h1 id="main-title">Aguardando seu pagamento</h1>
   <p id="main-desc">
     Clique no botão abaixo para abrir a fatura e realizar o pagamento via
     <strong>PIX, Boleto ou Cartão</strong>.
-    Após pagar, clique em <strong>Verificar Pagamento</strong>.
+    Após pagar, clique em <strong>Verificar pagamento</strong>.
   </p>
 
   {% if invoice_url %}
-  <a href="{{ invoice_url }}" target="_blank" rel="noopener" class="invoice-btn" id="invoice-link">
-    🧾 Abrir fatura / Pagar agora
+  <a href="{{ invoice_url }}" target="_blank" rel="noopener" class="btn-primary" id="invoice-link">
+    {{ layout.icon("external-link", 18) }} Abrir fatura / pagar agora
   </a>
   {% endif %}
 
@@ -166,8 +116,8 @@
     <span id="status-text">Verificando pagamento automaticamente…</span>
   </div>
 
-  <button class="btn-check" id="btn-check" onclick="checkPayment()">
-    ✅ Verificar Pagamento
+  <button class="btn-secondary btn-block" id="btn-check" onclick="checkPayment()">
+    {{ layout.icon("refresh", 16) }} Verificar pagamento
   </button>
 
   <p class="note">
@@ -180,6 +130,7 @@
 
 <script>
   const PAYMENT_ID = "{{ payment_id }}";
+  const CHECK_LABEL = {{ (layout.icon("refresh", 16) ~ ' Verificar pagamento')|tojson }};
   let attempts = 0;
   let polling = null;
 
@@ -199,12 +150,12 @@
       if (data.confirmed) {
         // Pagamento confirmado → mostra sucesso e redireciona
         clearInterval(polling);
-        document.getElementById('main-icon').textContent = '🎉';
+        document.getElementById('main-icon').innerHTML = {{ ('<span class="icon-badge is-success">'|safe ~ layout.icon("check-circle", 26) ~ '</span>'|safe)|tojson }};
         document.getElementById('main-title').textContent = 'Pagamento confirmado!';
         document.getElementById('main-desc').textContent = 'Seu acesso foi liberado. Redirecionando…';
         statusBox.className = 'status-confirmed';
         spinner.style.display = 'none';
-        statusText.textContent = '✅ Pagamento confirmado — acesso liberado!';
+        statusText.textContent = 'Pagamento confirmado — acesso liberado!';
         btn.style.display = 'none';
         document.getElementById('invoice-link') && (document.getElementById('invoice-link').style.display = 'none');
         setTimeout(() => { window.location.href = '/'; }, 2000);
@@ -213,7 +164,7 @@
         spinner.style.display = '';
         statusText.textContent = 'Pagamento ainda não confirmado. Tente novamente após pagar.';
         btn.disabled = false;
-        btn.textContent = '✅ Verificar Pagamento';
+        btn.innerHTML = CHECK_LABEL;
         attempts++;
       }
     } catch (err) {
@@ -221,7 +172,7 @@
       spinner.style.display = 'none';
       statusText.textContent = 'Erro ao verificar. Tente novamente.';
       btn.disabled = false;
-      btn.textContent = '✅ Verificar Pagamento';
+      btn.innerHTML = CHECK_LABEL;
     }
   }
 

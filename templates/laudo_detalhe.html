@@ -3,22 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three Health — Laudo Salvo</title>
-    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Laudo salvo — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <script src="{{ static_url('laudo-pdf.js') }}" defer></script>
     <style>
-        .header-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.55rem;
-            flex-wrap: wrap;
-        }
-
         .professional-summary {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
             gap: 1rem;
+        }
+
+        .professional-status {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.3rem;
+            min-width: 150px;
         }
 
         .professional-eyebrow {
@@ -27,7 +30,7 @@
             font-weight: 800;
             letter-spacing: 0.08em;
             text-transform: uppercase;
-            color: #64748b;
+            color: var(--text-muted);
             margin-bottom: 0.3rem;
         }
 
@@ -39,13 +42,13 @@
         }
 
         .professional-details {
-            color: #475569;
+            color: var(--text-muted);
             font-size: 0.94rem;
             margin-top: 0.35rem;
         }
 
         .consensus-card {
-            border: 1px solid #bfdbfe;
+            border: 1px solid var(--primary-border);
             background: #f8fbff;
             border-radius: 10px;
             padding: 1rem 1.1rem;
@@ -66,7 +69,7 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: #1B72E8;
+            background: var(--primary);
             color: #fff;
             font-weight: 800;
             font-size: 0.82rem;
@@ -82,7 +85,7 @@
 
         .consensus-subtitle,
         .consensus-description {
-            color: #475569;
+            color: var(--text-muted);
             font-size: 0.86rem;
             margin: 0;
         }
@@ -97,7 +100,7 @@
         .consensus-pill {
             border: 1px solid #dbeafe;
             background: #fff;
-            color: #155FC4;
+            color: var(--primary-dark);
             border-radius: 999px;
             padding: 0.28rem 0.65rem;
             font-size: 0.76rem;
@@ -123,7 +126,7 @@
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
-            background: #16a34a;
+            background: var(--success);
             color: white;
             border: none;
             border-radius: 8px;
@@ -170,9 +173,9 @@
 
         .feedback-option:hover,
         .feedback-option.selected {
-            border-color: #1B72E8;
-            color: #155FC4;
-            background: #eff6ff;
+            border-color: var(--primary);
+            color: var(--primary-dark);
+            background: var(--primary-light);
         }
 
         .feedback-card textarea {
@@ -195,17 +198,21 @@
 
         .feedback-status {
             font-size: 0.86rem;
-            color: #475569;
+            color: var(--text-muted);
             font-weight: 700;
         }
 
         .feedback-status.success { color: #15803d; }
-        .feedback-status.error { color: #dc2626; }
+        .feedback-status.error { color: var(--danger); }
 
         @media (max-width: 720px) {
             .professional-summary,
             .report-header {
                 flex-direction: column;
+            }
+
+            .professional-status {
+                align-items: flex-start;
             }
 
             .report-actions,
@@ -221,26 +228,9 @@
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <div class="logo">
-                <div class="logo-row">
-                    <div class="logo-lines">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
-                    <span class="logo-wordmark">health</span>
-                </div>
-                <div class="logo-underline"></div>
-            </div>
-            <div class="header-actions">
-                <a href="/clinica/dashboard" class="btn-secondary">Dashboard</a>
-                <a href="/laudos" class="btn-secondary">Histórico</a>
-                <a href="/" class="btn-secondary">Nova Análise</a>
-            </div>
-        </div>
-    </header>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("") }}
+    {% endcall %}
 
     <main class="container">
         {% set responsible = responsible|default({}) %}
@@ -250,7 +240,7 @@
         {% set responsible_organization = responsible.organization|default('', true) %}
 
         <div class="disclaimer-banner">
-            <span class="disclaimer-icon">⚕️</span>
+            <span class="disclaimer-icon">{{ layout.icon("shield", 22) }}</span>
             <p>
                 <strong>Aviso CFM/LGPD:</strong> Este laudo foi gerado por IA como ferramenta de apoio à decisão clínica.
                 <strong>Não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
@@ -261,7 +251,7 @@
             {% if messages %}
                 {% for category, message in messages %}
                     <div class="alert alert-{{ category }}">
-                        <span>{{ '❌' if category == 'error' else '✅' }}</span>
+                        {{ layout.icon('x-circle' if category == 'error' else 'check-circle') }}
                         {{ message }}
                     </div>
                 {% endfor %}
@@ -282,7 +272,7 @@
                         {% endif %}
                     </p>
                 </div>
-                <div>
+                <div class="professional-status">
                     <span class="meta-label">Gerado em</span>
                     <span class="meta-value">{{ laudo.created_at|datetime_br }}</span>
                 </div>
@@ -300,9 +290,8 @@
             <div class="report-header">
                 <h2>Laudo salvo</h2>
                 <div class="report-actions">
-                    <button type="button" onclick="downloadPDF()" class="btn-pdf">Baixar PDF</button>
-                    <button type="button" onclick="window.print()" class="btn-secondary btn-small">Imprimir</button>
-                    <button type="button" onclick="copyReport()" class="btn-secondary btn-small">Copiar</button>
+                    <button type="button" onclick="downloadPDF()" class="btn-pdf">{{ layout.icon("printer", 16) }} Imprimir / PDF</button>
+                                        <button type="button" onclick="copyReport()" class="btn-secondary btn-small">{{ layout.icon("copy", 16) }} Copiar</button>
                 </div>
             </div>
             <div class="report-content" id="report-content">
@@ -330,6 +319,8 @@
 
         {% include "_validacao_clinica_form.html" %}
     </main>
+
+    {{ layout.site_footer() }}
 
     <script type="application/json" id="data-responsible">{{ responsible|tojson }}</script>
     <script type="application/json" id="data-consensus">{{ consensus|tojson }}</script>
@@ -360,108 +351,20 @@
         const userDesc = JSON.parse(document.getElementById('data-user-desc').textContent || 'null');
         const analysisId = JSON.parse(document.getElementById('data-analysis-id').textContent || 'null');
 
-        function escapeHtml(value) {
-            return String(value || '').replace(/[&<>"']/g, char => ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#39;'
-            }[char]));
-        }
-
         function copyReport() {
-            navigator.clipboard.writeText(reportContent.innerText).then(() => {
-                alert('Laudo copiado para a área de transferência!');
-            });
+            copyToClipboard(reportContent.innerText)
+                .then(() => showToast('Laudo copiado para a área de transferência.'))
+                .catch(() => showToast('Não foi possível copiar o laudo. Selecione o texto e copie manualmente.', 'error', 5000));
         }
 
         function downloadPDF() {
-            const responsibleName = responsible?.name || 'Responsável não salvo neste histórico';
-            const responsibleDetails = [responsible?.role, responsible?.register, responsible?.organization].filter(Boolean).join(' · ') || 'Dados profissionais indisponíveis';
-            const reportHTML = reportContent.innerHTML;
-            const pdfContent = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<title>Laudo Three Health — ${generatedAt}</title>
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Nunito', Arial, sans-serif; font-size: 13px; color: #1e293b; background: white; }
-    .page { max-width: 780px; margin: 0 auto; padding: 32px 36px; }
-    .pdf-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1B72E8; padding-bottom: 16px; margin-bottom: 20px; }
-    .pdf-logo { display: flex; flex-direction: column; align-items: flex-start; }
-    .pdf-logo-row { display: flex; align-items: center; gap: 8px; }
-    .pdf-logo-lines { display: flex; flex-direction: column; gap: 3px; }
-    .pdf-logo-lines span { display: block; height: 3px; border-radius: 2px; background: #22C97A; }
-    .pdf-logo-lines span:nth-child(1) { width: 22px; }
-    .pdf-logo-lines span:nth-child(2) { width: 16px; }
-    .pdf-logo-lines span:nth-child(3) { width: 11px; }
-    .pdf-logo-wordmark { font-size: 22px; font-weight: 800; color: #1B72E8; line-height: 1; }
-    .pdf-logo-underline { width: 100%; height: 2px; background: #1B72E8; margin-top: 3px; }
-    .pdf-title-block { text-align: right; }
-    .pdf-title { font-size: 15px; font-weight: 800; color: #1B72E8; }
-    .pdf-subtitle { font-size: 11px; color: #64748b; margin-top: 2px; }
-    .pdf-professional, .pdf-consensus { border-left: 4px solid #1B72E8; border-radius: 0 8px 8px 0; padding: 12px 14px; margin-bottom: 14px; background: #eff6ff; }
-    .pdf-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #1B72E8; font-weight: 800; margin-bottom: 3px; }
-    .pdf-name { font-size: 17px; font-weight: 800; color: #0f172a; line-height: 1.25; }
-    .pdf-text { font-size: 11.5px; color: #475569; line-height: 1.5; margin-top: 2px; }
-    .pdf-clinical { background: #eff6ff; border-left: 3px solid #1B72E8; border-radius: 0 6px 6px 0; padding: 8px 12px; margin-bottom: 16px; font-size: 12px; color: #1e40af; }
-    .pdf-clinical strong { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; color: #1B72E8; }
-    .pdf-report-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 10px; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
-    .pdf-report-content { line-height: 1.7; font-size: 12.5px; }
-    .pdf-report-content h2 { font-size: 14px; color: #1B72E8; margin: 14px 0 5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
-    .pdf-report-content h3 { font-size: 13px; color: #1B72E8; margin: 12px 0 4px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
-    .pdf-report-content h4 { font-size: 12px; color: #155FC4; margin: 8px 0 3px; }
-    .pdf-report-content ul, .pdf-report-content ol { padding-left: 18px; margin: 4px 0; }
-    .pdf-footer { border-top: 2px solid #1B72E8; padding-top: 14px; margin-top: 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
-    .pdf-footer-sig { font-size: 12px; color: #1B72E8; font-weight: 700; }
-    .pdf-footer-sig span { display: block; font-size: 10px; color: #64748b; font-weight: 400; margin-top: 2px; }
-    .pdf-disclaimer { font-size: 10px; color: #78350f; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 8px 10px; flex: 1; line-height: 1.5; }
-</style>
-</head>
-<body>
-<div class="page">
-    <div class="pdf-header">
-        <div class="pdf-logo">
-            <div class="pdf-logo-row">
-                <div class="pdf-logo-lines"><span></span><span></span><span></span></div>
-                <span class="pdf-logo-wordmark">health</span>
-            </div>
-            <div class="pdf-logo-underline"></div>
-        </div>
-        <div class="pdf-title-block">
-            <div class="pdf-title">LAUDO DE ANÁLISE POR INTELIGÊNCIA ARTIFICIAL</div>
-            <div class="pdf-subtitle">Gerado em: ${generatedAt} · Three Health Platform</div>
-        </div>
-    </div>
-    <div class="pdf-professional">
-        <div class="pdf-label">Responsável pela análise</div>
-        <div class="pdf-name">${escapeHtml(responsibleName)}</div>
-        <div class="pdf-text">${escapeHtml(responsibleDetails)}</div>
-    </div>
-    ${userDesc ? `<div class="pdf-clinical"><strong>Informações Clínicas Fornecidas</strong>${userDesc}</div>` : ''}
-    <div class="pdf-report-title">Laudo Ortopédico — Análise por IA</div>
-    <div class="pdf-report-content">${reportHTML}</div>
-    <div class="pdf-footer">
-        <div class="pdf-footer-sig">
-            Three Health AI Assistant
-            <span>Gerado automaticamente por IA · ${generatedAt}</span>
-        </div>
-        <div class="pdf-disclaimer">
-            <strong>AVISO CFM/LGPD:</strong> Este laudo foi gerado por Inteligência Artificial como ferramenta de apoio à decisão clínica.
-            <strong>Não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
-        </div>
-    </div>
-</div>
-<script>window.onload = function() { window.print(); }<\/script>
-</body>
-</html>`;
-
-            const printWindow = window.open('', '_blank', 'width=900,height=700');
-            printWindow.document.write(pdfContent);
-            printWindow.document.close();
+            openLaudoPdf({
+                reportHTML: reportContent.innerHTML,
+                generatedAt: generatedAt || laudoNowBR(),
+                documentId: analysisId ? String(analysisId).slice(0, 8).toUpperCase() : '',
+                responsible: responsible || { name: 'Responsável não salvo neste histórico' },
+                clinicalInfo: userDesc,
+            });
         }
 
         const feedbackButtons = document.querySelectorAll('[data-feedback]');
