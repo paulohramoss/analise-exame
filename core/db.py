@@ -3,13 +3,18 @@ Integração com Supabase — Three Health Platform.
 
 Todas as operações são fire-and-forget: erros são logados mas nunca propagados
 para não bloquear o fluxo principal da aplicação.
+
+As consultas assumem o schema de supabase_migrations/schema.sql completo (sem
+"tentar de novo sem as colunas novas"): rode as migrations antes do deploy.
 """
 
+import hashlib
 import importlib
 import logging
 import os
-import time
 from functools import lru_cache
+
+from core.ttl_cache import TTLCache
 from collections import Counter
 
 logger = logging.getLogger(__name__)
@@ -17,8 +22,9 @@ logger = logging.getLogger(__name__)
 # Cache em memória do melhor caso validado por tipo de exame, usado como
 # exemplo de calibração no prompt de análise. TTL curto para não bater no
 # Supabase a cada análise, mas ainda refletir novas validações em minutos.
-_validated_case_cache: dict = {}
 _VALIDATED_CASE_CACHE_TTL_SECONDS = 900
+_validated_case_cache = TTLCache(maxsize=64, ttl_seconds=_VALIDATED_CASE_CACHE_TTL_SECONDS)
+_NO_CASE = object()
 
 
 @lru_cache(maxsize=1)
@@ -38,6 +44,11 @@ def _get_client():
     except Exception:
         logger.exception("Falha ao criar cliente Supabase")
         return None
+
+
+def is_configured() -> bool:
+    """True se há cliente Supabase (persistência ativa)."""
+    return _get_client() is not None
 
 
 def health_check() -> bool:
@@ -105,6 +116,44 @@ def listar_clientes(limite: int = 1000) -> list[dict]:
     except Exception:
         logger.exception("Erro em listar_clientes")
         return []
+
+
+def buscar_sessao_cliente(email: str) -> dict | None:
+    """Retorna {"id", "sessao_versao"} do cliente, ou None se não encontrado/sem banco.
+
+    sessao_versao é gravada no cookie premium; incrementá-la (troca de senha,
+    estorno) invalida todos os cookies já emitidos para o cliente.
+    """
+    db = _get_client()
+    if not db or not email:
+        return None
+    try:
+        res = db.table("clientes").select("id, sessao_versao").eq("email", email).limit(1).execute()
+    except Exception:
+        # Banco sem a migration 2026-10-13-sessao-versao.sql: ainda resolve o id.
+        logger.warning("Coluna clientes.sessao_versao indisponível; revogação de sessão desativada.", exc_info=True)
+        cliente_id = buscar_cliente_id_por_email(email)
+        return {"id": cliente_id, "sessao_versao": 0} if cliente_id else None
+    if not res.data:
+        return None
+    row = res.data[0]
+    return {"id": row["id"], "sessao_versao": int(row.get("sessao_versao") or 0)}
+
+
+def revogar_sessoes_cliente(email: str) -> bool:
+    """Invalida todos os cookies premium do cliente (incrementa sessao_versao)."""
+    db = _get_client()
+    if not db or not email:
+        return False
+    try:
+        sessao = buscar_sessao_cliente(email)
+        if not sessao:
+            return False
+        db.table("clientes").update({"sessao_versao": sessao["sessao_versao"] + 1}).eq("email", email).execute()
+        return True
+    except Exception:
+        logger.exception("Erro em revogar_sessoes_cliente")
+        return False
 
 
 def salvar_senha_cliente(email: str, senha_hash: str) -> bool:
@@ -179,18 +228,28 @@ def salvar_pagamento(
         return None
 
 
-def buscar_pagamento_confirmado_por_email(email: str) -> tuple[str, str] | None:
-    """Retorna (asaas_payment_id, external_reference) mais recente confirmado para o e-mail, ou None.
+def buscar_pagamento_confirmado_por_email(
+    email: str,
+    planos: tuple[str, ...] = ("mensal", "semestral", "anual"),
+) -> tuple[str, str, str | None] | None:
+    """Retorna (asaas_payment_id, external_reference, inicio_iso) do pagamento confirmado
+    mais recente do e-mail, ou None.
     Suporta external_reference no formato 'email' (legado) ou 'email|plano' (atual).
+    `inicio_iso` é a data a partir da qual o plano conta (ver _inicio_do_plano).
+
+    Compara por igualdade exata contra as referências possíveis. Um `ilike`
+    com prefixo deixava `%` e `_` digitados pelo usuário agirem como curinga
+    (ex.: `%@%` casava com qualquer pagamento confirmado).
     """
     db = _get_client()
     if not db or not email:
         return None
+    referencias = [email] + [f"{email}|{plano}" for plano in planos]
     try:
         res = (
             db.table("pagamentos")
-            .select("asaas_payment_id, external_reference")
-            .ilike("external_reference", f"{email}%")
+            .select("asaas_payment_id, external_reference, created_at, payload_asaas")
+            .in_("external_reference", referencias)
             .in_("status", ["CONFIRMED", "RECEIVED"])
             .order("created_at", desc=True)
             .limit(1)
@@ -198,11 +257,26 @@ def buscar_pagamento_confirmado_por_email(email: str) -> tuple[str, str] | None:
         )
         if res.data:
             row = res.data[0]
-            return row["asaas_payment_id"], row.get("external_reference", "")
+            return row["asaas_payment_id"], row.get("external_reference", ""), _inicio_do_plano(row)
         return None
     except Exception:
         logger.exception("Erro em buscar_pagamento_confirmado_por_email")
         return None
+
+
+def _inicio_do_plano(row: dict) -> str | None:
+    """Data de confirmação do pagamento (Asaas), com fallback para a criação da cobrança.
+
+    payload_asaas é o objeto da cobrança (gravado no checkout) ou o corpo do
+    webhook ({"event", "payment": {...}}), conforme o que chegou por último.
+    """
+    payload = row.get("payload_asaas") or {}
+    if isinstance(payload, dict):
+        payment = payload.get("payment") if isinstance(payload.get("payment"), dict) else payload
+        for campo in ("confirmedDate", "clientPaymentDate", "paymentDate"):
+            if payment.get(campo):
+                return str(payment[campo])
+    return row.get("created_at")
 
 
 def buscar_pagamento_id(asaas_payment_id: str) -> str | None:
@@ -299,25 +373,14 @@ def salvar_analise(
             "cliente_id": cliente_id,
             "sessao_id": sessao_id,
         }
-        optional_keys: list[str] = []
         if responsavel:
-            optional_fields = {
+            data.update({
                 "responsavel_nome": responsavel.get("name") or None,
                 "responsavel_perfil": responsavel.get("role") or None,
                 "responsavel_registro": responsavel.get("register") or None,
                 "responsavel_instituicao": responsavel.get("organization") or None,
-            }
-            data.update(optional_fields)
-            optional_keys = list(optional_fields.keys())
-
-        try:
-            res = db.table("analises").insert(data).execute()
-        except Exception as e:
-            if not optional_keys:
-                raise e
-            for key in optional_keys:
-                data.pop(key, None)
-            res = db.table("analises").insert(data).execute()
+            })
+        res = db.table("analises").insert(data).execute()
         return res.data[0]["id"] if res.data else None
     except Exception:
         logger.exception("Erro em salvar_analise")
@@ -336,32 +399,20 @@ def listar_analises(
     if not include_all and not cliente_id:
         return []
 
-    base_cols = (
+    columns = (
         "id, created_at, tipo_exame, modelo_ia, referencias_usadas, num_imagens, "
-        "modo, descricao_usuario, modalidade, tempo_processamento_ms"
+        "modo, descricao_usuario, modalidade, tempo_processamento_ms, "
+        "responsavel_nome, responsavel_perfil, responsavel_registro, responsavel_instituicao"
     )
-    optional_cols = (
-        ", responsavel_nome, responsavel_perfil, responsavel_registro, "
-        "responsavel_instituicao"
-    )
-
-    def _run_query(columns: str):
+    try:
         query = db.table("analises").select(columns)
         if cliente_id:
             query = query.eq("cliente_id", cliente_id)
-        query = query.order("created_at", desc=True).limit(limit)
-        return query.execute()
-
-    try:
-        res = _run_query(base_cols + optional_cols)
+        res = query.order("created_at", desc=True).limit(limit).execute()
         return res.data or []
     except Exception:
-        try:
-            res = _run_query(base_cols)
-            return res.data or []
-        except Exception:
-            logger.exception("Erro em listar_analises")
-            return []
+        logger.exception("Erro em listar_analises")
+        return []
 
 
 def buscar_analise(
@@ -376,31 +427,20 @@ def buscar_analise(
     if not include_all and not cliente_id:
         return None
 
-    base_cols = (
+    columns = (
         "id, created_at, tipo_exame, analise_completa, modelo_ia, referencias_usadas, "
-        "num_imagens, modo, descricao_usuario, modalidade, tempo_processamento_ms, cliente_id"
+        "num_imagens, modo, descricao_usuario, modalidade, tempo_processamento_ms, cliente_id, "
+        "responsavel_nome, responsavel_perfil, responsavel_registro, responsavel_instituicao"
     )
-    optional_cols = (
-        ", responsavel_nome, responsavel_perfil, responsavel_registro, "
-        "responsavel_instituicao"
-    )
-
-    def _run_query(columns: str):
+    try:
         query = db.table("analises").select(columns).eq("id", analise_id)
         if cliente_id:
             query = query.eq("cliente_id", cliente_id)
-        return query.limit(1).execute()
-
-    try:
-        res = _run_query(base_cols + optional_cols)
+        res = query.limit(1).execute()
         return res.data[0] if res.data else None
     except Exception:
-        try:
-            res = _run_query(base_cols)
-            return res.data[0] if res.data else None
-        except Exception:
-            logger.exception("Erro em buscar_analise")
-            return None
+        logger.exception("Erro em buscar_analise")
+        return None
 
 
 def salvar_imagem_exame(
@@ -418,27 +458,60 @@ def salvar_imagem_exame(
     if not db:
         return
     try:
-        data = {
+        db.table("imagens_exame").insert({
             "analise_id": analise_id,
             "mime_type": mime_type,
             "tamanho_bytes": tamanho_bytes,
             "hash_md5": hash_md5,
             "ordem": ordem,
-        }
-        optional_fields = {
             "origem": origem or "upload",
             "arquivo_original": arquivo_original or None,
             "dicom_metadata": dicom_metadata or None,
-        }
-        data.update(optional_fields)
-        try:
-            db.table("imagens_exame").insert(data).execute()
-        except Exception:
-            for key in optional_fields:
-                data.pop(key, None)
-            db.table("imagens_exame").insert(data).execute()
+        }).execute()
     except Exception:
         logger.exception("Erro em salvar_imagem_exame")
+
+
+def salvar_analise_com_imagens(
+    result: dict,
+    modo: str,
+    images: list[tuple[bytes, str]],
+    image_meta: list[dict],
+    tempo_ms: int | None = None,
+    **persist,
+) -> str | None:
+    """Persiste o resultado de analyze_exam_from_bytes e os metadados de cada imagem.
+
+    Ponto único usado pelas rotas síncronas e pelo worker da fila (antes eram
+    quatro cópias do mesmo bloco). `persist` são os campos opcionais de
+    salvar_analise (descricao_usuario, modalidade, ip_address, user_agent,
+    cliente_id, responsavel, sessao_id). Retorna o UUID da análise ou None.
+    """
+    analise_id = salvar_analise(
+        tipo_exame=result["exam_type"],
+        analise_completa=result["analysis"],
+        modelo_ia=result["model_used"],
+        referencias_usadas=result["references_used"],
+        num_imagens=result.get("num_images", len(images)),
+        modo=modo,
+        tempo_ms=tempo_ms,
+        **persist,
+    )
+    if not analise_id:
+        return None
+    for ordem, (raw_bytes, mime) in enumerate(images, 1):
+        meta = image_meta[ordem - 1] if ordem - 1 < len(image_meta) else {}
+        salvar_imagem_exame(
+            analise_id=analise_id,
+            mime_type=mime,
+            tamanho_bytes=len(raw_bytes),
+            hash_md5=hashlib.md5(raw_bytes).hexdigest(),
+            ordem=ordem,
+            origem=meta.get("origem") or "upload",
+            arquivo_original=meta.get("arquivo_original") or "",
+            dicom_metadata=meta.get("dicom_metadata") or None,
+        )
+    return analise_id
 
 
 def listar_feedbacks_por_analises(analise_ids: list[str]) -> list[dict]:
@@ -485,14 +558,18 @@ def listar_validacoes_clinicas(analise_ids: list[str]) -> list[dict]:
 def buscar_caso_validado_referencia(tipo_exame: str, min_concordancia: int = 80) -> dict | None:
     """
     Retorna o diagnóstico validado mais recente do tipo de exame com
-    grau_concordancia >= min_concordancia, para uso como exemplo de
-    calibração no prompt de análise. Cacheado em memória por
-    _VALIDATED_CASE_CACHE_TTL_SECONDS (inclusive resultados vazios).
+    grau_concordancia >= min_concordancia e aprovado_para_referencia = true,
+    para uso como exemplo de calibração no prompt de análise. Cacheado em
+    memória por _VALIDATED_CASE_CACHE_TTL_SECONDS (inclusive resultados vazios).
+
+    A aprovação é manual (admin, direto no Supabase): o texto da validação é
+    livre e escrito por qualquer cliente premium, e entra no prompt das
+    análises de TODOS os clientes — sem curadoria, abria espaço para injeção
+    de instruções no modelo e vazava dados clínicos entre clientes.
     """
-    now = time.time()
-    cached = _validated_case_cache.get(tipo_exame)
-    if cached and cached["expires_at"] > now:
-        return cached["case"]
+    cached = _validated_case_cache.get(tipo_exame, _NO_CASE)
+    if cached is not _NO_CASE:
+        return cached
 
     case = None
     db = _get_client()
@@ -505,6 +582,7 @@ def buscar_caso_validado_referencia(tipo_exame: str, min_concordancia: int = 80)
                     "achados_incorretos, grau_concordancia, created_at"
                 )
                 .eq("tipo_exame", tipo_exame)
+                .eq("aprovado_para_referencia", True)
                 .gte("grau_concordancia", min_concordancia)
                 .order("created_at", desc=True)
                 .limit(1)
@@ -515,10 +593,7 @@ def buscar_caso_validado_referencia(tipo_exame: str, min_concordancia: int = 80)
         except Exception:
             logger.exception("Erro em buscar_caso_validado_referencia")
 
-    _validated_case_cache[tipo_exame] = {
-        "case": case,
-        "expires_at": now + _VALIDATED_CASE_CACHE_TTL_SECONDS,
-    }
+    _validated_case_cache.set(tipo_exame, case)
     return case
 
 
@@ -639,6 +714,124 @@ def salvar_diagnostico_validado(
         return res.data[0]["id"] if res.data else None
     except Exception:
         logger.exception("Erro em salvar_diagnostico_validado")
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIREITOS DO TITULAR (LGPD art. 18)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def exportar_dados_cliente(cliente_id: str) -> dict | None:
+    """Todos os dados pessoais do cliente, para entrega ao titular (portabilidade/acesso).
+
+    Fica de fora só o que é segredo do sistema (hash de senha, versão de sessão)
+    e o payload bruto das cobranças (dados do gateway, não do titular).
+    """
+    db = _get_client()
+    if not db or not cliente_id:
+        return None
+    try:
+        cliente = (
+            db.table("clientes").select("id, nome, email, cpf_cnpj, created_at")
+            .eq("id", cliente_id).limit(1).execute().data
+        )
+        if not cliente:
+            return None
+        analises = (
+            db.table("analises").select(
+                "id, created_at, tipo_exame, modalidade, descricao_usuario, analise_completa, modelo_ia, "
+                "num_imagens, responsavel_nome, responsavel_perfil, responsavel_registro, responsavel_instituicao"
+            ).eq("cliente_id", cliente_id).order("created_at", desc=True).execute().data or []
+        )
+        ids = [a["id"] for a in analises]
+        return {
+            "cliente": cliente[0],
+            "pagamentos": (
+                db.table("pagamentos").select(
+                    "asaas_payment_id, valor, descricao, plano, forma_pagamento, status, created_at"
+                ).eq("cliente_id", cliente_id).order("created_at", desc=True).execute().data or []
+            ),
+            "analises": analises,
+            "imagens_exame": (
+                db.table("imagens_exame").select(
+                    "analise_id, mime_type, tamanho_bytes, ordem, origem, arquivo_original, created_at"
+                ).in_("analise_id", ids).execute().data or []
+            ) if ids else [],
+            "feedbacks": (
+                db.table("feedbacks_ia").select("analise_id, tipo, comentario, fonte_nome, created_at")
+                .in_("analise_id", ids).execute().data or []
+            ) if ids else [],
+            "validacoes_clinicas": (
+                db.table("diagnosticos_validados").select(
+                    "analise_id, diagnostico_final, grau_concordancia, validado_por, created_at"
+                ).in_("analise_id", ids).execute().data or []
+            ) if ids else [],
+            "sessoes": (
+                db.table("sessoes_acesso").select("ip_address, user_agent, created_at")
+                .eq("cliente_id", cliente_id).order("created_at", desc=True).execute().data or []
+            ),
+        }
+    except Exception:
+        logger.exception("Erro em exportar_dados_cliente")
+        return None
+
+
+def excluir_dados_cliente(cliente_id: str) -> bool:
+    """Elimina os dados pessoais do cliente (LGPD art. 18, VI).
+
+    Apaga laudos (e, em cascata, imagens, feedbacks e validações), sessões,
+    logs de acesso e o cadastro. As cobranças em `pagamentos` permanecem — sem
+    vínculo com o cadastro (cliente_id vira NULL pela FK) — porque registros
+    fiscais têm guarda obrigatória por lei (LGPD art. 16, I).
+    """
+    db = _get_client()
+    if not db or not cliente_id:
+        return False
+    try:
+        db.table("analises").delete().eq("cliente_id", cliente_id).execute()
+        db.table("sessoes_acesso").delete().eq("cliente_id", cliente_id).execute()
+        db.table("logs_acesso").delete().eq("cliente_id", cliente_id).execute()
+        db.table("clientes").delete().eq("id", cliente_id).execute()
+        return True
+    except Exception:
+        logger.exception("Erro em excluir_dados_cliente")
+        return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONTADORES DIÁRIOS (orçamento de custo, cota do trial)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def somar_gasto_diario(escopo: str, dia: str, valor: float) -> float | None:
+    """Soma `valor` ao contador (escopo, dia) de forma atômica no banco. Retorna o total ou None."""
+    db = _get_client()
+    if not db:
+        return None
+    try:
+        res = db.rpc("somar_gasto_diario", {"p_escopo": escopo, "p_dia": dia, "p_valor": valor}).execute()
+        return float(res.data) if res.data is not None else None
+    except Exception:
+        logger.warning("Erro em somar_gasto_diario (migration aplicada?)", exc_info=True)
+        return None
+
+
+def buscar_gasto_diario(escopo: str, dia: str) -> float | None:
+    """Total do contador (escopo, dia); 0.0 se ainda não houver linha; None sem banco/erro."""
+    db = _get_client()
+    if not db:
+        return None
+    try:
+        res = (
+            db.table("gastos_diarios")
+            .select("total")
+            .eq("escopo", escopo)
+            .eq("dia", dia)
+            .limit(1)
+            .execute()
+        )
+        return float(res.data[0]["total"]) if res.data else 0.0
+    except Exception:
+        logger.warning("Erro em buscar_gasto_diario (migration aplicada?)", exc_info=True)
         return None
 
 

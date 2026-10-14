@@ -19,7 +19,8 @@ um checkout pago — só rejeitamos quando a resposta do DNS é conclusiva.
 import logging
 import os
 import re
-import time
+
+from core.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +66,8 @@ _ERRO_DOMINIO = "O domínio deste e-mail não existe ou não recebe mensagens. C
 
 # Cache de resultados conclusivos do DNS. Resultados indeterminados nunca são
 # cacheados — a próxima tentativa deve poder consultar de novo.
-_mx_cache: dict[str, bool] = {}
-_mx_cache_expiracao: dict[str, float] = {}
 _MX_CACHE_TTL_SECONDS = 3600
+_mx_cache = TTLCache(maxsize=2048, ttl_seconds=_MX_CACHE_TTL_SECONDS)
 
 
 def _dominios_bloqueados() -> frozenset[str]:
@@ -96,14 +96,13 @@ def dominio_aceita_email(dominio: str, timeout: float | None = None) -> bool | N
     if not dominio:
         return False
 
-    agora = time.time()
-    if dominio in _mx_cache and _mx_cache_expiracao.get(dominio, 0) > agora:
-        return _mx_cache[dominio]
+    cached = _mx_cache.get(dominio)
+    if cached is not None:
+        return cached
 
     resultado = _consultar_dns(dominio, timeout)
     if resultado is not None:
-        _mx_cache[dominio] = resultado
-        _mx_cache_expiracao[dominio] = agora + _MX_CACHE_TTL_SECONDS
+        _mx_cache.set(dominio, resultado)
     return resultado
 
 

@@ -152,13 +152,15 @@
         clearInterval(polling);
         document.getElementById('main-icon').innerHTML = {{ ('<span class="icon-badge is-success">'|safe ~ layout.icon("check-circle", 26) ~ '</span>'|safe)|tojson }};
         document.getElementById('main-title').textContent = 'Pagamento confirmado!';
-        document.getElementById('main-desc').textContent = 'Seu acesso foi liberado. Redirecionando…';
+        document.getElementById('main-desc').textContent = data.login_required
+          ? 'Entre com o e-mail e a senha criados no checkout. Redirecionando…'
+          : 'Seu acesso foi liberado. Redirecionando…';
         statusBox.className = 'status-confirmed';
         spinner.style.display = 'none';
-        statusText.textContent = 'Pagamento confirmado — acesso liberado!';
+        statusText.textContent = data.login_required ? 'Pagamento confirmado!' : 'Pagamento confirmado — acesso liberado!';
         btn.style.display = 'none';
         document.getElementById('invoice-link') && (document.getElementById('invoice-link').style.display = 'none');
-        setTimeout(() => { window.location.href = '/'; }, 2000);
+        setTimeout(() => { window.location.href = data.login_required ? '/login' : '/'; }, 2000);
       } else {
         statusBox.className = 'status-waiting';
         spinner.style.display = '';

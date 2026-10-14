@@ -34,11 +34,12 @@
 {%- endmacro %}
 
 {# Navegação de quem está logado: mesma ordem e destaque em todas as páginas.
-   current: "analise" | "historico" | "dashboard" | "" #}
+   current: "analise" | "historico" | "dashboard" | "conta" | "" #}
 {% macro app_nav(current="") -%}
 <a href="/laudos" class="btn-secondary{{ ' is-current' if current == 'historico' }}"{% if current == 'historico' %} aria-current="page"{% endif %}>Histórico</a>
 <a href="/clinica/dashboard" class="btn-secondary{{ ' is-current' if current == 'dashboard' }}"{% if current == 'dashboard' %} aria-current="page"{% endif %}>Dashboard</a>
 {% if current != 'analise' %}<a href="/" class="btn-primary">Nova análise</a>{% endif %}
+<a href="/conta" class="btn-ghost{{ ' is-current' if current == 'conta' }}"{% if current == 'conta' %} aria-current="page"{% endif %}>Meus dados</a>
 <a href="/premium/logout" class="btn-ghost">Sair</a>
 {%- endmacro %}
 

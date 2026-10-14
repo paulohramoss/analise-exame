@@ -87,6 +87,8 @@ def create_customer(name: str, email: str, cpf_cnpj: str = "") -> dict:
 
 
 BILLING_TYPES = {"PIX", "BOLETO", "CREDIT_CARD", "UNDEFINED"}
+# Dados de cartão nunca são enviados por este app: cobranças CREDIT_CARD são
+# pagas na página segura do Asaas (invoiceUrl), fora do nosso escopo PCI.
 
 
 def create_payment(
@@ -95,14 +97,11 @@ def create_payment(
     description: str,
     external_reference: str = "",
     billing_type: str = "UNDEFINED",
-    credit_card: dict | None = None,
-    credit_card_holder_info: dict | None = None,
 ) -> dict:
     """
     Cria uma cobrança para o cliente.
     billing_type: PIX | BOLETO | CREDIT_CARD | UNDEFINED.
-    Para CREDIT_CARD, passe credit_card e credit_card_holder_info.
-    Retorna o objeto de pagamento do Asaas.
+    Retorna o objeto de pagamento do Asaas (invoiceUrl é a página de pagamento).
     """
     if billing_type not in BILLING_TYPES:
         billing_type = "UNDEFINED"
@@ -115,10 +114,6 @@ def create_payment(
         "description": description,
         "externalReference": external_reference,
     }
-    if billing_type == "CREDIT_CARD" and credit_card:
-        payload["creditCard"] = credit_card
-    if billing_type == "CREDIT_CARD" and credit_card_holder_info:
-        payload["creditCardHolderInfo"] = credit_card_holder_info
     resp = requests.post(
         f"{_base_url()}/payments",
         json=payload,

@@ -69,6 +69,7 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
 .report li { margin-bottom: 2px; }
 .report p { margin: 4px 0; }
 .report strong { color: #0f172a; }
+.report blockquote { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--primary); background: var(--soft); color: var(--muted); break-inside: avoid; }
 
 /* Validação e assinatura */
 .validation { break-inside: avoid; page-break-inside: avoid; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-top: 22px; }

@@ -6,6 +6,7 @@
     <title>Teste gratuito — Three Health</title>
     {% import "_layout.html" as layout %}
     {{ layout.head_assets() }}
+    <script src="{{ static_url('laudo-ui.js') }}"></script>
     <script src="{{ static_url('laudo-pdf.js') }}" defer></script>
     <style>
         /* ── Trial Badge ── */
@@ -304,6 +305,7 @@
         .report-content ul, .report-content ol { padding-left: 1.4rem; margin: 0.4rem 0; }
         .report-content li { margin-bottom: 0.2rem; }
         .report-content p { margin: 0.4rem 0; }
+        .report-content blockquote { margin: 0.6rem 0; padding: 0.5rem 0.8rem; border-left: 3px solid var(--primary); background: var(--primary-light); border-radius: 0 8px 8px 0; color: var(--text-muted); }
 
         .meta-grid {
             display: grid;
@@ -906,7 +908,7 @@
         <div class="loading-content">
             <div class="spinner"></div>
             <h3>Analisando exame...</h3>
-            <p>Buscando referências e gerando laudo com IA.</p>
+            <p id="trial-stage-text" aria-live="polite">Buscando referências e gerando laudo com IA.</p>
             <p>Isso pode levar alguns segundos.</p>
         </div>
     </div>
@@ -917,6 +919,7 @@
 
         // ── State ──
         let trialCount = parseInt(localStorage.getItem(STORAGE_KEY) || '0');
+        let serverRemaining = null;  // cota restante informada por /trial/analyze
 
         function saveCount() {
             localStorage.setItem(STORAGE_KEY, String(trialCount));
@@ -1107,9 +1110,20 @@
                 const resp = await fetch('/trial/analyze', { method: 'POST', body: formData });
                 const data = await resp.json();
 
+                if (data.trial_exhausted) {
+                    // O servidor é quem manda: sincroniza o contador visual e mostra o upgrade.
+                    trialCount = MAX_TRIALS;
+                    saveCount();
+                    updateBadge();
+                    showUpgrade();
+                    return;
+                }
                 if (!resp.ok && resp.status !== 202) {
                     showError(data.error || 'Erro inesperado. Tente novamente.');
                     return;
+                }
+                if (typeof data.trial_remaining === 'number') {
+                    serverRemaining = data.trial_remaining;
                 }
                 if (data.error) {
                     showError(data.error);
@@ -1155,15 +1169,23 @@
                 if (data.status === 'finished') {
                     return data;
                 }
-                // 'queued' ou 'started' — continua aguardando
+                // 'queued' ou 'started' — mostra a etapa e continua aguardando
+                const label = stageLabel(data.stage);
+                if (label) document.getElementById('trial-stage-text').textContent = label + '…';
             }
             showError('A análise está demorando mais que o esperado. Tente novamente em alguns instantes.');
             return null;
         }
 
+        let lastResult = null;
+
         function populateTrialResult(data) {
-            // Increment count
-            trialCount++;
+            lastResult = data;
+            // Contagem: usa a do servidor quando disponível (cota por IP), senão incrementa a local.
+            trialCount = serverRemaining !== null
+                ? Math.max(trialCount + 1, MAX_TRIALS - serverRemaining)
+                : trialCount + 1;
+            serverRemaining = null;
             saveCount();
             updateBadge();
 
@@ -1176,8 +1198,8 @@
             document.getElementById('r-image').src = `data:${data.image_mime};base64,${data.image_b64}`;
 
             const reportEl = document.getElementById('report-content');
-            reportEl.innerHTML = data.analysis;
-            renderMarkdown(reportEl);
+            // O laudo vem da IA: renderLaudoInto escapa o texto e só insere as próprias tags.
+            renderLaudoInto(reportEl, data.analysis || '');
 
             // Show/hide new analysis button and last-analysis warning
             const btnNew = document.getElementById('btn-new-analysis');
@@ -1193,22 +1215,6 @@
             showSection('section-result');
         }
 
-        // ── Markdown render ──
-        function renderMarkdown(el) {
-            let html = el.innerHTML.trim();
-            // Headers (aceita espaços opcionais antes do #)
-            html = html.replace(/^\s*### (.+)$/gm, '<h4>$1</h4>');
-            html = html.replace(/^\s*## (.+)$/gm, '<h3>$1</h3>');
-            html = html.replace(/^\s*# (.+)$/gm, '<h2>$1</h2>');
-            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-            html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-            html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-            html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-            html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
-            html = html.replace(/\n\n/g, '</p><p>');
-            html = '<p>' + html + '</p>';
-            el.innerHTML = html;
-        }
 
         // ── Copy report ──
         function copyReport() {
@@ -1226,10 +1232,11 @@
                 reportHTML: document.getElementById('report-content').innerHTML,
                 generatedAt: laudoNowBR(),
                 badge: 'Teste gratuito',
-                meta: [
-                    { label: 'Região', value: document.getElementById('r-exam-type').textContent },
-                    { label: 'Referências usadas', value: document.getElementById('r-refs').textContent },
-                ],
+                meta: laudoPdfMeta({
+                    exam_type: document.getElementById('r-exam-type').textContent,
+                    references_used: lastResult ? lastResult.references_used : 0,
+                    num_images: 1,
+                }, lastResult ? lastResult.consensus : null),
                 clinicalInfo: lastClinicalInfo,
                 images: imgEl && imgEl.src ? [{ src: imgEl.src }] : [],
             });

@@ -6,6 +6,7 @@
     <title>Processando análise — Three Health</title>
     {% import "_layout.html" as layout %}
     {{ layout.head_assets() }}
+    <script src="{{ static_url('laudo-ui.js') }}"></script>
     <link
       rel="stylesheet"
       href="{{ static_url('style.css') }}"
@@ -58,7 +59,7 @@
       <div class="card processing-card" id="processing-content">
         <div class="spinner"></div>
         <h2>Analisando exame...</h2>
-        <p>Gerando laudo com consenso otimizado entre os modelos de IA.</p>
+        <p id="stage-text" aria-live="polite">Gerando laudo com consenso otimizado entre os modelos de IA.</p>
         <p>
           Esta página atualiza automaticamente quando o laudo estiver pronto —
           não é necessário recarregar.
@@ -78,6 +79,8 @@
                   const resp = await fetch(statusUrl);
                   const data = await resp.json();
 
+                  const label = stageLabel(data.stage);
+                  if (label) document.getElementById('stage-text').textContent = label + '…';
                   if (data.status === 'finished') {
                       window.location.href = resultadoUrl;
                       return;

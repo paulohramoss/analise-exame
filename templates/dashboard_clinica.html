@@ -264,7 +264,7 @@
                             <div class="compact-title">{{ item.tipo_exame|exam_label }}</div>
                             <div class="compact-meta">{{ item.created_at|datetime_br }} · {{ item.num_imagens }} {{ 'imagem' if item.num_imagens == 1 else 'imagens' }}</div>
                         </div>
-                        <a class="status-pill" href="{{ url_for('laudo_detalhe', analise_id=item.id) }}">Validar</a>
+                        <a class="status-pill" href="{{ url_for('laudos.laudo_detalhe', analise_id=item.id) }}">Validar</a>
                     </div>
                     {% else %}
                     <p class="card-description">Todos os laudos recentes foram validados.</p>

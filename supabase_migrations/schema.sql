@@ -12,9 +12,10 @@
 -- `if not exists`, então não há efeito sobre dados já presentes).
 --
 -- Segurança: a aplicação acessa o banco com a service_role key (ver
--- SUPABASE_SERVICE_KEY no .env.example), que ignora Row Level Security.
--- Não há políticas RLS definidas aqui — todo controle de acesso é feito na
--- camada da aplicação (Flask), não no banco.
+-- SUPABASE_SERVICE_KEY no .env.example), que ignora Row Level Security. O
+-- controle de acesso por cliente é feito na camada da aplicação (Flask); o
+-- RLS (2026-10-13-rls-tabelas.sql) existe para que a chave anon/publishable,
+-- pública por design, não leia nem escreva nada pela API REST do Supabase.
 
 create extension if not exists pgcrypto;
 
@@ -28,8 +29,12 @@ create table if not exists public.clientes (
     cpf_cnpj           text,
     asaas_customer_id  text,
     senha_hash         text,
+    sessao_versao      integer not null default 0,   -- incrementar invalida os cookies premium do cliente
     created_at         timestamptz not null default now()
 );
+
+alter table public.clientes
+    add column if not exists sessao_versao integer not null default 0;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- PAGAMENTOS — cobranças criadas no Asaas (PIX/boleto/cartão)
@@ -159,8 +164,12 @@ create table if not exists public.diagnosticos_validados (
     achados_perdidos      jsonb default '[]'::jsonb,
     achados_incorretos    jsonb default '[]'::jsonb,
     validado_por          text,
+    aprovado_para_referencia boolean not null default false,  -- curadoria manual (admin) antes de virar exemplo no prompt
     created_at            timestamptz not null default now()
 );
+
+alter table public.diagnosticos_validados
+    add column if not exists aprovado_para_referencia boolean not null default false;
 
 create index if not exists diagnosticos_validados_analise_created_idx
     on public.diagnosticos_validados (analise_id, created_at desc);

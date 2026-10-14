@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 import uuid
+from contextvars import ContextVar, Token
 from datetime import datetime, timezone
 
 try:
@@ -32,11 +33,27 @@ def new_trace_id() -> str:
     return uuid.uuid4().hex[:16]
 
 
+# trace_id fora de requisição HTTP (ex.: job da fila no worker). Permite achar,
+# pelo mesmo trace_id, os logs da requisição que enfileirou e os do worker.
+_bound_trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
+
+
+def bind_trace_id(trace_id: str | None) -> Token:
+    """Associa um trace_id ao contexto atual (thread/tarefa). Desfaça com unbind_trace_id."""
+    return _bound_trace_id.set(trace_id)
+
+
+def unbind_trace_id(token: Token) -> None:
+    _bound_trace_id.reset(token)
+
+
 def current_trace_id() -> str | None:
-    """Retorna o trace_id da requisição Flask atual, se houver uma em andamento."""
+    """trace_id da requisição Flask atual ou, fora dela, o associado por bind_trace_id."""
     if has_request_context() and g is not None:
-        return getattr(g, "trace_id", None)
-    return None
+        trace_id = getattr(g, "trace_id", None)
+        if trace_id:
+            return trace_id
+    return _bound_trace_id.get()
 
 
 class TraceIdFilter(logging.Filter):
@@ -94,3 +111,4 @@ def configure_logging() -> None:
     root_logger.addHandler(handler)
     root_logger.setLevel(level)
     root_logger._medai_configured = True  # type: ignore[attr-defined]
+

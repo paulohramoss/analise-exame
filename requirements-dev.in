@@ -1,0 +1,9 @@
+# Ferramentas de desenvolvimento/CI, travadas junto com as versões do app.
+#   pip-compile --strip-extras requirements-dev.in
+-c requirements.txt
+-r requirements.in
+pytest>=8.0.0
+ruff>=0.6.0
+fakeredis>=2.20.0
+pip-audit>=2.7.0
+pip-tools>=7.4.0

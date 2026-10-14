@@ -5,12 +5,22 @@ from core import cost_tracking
 
 def test_estimate_cost_usd_known_model():
     cost = cost_tracking.estimate_cost_usd("gemini-2.5-flash", input_tokens=1_000_000, output_tokens=1_000_000)
-    input_price, output_price = cost_tracking._PRICING_PER_1M_TOKENS["gemini-2.5-flash"]
+    input_price, output_price = dict(cost_tracking._PRICING_PER_1M_TOKENS)["gemini-2.5-flash"]
     assert cost == input_price + output_price
 
 
-def test_estimate_cost_usd_unknown_model_is_zero():
-    assert cost_tracking.estimate_cost_usd("modelo-desconhecido", 1_000_000, 1_000_000) == 0.0
+def test_estimate_cost_usd_matches_model_family_by_prefix():
+    """Trocar CLAUDE_MODEL por outra versão Sonnet continua cobrando o preço Sonnet."""
+    sonnet = dict(cost_tracking._PRICING_PER_1M_TOKENS)["claude-sonnet"]
+    assert cost_tracking.estimate_cost_usd("claude-sonnet-5-5", 1_000_000, 0) == sonnet[0]
+    lite = dict(cost_tracking._PRICING_PER_1M_TOKENS)["gemini-2.5-flash-lite"]
+    assert cost_tracking.estimate_cost_usd("gemini-2.5-flash-lite", 1_000_000, 0) == lite[0]
+
+
+def test_estimate_cost_usd_unknown_model_is_never_free():
+    """Antes custava 0 — e o orçamento diário parava de funcionar sem aviso."""
+    assert cost_tracking.estimate_cost_usd("gemini-9-ultra", 1_000_000, 1_000_000) > 0
+    assert cost_tracking.estimate_cost_usd("modelo-desconhecido", 1_000_000, 1_000_000) > 0
 
 
 def test_log_analysis_cost_sums_all_usage_entries():

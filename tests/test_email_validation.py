@@ -8,10 +8,8 @@ from core import email_validation as ev
 @pytest.fixture(autouse=True)
 def _limpa_cache_mx():
     ev._mx_cache.clear()
-    ev._mx_cache_expiracao.clear()
     yield
     ev._mx_cache.clear()
-    ev._mx_cache_expiracao.clear()
 
 
 # ── Sintaxe ───────────────────────────────────────────────────────────────────

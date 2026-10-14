@@ -9,7 +9,11 @@ O fallback síncrono (sem Redis) é coberto em tests/test_analysis_routes.py.
 import io
 from unittest.mock import MagicMock
 
-import app as flask_app_module
+import rq
+
+from web import config
+from web import security
+from core import jobs
 
 FAKE_RESULT = {
     "success": True,
@@ -38,7 +42,7 @@ def _upload_payload(**extra):
 
 def _login_as_admin(client):
     """Usa o cookie admin (bypassa o fluxo de pagamento) para acessar rotas premium."""
-    key = flask_app_module._get_admin_key()
+    key = config.get_admin_key()
     resp = client.get(f"/admin/entrar?key={key}")
     assert resp.status_code in (302, 303)
 
@@ -88,7 +92,7 @@ def test_api_analyze_enqueues_and_finishes(client, fake_redis_conn, run_pending_
 
     run_pending_jobs(fake_redis_conn)
 
-    status_resp = client.get(body["status_url"])
+    status_resp = client.get(body["status_url"], headers={"X-API-Key": "chave-do-chamador"})
     status_body = status_resp.get_json()
     assert status_body["status"] == "finished"
     assert "laudo gerado de forma assíncrona" in status_body["analysis"]
@@ -131,8 +135,67 @@ def test_premium_analyze_redirects_to_processing_then_result(
     assert "laudo gerado de forma assíncrona" in resultado_resp.get_data(as_text=True)
 
 
+def test_premium_resultado_unknown_job_redirects_home(client, fake_redis_conn):
+    """Job inexistente/expirado não prende o usuário num polling infinito."""
+    _login_as_admin(client)
+    resp = client.get("/analyze/resultado/job-que-nao-existe")
+    assert resp.status_code == 302
+    assert resp.headers["Location"] == "/"
+
+
 def test_premium_resultado_redirects_back_to_processing_if_not_finished(client, fake_redis_conn):
     _login_as_admin(client)
-    resp = client.get("/analyze/resultado/job-nao-processado-ainda")
+    job_id = jobs.enqueue_analysis(owner="admin", mode="premium")
+    resp = client.get(f"/analyze/resultado/{job_id}")
     assert resp.status_code == 302
     assert "/analyze/processando/" in resp.headers["Location"]
+
+
+def _premium_cookie_for(email):
+    return security.generate_premium_token("pay_1", email, 3600)
+
+
+def test_premium_user_cannot_read_another_users_job(client, fake_redis_conn):
+    job_id = jobs.enqueue_analysis(owner="premium:dono@example.com", mode="premium")
+
+    client.set_cookie(security.PREMIUM_COOKIE, _premium_cookie_for("intruso@example.com"))
+    assert client.get(f"/analyze/status/{job_id}").status_code == 404
+    resp = client.get(f"/analyze/resultado/{job_id}")
+    assert resp.headers["Location"] == "/"
+
+    client.set_cookie(security.PREMIUM_COOKIE, _premium_cookie_for("dono@example.com"))
+    assert client.get(f"/analyze/status/{job_id}").status_code == 200
+
+
+def test_api_key_cannot_read_job_of_another_key(client, fake_redis_conn, monkeypatch):
+    _mock_analyze(monkeypatch)
+    resp = client.post(
+        "/api/analyze",
+        data=_upload_payload(description="joelho"),
+        content_type="multipart/form-data",
+        headers={"X-API-Key": "chave"},
+    )
+    status_url = resp.get_json()["status_url"]
+
+    other = client.get(status_url, headers={"X-API-Key": "chave-do-chamador"})
+    assert other.status_code == 404
+    own = client.get(status_url, headers={"X-API-Key": "chave"})
+    assert own.status_code == 200
+    assert "owner" not in own.get_json()
+
+
+def test_enqueued_job_does_not_carry_api_keys(client, fake_redis_conn, monkeypatch):
+    """As chaves ficam no ambiente do worker; antes iam em texto puro para o Redis."""
+    _mock_analyze(monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-segredo")
+    resp = client.post(
+        "/api/analyze",
+        data=_upload_payload(description="joelho"),
+        content_type="multipart/form-data",
+        headers={"X-API-Key": "chave"},
+    )
+    job = rq.job.Job.fetch(resp.get_json()["job_id"], connection=fake_redis_conn)
+
+    assert "api_key" not in job.kwargs and "anthropic_api_key" not in job.kwargs
+    raw = b"".join(fake_redis_conn.hgetall(f"rq:job:{job.id}").values())
+    assert b"sk-ant-segredo" not in raw and b"test-gemini-key" not in raw

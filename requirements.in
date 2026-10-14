@@ -1,0 +1,26 @@
+# Dependências DIRETAS da aplicação (web + worker), com a versão mínima aceita.
+# Não instale a partir deste arquivo: ele gera o requirements.txt travado.
+#
+#   pip-compile --strip-extras requirements.in            # regenera o lock
+#   pip-compile --strip-extras --upgrade-package flask requirements.in
+#
+# Mínimos acima das versões com CVE conhecido (pip-audit, out/2026):
+flask>=3.1.3
+werkzeug>=3.1.9
+requests>=2.33.0
+python-dotenv>=1.2.2
+
+flask-limiter>=3.8.0
+google-genai>=1.0.0
+anthropic>=0.40.0
+pillow>=11.0.0
+pydicom>=2.4.4
+numpy>=1.26.0
+# >=2.16: até a 2.15.x o cliente validava a chave com uma regex de JWT e
+# rejeitava as chaves novas do Supabase (sb_secret_… / sb_publishable_…).
+supabase>=2.31.0,<3
+httpx>=0.28.1
+dnspython>=2.6.1
+redis>=5.0.0
+rq>=1.16.0
+sentry-sdk[flask]>=2.0.0

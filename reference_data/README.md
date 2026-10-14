@@ -5,20 +5,30 @@ Quanto mais imagens normais de qualidade forem adicionadas, mais precisa será a
 
 ## Como adicionar imagens
 
-Coloque as imagens de referência (exames normais) na subpasta correspondente ao tipo de exame.
-A IA usa essas imagens para comparar com o exame do paciente.
+Coloque as imagens de referência (exames normais) na subpasta da região anatômica.
+O nome da pasta é **exatamente** o tipo de exame detectado pelo sistema
+(`EXAM_TYPE_KEYWORDS` em `core/reference_images.py`) — uma pasta com outro nome
+nunca é lida.
 
 ```
 reference_data/
-├── raio_x_torax/          → Radiografias de tórax normais (PA e lateral)
-├── ressonancia_cerebro/   → RM de crânio normal (axial, coronal, sagital)
-├── ressonancia_joelho/    → RM de joelho normal (sagital, coronal, axial)
-├── ressonancia_coluna/    → RM de coluna normal (lombar, cervical, torácica)
-├── tomografia_cranio/     → TC de crânio normal
-├── ultrassonografia/      → Ultrassonografias normais
-├── mamografia/            → Mamografias normais (CC e MLO)
-└── geral/                 → Imagens de referência gerais
+├── joelho/         → RM / RX de joelho normal (sagital, coronal, axial)
+├── coluna/         → RM / RX de coluna normal (lombar, cervical, torácica)
+├── ombro/          → RM / RX de ombro normal
+├── quadril/        → RM / RX de quadril e pelve normais
+├── pe_tornozelo/   → RM / RX de pé e tornozelo normais
+├── mao_punho/      → RM / RX de mão e punho normais
+├── cotovelo/       → RM / RX de cotovelo normal
+├── geral/          → usada só quando a região não pôde ser identificada
+└── docs/           → atlas em PDF (ver docs/README.md)
 ```
+
+Use **imagens de exame**, não diagramas ou desenhos esquemáticos: o modelo
+compara o exame do paciente com elas pixel a pixel.
+
+Sem imagem local, joelho e ombro baixam uma referência pública da Wikimedia;
+as demais regiões seguem **sem** comparação visual (melhor do que comparar com
+a região errada).
 
 ## Formatos aceitos
 
