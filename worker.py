@@ -27,10 +27,18 @@ load_dotenv()
 
 from core import jobs
 from core.build_info import get_build_version
-from core.logging_config import configure_logging
+from core.logging_config import (
+    configure_logging,
+    init_posthog_log_capture,
+    posthog_log_capture_enabled,
+)
+from web.posthog import init_posthog
 
 configure_logging()
+init_posthog()
+init_posthog_log_capture()
 logger = logging.getLogger("worker")
+posthog_logger = logging.getLogger("posthog.logs")
 
 BUILD_VERSION = get_build_version()
 
@@ -83,6 +91,11 @@ def main() -> None:
     worker = worker_class([queue], connection=queue.connection)
 
     logger.info("Worker iniciado (fila=%s, classe=%s)", queue.name, worker_class.__name__)
+    if posthog_log_capture_enabled():
+        posthog_logger.info(
+            "analysis_queue_worker_started",
+            extra={"queue_name": queue.name, "worker_class": worker_class.__name__},
+        )
     worker.work(with_scheduler=False)
 
 

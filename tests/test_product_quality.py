@@ -252,7 +252,7 @@ def test_job_reports_stages(client, fake_redis_conn, run_pending_jobs, monkeypat
 def test_analyzer_notifies_stages(monkeypatch):
     stages = []
     monkeypatch.setattr(analyzer, "get_reference_images_as_bytes", lambda exam_type: [])
-    monkeypatch.setattr(analyzer, "_make_gemini_client", lambda api_key: MagicMock())
+    monkeypatch.setattr(analyzer, "_make_gemini_client", lambda api_key, *args: MagicMock())
     monkeypatch.setattr(analyzer, "_generate_with_retry", MagicMock(return_value=MagicMock(text="laudo", usage_metadata=None)))
 
     analyzer.analyze_exam_from_bytes((b"img-progresso", "image/jpeg"), "joelho.jpg", api_key="k",

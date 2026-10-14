@@ -112,3 +112,46 @@ def configure_logging() -> None:
     root_logger.setLevel(level)
     root_logger._medai_configured = True  # type: ignore[attr-defined]
 
+
+def init_posthog_log_capture() -> bool:
+    """Export only records deliberately emitted through the dedicated logger."""
+    posthog_logger = logging.getLogger("posthog.logs")
+    if getattr(posthog_logger, "_posthog_logs_configured", False):
+        return True
+
+    project_token = os.environ.get("POSTHOG_PROJECT_TOKEN", "").strip()
+    host = os.environ.get("POSTHOG_HOST", "").strip()
+    if not project_token or not host:
+        return False
+
+    try:
+        from opentelemetry._logs import set_logger_provider
+        from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+        from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+    except ImportError:
+        logging.getLogger(__name__).warning(
+            "PostHog log capture requires opentelemetry-api, opentelemetry-sdk, "
+            "and opentelemetry-exporter-otlp."
+        )
+        return False
+
+    logger_provider = LoggerProvider()
+    set_logger_provider(logger_provider)
+    exporter = OTLPLogExporter(
+        endpoint=f"{host.rstrip('/')}/i/v1/logs",
+        headers={"Authorization": f"Bearer {project_token}"},
+    )
+    logger_provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
+
+    handler = LoggingHandler(logger_provider=logger_provider)
+    handler.addFilter(TraceIdFilter())
+    posthog_logger.addHandler(handler)
+    posthog_logger.setLevel(logging.INFO)
+    posthog_logger._posthog_logs_configured = True  # type: ignore[attr-defined]
+    return True
+
+
+def posthog_log_capture_enabled() -> bool:
+    """Whether purpose-written PostHog log records can be emitted."""
+    return bool(getattr(logging.getLogger("posthog.logs"), "_posthog_logs_configured", False))

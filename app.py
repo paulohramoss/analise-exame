@@ -11,13 +11,19 @@ import os
 
 from dotenv import load_dotenv
 from flask import Flask
+from werkzeug.exceptions import HTTPException
 
 load_dotenv()
 
 from core.build_info import get_build_version  # noqa: E402
-from core.logging_config import configure_logging  # noqa: E402
+from core.logging_config import (  # noqa: E402
+    configure_logging,
+    init_posthog_log_capture,
+    posthog_log_capture_enabled,
+)
 from web import config, hooks, security, uploads  # noqa: E402
 from web.extensions import limiter  # noqa: E402
+from web.posthog import init_posthog  # noqa: E402
 from web.routes import ALL_BLUEPRINTS  # noqa: E402
 
 configure_logging()
@@ -59,6 +65,18 @@ def create_app() -> Flask:
     flask_app.config["UPLOAD_FOLDER"] = str(uploads.UPLOAD_FOLDER)
     flask_app.config["MAX_CONTENT_LENGTH"] = uploads.MAX_CONTENT_LENGTH
 
+    posthog_client = init_posthog()
+    init_posthog_log_capture()
+
+    @flask_app.errorhandler(Exception)
+    def capture_unhandled_exception(error: Exception):
+        """Send unhandled application exceptions to PostHog before Flask renders a 500."""
+        if isinstance(error, HTTPException):
+            return error
+        if posthog_client is not None:
+            posthog_client.capture_exception(error)
+        return flask_app.handle_exception(error)
+
     if config.is_local_runtime() and not os.environ.get("ADMIN_KEY", "").strip():
         logger.warning(
             "ADMIN_KEY não definida — acesso admin local liberado via /admin/entrar?key=%s "
@@ -72,6 +90,11 @@ def create_app() -> Flask:
     hooks.register(flask_app, BUILD_VERSION)
     for blueprint in ALL_BLUEPRINTS:
         flask_app.register_blueprint(blueprint)
+    if posthog_log_capture_enabled():
+        logging.getLogger("posthog.logs").info(
+            "flask_application_ready",
+            extra={"runtime": "flask", "build_version": BUILD_VERSION},
+        )
     return flask_app
 
 

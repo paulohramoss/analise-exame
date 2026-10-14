@@ -9,7 +9,7 @@ from werkzeug.security import generate_password_hash
 
 from core import asaas, db
 from core.email_validation import validar_email_cadastro
-from web import accounts, config, security
+from web import accounts, config, posthog, security
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +128,12 @@ def checkout_pay():
         plano=plan_key,
         forma_pagamento=billing_type,
     )
+    if posthog.posthog_client is not None:
+        posthog.posthog_client.capture(
+            "checkout_payment_created",
+            distinct_id=str(cliente_id),
+            properties={"plan_key": plan_key, "billing_type": billing_type},
+        )
 
     # ── Resposta por tipo de pagamento ────────────────────────────────────────
     body = {"success": True, "billing_type": billing_type, "payment_id": payment_id}
@@ -196,12 +202,16 @@ def payment_status():
 
     # setup_token só é necessário se o cliente ainda não tem senha (checkout sempre define)
     setup_token = "" if db.buscar_senha_hash_cliente(email) else security.generate_setup_token(email)
-    return accounts.start_premium_session(
+    plan_key = accounts.plan_key_from_reference(ext_ref)
+    response = accounts.start_premium_session(
         jsonify({"confirmed": True, "setup_token": setup_token}),
         email=email,
         payment_id=payment_id,
-        plan_key=accounts.plan_key_from_reference(ext_ref),
+        plan_key=plan_key,
     )
+    if posthog.posthog_client is not None:
+        posthog.posthog_client.capture("payment_confirmed", properties={"plan_key": plan_key})
+    return response
 
 
 @bp.route("/webhook/asaas", methods=["POST"])
