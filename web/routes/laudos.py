@@ -3,7 +3,7 @@
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
 from core import db
-from web import presentation
+from web import posthog, presentation
 from web.security import premium_required
 
 bp = Blueprint("laudos", __name__)
@@ -133,6 +133,11 @@ def feedback():
         validado_por=fonte_nome,
         modalidade=row.get("modalidade"),
     )
+    if posthog.posthog_client is not None:
+        posthog.posthog_client.capture(
+            "clinical_feedback_submitted",
+            properties={"feedback_type": feedback_value, "is_correction": is_correction},
+        )
     return jsonify({"success": True, "message": "Feedback médico salvo no histórico de validação."})
 
 
@@ -201,4 +206,14 @@ def validacao_clinica():
         fonte=presentation.feedback_source_for_role(reviewer_role),
         fonte_nome=validado_por,
     )
+    if posthog.posthog_client is not None:
+        posthog.posthog_client.capture(
+            "clinical_validation_submitted",
+            properties={
+                "concordance_score": score,
+                "correct_findings_count": len(correct_findings),
+                "missed_findings_count": len(missed_findings),
+                "wrong_findings_count": len(wrong_findings),
+            },
+        )
     return _respond("Validação clínica formal salva com sucesso.")

@@ -245,7 +245,7 @@ def test_analysis_cache_disabled_via_flag(monkeypatch):
 
 def test_analyze_exam_from_bytes_second_identical_call_hits_cache(monkeypatch):
     monkeypatch.setattr(analyzer, "get_reference_images_as_bytes", lambda exam_type: [])
-    monkeypatch.setattr(analyzer, "_make_gemini_client", lambda api_key: MagicMock())
+    monkeypatch.setattr(analyzer, "_make_gemini_client", lambda api_key, *args: MagicMock())
 
     fake_response = MagicMock()
     fake_response.text = "## 1. IDENTIFICAÇÃO DO EXAME\nlaudo de teste"
@@ -273,7 +273,7 @@ def test_analyze_exam_from_bytes_second_identical_call_hits_cache(monkeypatch):
 
 def test_analyze_exam_from_bytes_different_description_bypasses_cache(monkeypatch):
     monkeypatch.setattr(analyzer, "get_reference_images_as_bytes", lambda exam_type: [])
-    monkeypatch.setattr(analyzer, "_make_gemini_client", lambda api_key: MagicMock())
+    monkeypatch.setattr(analyzer, "_make_gemini_client", lambda api_key, *args: MagicMock())
 
     fake_response = MagicMock()
     fake_response.text = "## 1. IDENTIFICAÇÃO DO EXAME\nlaudo de teste"

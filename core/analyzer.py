@@ -13,6 +13,7 @@ import os
 import tempfile
 import threading
 import time
+import uuid
 from collections.abc import Callable
 
 import anthropic
@@ -160,11 +161,45 @@ def _store_cached_analysis(cache_key: str, result: dict) -> None:
     _analysis_result_cache.set(cache_key, result)
 
 
-def _make_gemini_client(api_key: str) -> genai.Client:
-    return genai.Client(
-        api_key=api_key,
-        http_options=types.HttpOptions(timeout=_GEMINI_HTTP_TIMEOUT_MS),
-    )
+def _make_gemini_client(api_key: str, posthog_client=None):
+    client_options = {
+        "api_key": api_key,
+        "http_options": types.HttpOptions(timeout=_GEMINI_HTTP_TIMEOUT_MS),
+    }
+    if posthog_client is not None:
+        from posthog.ai.gemini import Client
+
+        return Client(**client_options, posthog_client=posthog_client)
+    return genai.Client(**client_options)
+
+
+def _make_anthropic_client(api_key: str, timeout_seconds: float, posthog_client=None):
+    client_options = {
+        "api_key": api_key,
+        "timeout": timeout_seconds,
+        "max_retries": 0,
+    }
+    if posthog_client is not None:
+        from posthog.ai.anthropic import Anthropic
+
+        return Anthropic(**client_options, posthog_client=posthog_client)
+    return anthropic.Anthropic(**client_options)
+
+
+def _posthog_generation_kwargs(
+    ai_session_id: str | None,
+    ai_trace_id: str | None,
+    posthog_distinct_id: str | None,
+) -> dict:
+    if not ai_session_id or not ai_trace_id:
+        return {}
+    kwargs = {
+        "posthog_trace_id": ai_trace_id,
+        "posthog_properties": {"$ai_session_id": ai_session_id},
+    }
+    if posthog_distinct_id:
+        kwargs["posthog_distinct_id"] = posthog_distinct_id
+    return kwargs
 
 
 def _is_quota_exhausted(exc: Exception) -> bool:
@@ -209,6 +244,9 @@ def _generate_with_retry(
     max_output_tokens: int = _GEMINI_MAX_OUTPUT_TOKENS,
     deadline: float | None = None,
     cancel_event: threading.Event | None = None,
+    ai_session_id: str | None = None,
+    ai_trace_id: str | None = None,
+    posthog_distinct_id: str | None = None,
 ) -> object:
     """Chama generate_content com retry exponencial e fallback de modelos.
 
@@ -235,6 +273,7 @@ def _generate_with_retry(
                         thinking_config=types.ThinkingConfig(thinking_budget=_GEMINI_THINKING_BUDGET),
                         http_options=types.HttpOptions(timeout=int(_remaining_seconds(deadline, _GEMINI_HTTP_TIMEOUT_MS / 1000) * 1000)),
                     ),
+                    **_posthog_generation_kwargs(ai_session_id, ai_trace_id, posthog_distinct_id),
                 )
                 if model != model_name:
                     logger.info("Resposta obtida com modelo de fallback: %s", model)
@@ -539,6 +578,9 @@ def detect_exam_type_from_image(
     mime_type: str,
     model_name: str = "gemini-2.5-flash",
     deadline: float | None = None,
+    ai_session_id: str | None = None,
+    ai_trace_id: str | None = None,
+    posthog_distinct_id: str | None = None,
 ) -> str | None:
     """Detecta a região anatômica analisando visualmente a imagem via Gemini."""
     own_deadline = time.monotonic() + _DETECTION_TIMEOUT_SECONDS
@@ -570,6 +612,9 @@ def detect_exam_type_from_image(
             ],
             max_output_tokens=16,
             deadline=deadline,
+            ai_session_id=ai_session_id,
+            ai_trace_id=ai_trace_id,
+            posthog_distinct_id=posthog_distinct_id,
         )
         result = response.text.strip().lower()
         valid_types = {"joelho", "coluna", "ombro", "quadril", "pe_tornozelo", "mao_punho", "cotovelo", "geral"}
@@ -714,15 +759,15 @@ def _analyze_with_claude(
     reference_images: list,
     timeout_seconds: float = _CLAUDE_ANALYSIS_TIMEOUT_SECONDS,
     validated_case_text: str | None = None,
+    posthog_client=None,
+    ai_session_id: str | None = None,
+    ai_trace_id: str | None = None,
+    posthog_distinct_id: str | None = None,
 ) -> tuple[str, dict | None] | None:
     """Análise independente com Claude. Retorna (texto, uso_de_tokens) ou None em caso de falha."""
     try:
         logger.info("Claude: iniciando análise independente...")
-        client = anthropic.Anthropic(
-            api_key=anthropic_api_key,
-            timeout=timeout_seconds,
-            max_retries=0,
-        )
+        client = _make_anthropic_client(anthropic_api_key, timeout_seconds, posthog_client)
         content = _build_claude_content(
             exam_images, exam_type, user_description, reference_images, validated_case_text
         )
@@ -731,6 +776,7 @@ def _analyze_with_claude(
             max_tokens=_CLAUDE_ANALYSIS_MAX_TOKENS,
             messages=[{"role": "user", "content": content}],
             timeout=timeout_seconds,
+            **_posthog_generation_kwargs(ai_session_id, ai_trace_id, posthog_distinct_id),
         )
         logger.info("Claude: análise concluída.")
         return message.content[0].text, _extract_claude_usage(_CLAUDE_MODEL, message)
@@ -747,6 +793,10 @@ def _synthesize_analyses(
     user_description: str,
     timeout_seconds: float = _CLAUDE_SYNTHESIS_TIMEOUT_SECONDS,
     gemini_label: str = "Gemini",
+    posthog_client=None,
+    ai_session_id: str | None = None,
+    ai_trace_id: str | None = None,
+    posthog_distinct_id: str | None = None,
 ) -> tuple[str, dict | None]:
     """
     Sintetiza as análises do Gemini e do Claude em um relatório de consenso final.
@@ -824,16 +874,13 @@ RELATÓRIO DE CONSENSO FINAL:"""
 
     try:
         logger.info("Síntese: gerando relatório de consenso...")
-        client = anthropic.Anthropic(
-            api_key=anthropic_api_key,
-            timeout=timeout_seconds,
-            max_retries=0,
-        )
+        client = _make_anthropic_client(anthropic_api_key, timeout_seconds, posthog_client)
         message = client.messages.create(
             model=_CLAUDE_MODEL,
             max_tokens=_CLAUDE_SYNTHESIS_MAX_TOKENS,
             messages=[{"role": "user", "content": synthesis_prompt}],
             timeout=timeout_seconds,
+            **_posthog_generation_kwargs(ai_session_id, ai_trace_id, posthog_distinct_id),
         )
         logger.info("Síntese: relatório de consenso concluído.")
         return message.content[0].text, _extract_claude_usage(_CLAUDE_MODEL, message)
@@ -854,6 +901,10 @@ def _run_dual_analysis(
     deadline: float | None = None,
     validated_case_text: str | None = None,
     on_late_usage: Callable[[dict], None] | None = None,
+    posthog_client=None,
+    ai_session_id: str | None = None,
+    ai_trace_id: str | None = None,
+    posthog_distinct_id: str | None = None,
 ) -> tuple[str, str, list[dict]]:
     """
     Executa Gemini e Claude em paralelo.
@@ -880,6 +931,9 @@ def _run_dual_analysis(
             _GEMINI_MAX_OUTPUT_TOKENS,
             deadline,
             cancel_event,
+            ai_session_id,
+            ai_trace_id,
+            posthog_distinct_id,
         )
         claude_future = executor.submit(
             _analyze_with_claude,
@@ -890,6 +944,10 @@ def _run_dual_analysis(
             reference_images,
             _remaining_seconds(deadline, _CLAUDE_ANALYSIS_TIMEOUT_SECONDS),
             validated_case_text,
+            posthog_client,
+            ai_session_id,
+            ai_trace_id,
+            posthog_distinct_id,
         )
 
         done, pending = concurrent.futures.wait(
@@ -977,6 +1035,10 @@ def _produce_final_analysis(
     validated_case_text: str | None,
     on_late_usage: Callable[[dict], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
+    posthog_client=None,
+    ai_session_id: str | None = None,
+    ai_trace_id: str | None = None,
+    posthog_distinct_id: str | None = None,
 ) -> tuple[str, str, list[dict]]:
     """
     Executa a análise (dual Gemini+Claude quando anthropic_api_key é fornecida,
@@ -988,6 +1050,9 @@ def _produce_final_analysis(
             model_name,
             contents=content_parts,
             deadline=deadline,
+            ai_session_id=ai_session_id,
+            ai_trace_id=ai_trace_id,
+            posthog_distinct_id=posthog_distinct_id,
         )
         usage = []
         gemini_usage = _extract_gemini_usage(model_name, response)
@@ -1000,6 +1065,7 @@ def _produce_final_analysis(
         gemini_client, model_name, content_parts,
         anthropic_api_key, exam_images, exam_type, user_description, reference_images,
         deadline, validated_case_text, on_late_usage,
+        posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
     )
     if gemini_text and claude_text and not _deadline_expired(deadline, reserve_seconds=_SYNTHESIS_RESERVE_SECONDS):
         _notify(on_progress, "consenso")
@@ -1007,6 +1073,10 @@ def _produce_final_analysis(
             anthropic_api_key, gemini_text, claude_text, exam_type, user_description,
             timeout_seconds=_remaining_seconds(deadline, _CLAUDE_SYNTHESIS_TIMEOUT_SECONDS),
             gemini_label=pretty_model_name(model_name),
+            posthog_client=posthog_client,
+            ai_session_id=ai_session_id,
+            ai_trace_id=ai_trace_id,
+            posthog_distinct_id=posthog_distinct_id,
         )
         if synthesis_usage:
             usage.append(synthesis_usage)
@@ -1029,6 +1099,9 @@ def analyze_exam_from_bytes(
     user_description: str = "",
     model_name: str = "gemini-2.5-flash",
     anthropic_api_key: str = "",
+    posthog_client=None,
+    posthog_distinct_id: str | None = None,
+    ai_trace_id: str | None = None,
     on_late_usage: Callable[[dict], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
 ) -> dict:
@@ -1043,6 +1116,9 @@ def analyze_exam_from_bytes(
         user_description: Descrição clínica fornecida pelo usuário
         model_name: Modelo Gemini a utilizar
         anthropic_api_key: Chave da API da Anthropic (habilita análise dual)
+        posthog_client: cliente PostHog compartilhado que instrumenta os provedores
+        posthog_distinct_id: UUID estável do cliente, quando autenticado
+        ai_trace_id: identificador da análise que agrupa suas gerações
         on_late_usage: chamado (em outra thread) com o uso de tokens de uma
             chamada que terminou depois do orçamento de tempo e foi descartada
         on_progress: chamado com a etapa atual ("identificando_regiao",
@@ -1064,7 +1140,12 @@ def analyze_exam_from_bytes(
         return cached_result
 
     deadline = time.monotonic() + _ANALYSIS_BUDGET_SECONDS
-    gemini_client = _make_gemini_client(api_key)
+    if posthog_client is not None:
+        ai_trace_id = ai_trace_id or str(uuid.uuid4())
+        ai_session_id = f"analysis-{ai_trace_id}"
+    else:
+        ai_session_id = None
+    gemini_client = _make_gemini_client(api_key, posthog_client)
 
     keyword_type = detect_exam_type(exam_filename, user_description)
     if keyword_type != "geral":
@@ -1078,6 +1159,9 @@ def analyze_exam_from_bytes(
             exam_images[0][1],
             model_name,
             deadline,
+            ai_session_id,
+            ai_trace_id,
+            posthog_distinct_id,
         ) if exam_images and not _deadline_expired(deadline, reserve_seconds=_DETECTION_RESERVE_SECONDS) else None
         if visual_type and visual_type != "geral":
             exam_type = visual_type
@@ -1102,6 +1186,7 @@ def analyze_exam_from_bytes(
         gemini_client, model_name, content_parts, anthropic_api_key,
         exam_images, exam_type, user_description, reference_images,
         deadline, validated_case_text, on_late_usage, on_progress,
+        posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
     )
 
     result = {

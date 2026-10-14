@@ -214,6 +214,7 @@ def _run_analysis(
 ) -> dict:
     from core import cost_tracking, db
     from core.analyzer import analyze_exam_from_bytes
+    from web.posthog import init_posthog
 
     logger.info("Job de análise iniciado (mode=%s, imagens=%d)", mode, len(images))
     t0 = time.time()
@@ -224,6 +225,9 @@ def _run_analysis(
         user_description=user_description,
         model_name=model_name,
         anthropic_api_key=anthropic_api_key or _env_first("ANTHROPIC_API_KEY"),
+        posthog_client=init_posthog(),
+        posthog_distinct_id=str(persist["cliente_id"]) if persist.get("cliente_id") else None,
+        ai_trace_id=current_trace_id(),
         on_late_usage=cost_tracking.late_usage_recorder(cost_scopes),
         on_progress=_set_stage,
     )

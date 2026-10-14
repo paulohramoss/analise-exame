@@ -18,6 +18,10 @@ anyio==4.14.2
     #   anthropic
     #   google-genai
     #   httpx
+backoff==2.2.1
+    # via
+    #   -c requirements.txt
+    #   posthog
 blinker==1.9.0
     # via
     #   -c requirements.txt
@@ -79,6 +83,7 @@ distro==1.9.0
     #   -c requirements.txt
     #   anthropic
     #   google-genai
+    #   posthog
 dnspython==2.8.0
     # via
     #   -c requirements.txt
@@ -109,6 +114,10 @@ google-genai==2.14.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
+googleapis-common-protos==1.75.5
+    # via
+    #   -c requirements.txt
+    #   opentelemetry-exporter-otlp-proto-http
 h11==0.16.0
     # via
     #   -c requirements.txt
@@ -188,6 +197,45 @@ numpy==2.5.1
     # via
     #   -c requirements.txt
     #   -r requirements.in
+opentelemetry-api==1.45.1
+    # via
+    #   -c requirements.txt
+    #   -r requirements.in
+    #   opentelemetry-exporter-http-transport
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+opentelemetry-exporter-http-transport==0.66b1
+    # via
+    #   -c requirements.txt
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-common==0.66b1
+    # via
+    #   -c requirements.txt
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-proto-common==1.45.1
+    # via
+    #   -c requirements.txt
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-proto-http==1.45.1
+    # via
+    #   -c requirements.txt
+    #   -r requirements.in
+opentelemetry-proto==1.45.1
+    # via
+    #   -c requirements.txt
+    #   opentelemetry-exporter-otlp-proto-common
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-sdk==1.45.1
+    # via
+    #   -c requirements.txt
+    #   -r requirements.in
+    #   opentelemetry-exporter-otlp-common
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-semantic-conventions==0.66b1
+    # via
+    #   -c requirements.txt
+    #   opentelemetry-sdk
 ordered-set==4.1.0
     # via
     #   -c requirements.txt
@@ -224,10 +272,19 @@ postgrest==2.31.0
     # via
     #   -c requirements.txt
     #   supabase
+posthog==7.69.0
+    # via
+    #   -c requirements.txt
+    #   -r requirements.in
 propcache==0.5.2
     # via
     #   -c requirements.txt
     #   yarl
+protobuf==7.36.2
+    # via
+    #   -c requirements.txt
+    #   googleapis-common-protos
+    #   opentelemetry-proto
 py-serializable==2.1.0
     # via cyclonedx-python-lib
 pyasn1==0.6.4
@@ -300,7 +357,10 @@ requests==2.34.2
     #   cachecontrol
     #   google-auth
     #   google-genai
+    #   opentelemetry-exporter-http-transport
+    #   opentelemetry-exporter-otlp-proto-http
     #   pip-audit
+    #   posthog
 rich==15.0.0
     # via pip-audit
 rq==2.10.0
@@ -361,6 +421,11 @@ typing-extensions==4.16.0
     #   flask-limiter
     #   google-genai
     #   limits
+    #   opentelemetry-api
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+    #   posthog
     #   pydantic
     #   pydantic-core
     #   realtime

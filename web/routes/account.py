@@ -8,7 +8,7 @@ from flask import Blueprint, Response, flash, g, make_response, redirect, render
 from werkzeug.security import check_password_hash
 
 from core import db
-from web import security
+from web import posthog, security
 from web.extensions import rate_limit
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,8 @@ def exportar_dados():
         return redirect(url_for("account.conta"))
 
     dados = {"gerado_em": datetime.now(timezone.utc).isoformat(), **dados}
+    if posthog.posthog_client is not None:
+        posthog.posthog_client.capture("account_data_exported")
     filename = f"three-health-meus-dados-{datetime.now(timezone.utc):%Y%m%d}.json"
     return Response(
         json.dumps(dados, ensure_ascii=False, indent=2, default=str),
@@ -86,6 +88,8 @@ def excluir_conta():
         return redirect(url_for("account.conta"))
 
     logger.info("Conta excluída a pedido do titular (cliente_id=%s)", cliente_id)
+    if posthog.posthog_client is not None:
+        posthog.posthog_client.capture("account_deleted")
     security.forget_session(email)
     flash("Sua conta e seus dados foram excluídos.", "success")
     resp = make_response(redirect(url_for("analysis.index")))

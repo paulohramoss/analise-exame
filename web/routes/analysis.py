@@ -18,7 +18,7 @@ from flask import Blueprint, flash, g, jsonify, redirect, render_template, reque
 
 from core import analyzer, cost_tracking, db, jobs, privacy
 from core.build_info import get_build_version
-from web import config, costs, presentation, security, uploads
+from web import config, costs, posthog, presentation, security, uploads
 from web.extensions import rate_limit
 
 logger = logging.getLogger(__name__)
@@ -133,6 +133,9 @@ def _run_now(mode: str, prepared: _AnalysisInput, api_key: str, persist: dict) -
         user_description=prepared.analysis_description,
         model_name=config.get_model_name(),
         anthropic_api_key=config.get_anthropic_api_key(),
+        posthog_client=posthog.init_posthog(),
+        posthog_distinct_id=str(g.cliente_id) if g.get("cliente_id") else None,
+        ai_trace_id=g.get("trace_id"),
         on_late_usage=cost_tracking.late_usage_recorder(costs.cost_budget_scopes(mode)),
     )
     costs.record_analysis_cost(mode, result)
@@ -224,6 +227,11 @@ def analyze():
         "user_description_display": prepared.user_description,
         "responsible": responsible_info,
     })
+    if posthog.posthog_client is not None:
+        posthog.posthog_client.capture(
+            "premium_analysis_submitted",
+            properties={"image_count": len(prepared.images), "processing_mode": "async" if job_id else "sync"},
+        )
     if job_id:
         return redirect(url_for("analysis.analyze_processando", job_id=job_id))
 
@@ -345,6 +353,11 @@ def trial_analyze():
     persist = prepared.persist_fields()
 
     job_id = _enqueue("trial", prepared, persist, display_extra={"image_b64": display["b64"], "image_mime": display["mime"]})
+    if posthog.posthog_client is not None:
+        posthog.posthog_client.capture(
+            "trial_analysis_submitted",
+            properties={"processing_mode": "async" if job_id else "sync"},
+        )
     if job_id:
         return jsonify({
             "status": "queued",

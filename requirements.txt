@@ -13,6 +13,8 @@ anyio==4.14.2
     #   anthropic
     #   google-genai
     #   httpx
+backoff==2.2.1
+    # via posthog
 blinker==1.9.0
     # via
     #   flask
@@ -47,6 +49,7 @@ distro==1.9.0
     # via
     #   anthropic
     #   google-genai
+    #   posthog
 dnspython==2.8.0
     # via -r requirements.in
 docstring-parser==0.18.0
@@ -62,6 +65,8 @@ google-auth==2.56.2
     # via google-genai
 google-genai==2.14.0
     # via -r requirements.in
+googleapis-common-protos==1.75.5
+    # via opentelemetry-exporter-otlp-proto-http
 h11==0.16.0
     # via httpcore
 h2==4.4.1
@@ -106,6 +111,32 @@ multidict==7.1.0
     # via yarl
 numpy==2.5.1
     # via -r requirements.in
+opentelemetry-api==1.45.1
+    # via
+    #   -r requirements.in
+    #   opentelemetry-exporter-http-transport
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+opentelemetry-exporter-http-transport==0.66b1
+    # via opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-common==0.66b1
+    # via opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-proto-common==1.45.1
+    # via opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-proto-http==1.45.1
+    # via -r requirements.in
+opentelemetry-proto==1.45.1
+    # via
+    #   opentelemetry-exporter-otlp-proto-common
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-sdk==1.45.1
+    # via
+    #   -r requirements.in
+    #   opentelemetry-exporter-otlp-common
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-semantic-conventions==0.66b1
+    # via opentelemetry-sdk
 ordered-set==4.1.0
     # via flask-limiter
 packaging==26.2
@@ -116,8 +147,14 @@ pillow==12.3.0
     # via -r requirements.in
 postgrest==2.31.0
     # via supabase
+posthog==7.69.0
+    # via -r requirements.in
 propcache==0.5.2
     # via yarl
+protobuf==7.36.2
+    # via
+    #   googleapis-common-protos
+    #   opentelemetry-proto
 pyasn1==0.6.4
     # via pyasn1-modules
 pyasn1-modules==0.4.2
@@ -153,6 +190,9 @@ requests==2.34.2
     #   -r requirements.in
     #   google-auth
     #   google-genai
+    #   opentelemetry-exporter-http-transport
+    #   opentelemetry-exporter-otlp-proto-http
+    #   posthog
 rq==2.10.0
     # via -r requirements.in
 sentry-sdk==2.66.1
@@ -181,6 +221,11 @@ typing-extensions==4.16.0
     #   flask-limiter
     #   google-genai
     #   limits
+    #   opentelemetry-api
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+    #   posthog
     #   pydantic
     #   pydantic-core
     #   realtime

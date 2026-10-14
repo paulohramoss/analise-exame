@@ -3,12 +3,12 @@
 import hmac
 import logging
 
-from flask import Blueprint, flash, make_response, redirect, render_template, request, url_for
+from flask import Blueprint, flash, g, make_response, redirect, render_template, request, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from core import cost_tracking, db, mailer
 from core.email_validation import validar_email_cadastro
-from web import accounts, config, security
+from web import accounts, config, posthog, security
 from web.extensions import rate_limit
 
 logger = logging.getLogger(__name__)
@@ -129,6 +129,8 @@ def acesso_verificar():
 @bp.route("/premium/logout")
 def premium_logout():
     """Remove o cookie premium (logout)."""
+    if g.get("cliente_id") and posthog.posthog_client is not None:
+        posthog.posthog_client.capture("premium_session_ended")
     resp = make_response(redirect(url_for("auth.login")))
     resp.delete_cookie(security.PREMIUM_COOKIE)
     return resp

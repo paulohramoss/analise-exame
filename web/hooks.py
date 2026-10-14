@@ -9,11 +9,12 @@ from urllib.parse import urlsplit
 
 from flask import Flask, flash, g, jsonify, make_response, redirect, request, url_for
 
-from core.logging_config import new_trace_id
+from core.logging_config import new_trace_id, posthog_log_capture_enabled
 from web import access_log, presentation, security
 from web.extensions import RateLimitExceeded
 
 logger = logging.getLogger(__name__)
+posthog_logger = logging.getLogger("posthog.logs")
 
 # Rotas que recebem POST de fora do navegador do usuário: autenticam por
 # cabeçalho próprio (X-API-Key, token do Asaas), não por cookie — CSRF não se aplica.
@@ -75,6 +76,33 @@ def register(app: Flask, build_version: str) -> None:
         if not g.is_admin:
             security.load_premium_session()
 
+        # Flask has no PostHog middleware. Keep one fresh SDK context active for
+        # the complete request so later captures and centralized error handling
+        # inherit the authenticated customer's stable UUID.
+        from web.posthog import posthog_client
+
+        if posthog_client is not None:
+            context = posthog_client.new_context(fresh=True)
+            context.__enter__()
+            g.posthog_context = context
+
+            # An authenticated customer id is authoritative. Browser tracing
+            # headers are analytics-only fallback context for future clients.
+            distinct_id = str(g.get("cliente_id") or request.headers.get("X-POSTHOG-DISTINCT-ID", "")).strip()
+            if distinct_id:
+                posthog_client.identify_context(distinct_id)
+
+            session_id = request.headers.get("X-POSTHOG-SESSION-ID", "").strip()
+            if session_id:
+                posthog_client.set_context_session(session_id)
+
+    @app.teardown_request
+    def close_posthog_context(_error):
+        """End the request-scoped SDK context after error handlers have run."""
+        context = g.pop("posthog_context", None)
+        if context is not None:
+            context.__exit__(None, None, None)
+
     @app.before_request
     def csrf_origin_check():
         """Recusa POST/PUT/PATCH/DELETE vindos de outro site (CSRF).
@@ -132,6 +160,16 @@ def register(app: Flask, build_version: str) -> None:
                 cliente_id=g.get("cliente_id"),
                 analise_id=g.get("analise_id"),
             )
+            if posthog_log_capture_enabled():
+                route = request.url_rule.rule if request.url_rule is not None else "unmatched"
+                posthog_logger.info(
+                    "http_request_completed",
+                    extra={
+                        "http_method": request.method,
+                        "http_route": route,
+                        "http_status_code": response.status_code,
+                    },
+                )
         return response
 
     if RateLimitExceeded is not None:

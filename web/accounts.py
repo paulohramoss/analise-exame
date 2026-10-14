@@ -83,6 +83,15 @@ def start_premium_session(resp, *, email: str, payment_id: str, plan_key: str, v
         user_agent=request.headers.get("User-Agent"),
     )
     g.cliente_id = cliente_id
+
+    # A requisição começou sem cookie premium: associa o UUID do cliente assim
+    # que o login dá certo. Só o UUID vai ao PostHog — nunca e-mail ou nome.
+    if cliente_id:
+        from web.posthog import posthog_client
+
+        if posthog_client is not None:
+            posthog_client.identify_context(str(cliente_id))
+            posthog_client.capture("premium_session_started", properties={"plan_key": plan_key})
     return resp
 
 
