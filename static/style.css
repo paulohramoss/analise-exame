@@ -524,6 +524,15 @@
     color: var(--text);
 }
 
+.report-content blockquote {
+    margin: 0.75rem 0;
+    padding: 0.6rem 0.9rem;
+    border-left: 3px solid var(--primary);
+    background: var(--primary-light);
+    border-radius: 0 8px 8px 0;
+    color: var(--text-muted);
+}
+
 /* ===== Result Layout (side by side) ===== */
 .result-layout {
     display: grid;

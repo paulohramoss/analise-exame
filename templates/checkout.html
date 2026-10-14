@@ -328,7 +328,7 @@
       <div class="pm-card" data-billing="CREDIT_CARD" onclick="selectBilling('CREDIT_CARD')">
         <span class="pm-icon">{{ layout.icon("credit-card", 22) }}</span>
         <div class="pm-name">Cartão</div>
-        <div class="pm-desc">Crédito ou débito</div>
+        <div class="pm-desc">Página segura Asaas</div>
       </div>
     </div>
 
@@ -412,55 +412,13 @@
         </div>
       </div>
 
-      <!-- Dados do cartão (visível só quando Cartão for selecionado) -->
+      <!-- Cartão: pagamento na página segura do Asaas (os dados do cartão não passam por aqui) -->
       <div id="card-section">
-        <div class="card-section-title">{{ layout.icon("credit-card", 16) }} Dados do cartão</div>
-
-        <div class="field-group">
-          <label for="card_number">Número do cartão</label>
-          <input type="text" id="card_number" name="card_number"
-                 placeholder="0000 0000 0000 0000" maxlength="19" inputmode="numeric" autocomplete="cc-number">
-        </div>
-
-        <div class="field-group">
-          <label for="card_holder">Nome no cartão</label>
-          <input type="text" id="card_holder" name="card_holder"
-                 placeholder="Como está no cartão" autocomplete="cc-name" style="text-transform:uppercase">
-        </div>
-
-        <div class="field-group field-row">
-          <div>
-            <label for="card_expiry">Validade (MM/AA)</label>
-            <input type="text" id="card_expiry" name="card_expiry"
-                   placeholder="MM/AA" maxlength="5" inputmode="numeric" autocomplete="cc-exp">
-          </div>
-          <div>
-            <label for="card_cvv">CVV</label>
-            <input type="text" id="card_cvv" name="card_cvv"
-                   placeholder="123" maxlength="4" inputmode="numeric" autocomplete="cc-csc">
-          </div>
-        </div>
-
-        <p class="sec-label" style="margin-top:.25rem">Endereço de cobrança</p>
-
-        <div class="field-group field-row">
-          <div>
-            <label for="card_postal_code">CEP</label>
-            <input type="text" id="card_postal_code" name="card_postal_code"
-                   placeholder="00000-000" maxlength="9" inputmode="numeric" autocomplete="postal-code">
-          </div>
-          <div>
-            <label for="card_address_number">Número</label>
-            <input type="text" id="card_address_number" name="card_address_number"
-                   placeholder="Ex: 100" autocomplete="address-line2">
-          </div>
-        </div>
-
-        <div class="field-group">
-          <label for="card_phone">Telefone do titular</label>
-          <input type="tel" id="card_phone" name="card_phone"
-                 placeholder="(11) 99999-9999" maxlength="15" autocomplete="tel">
-        </div>
+        <div class="card-section-title">{{ layout.icon("lock", 16) }} Pagamento com cartão</div>
+        <p class="note-small" style="margin:0;text-align:left">
+          Ao continuar, abriremos a página de pagamento segura do Asaas, nosso processador de pagamentos,
+          para você informar os dados do cartão. Assim que o pagamento for aprovado, seu acesso é liberado aqui.
+        </p>
       </div>
 
       <button type="submit" class="btn-primary btn-block" id="btn-pay">
@@ -536,11 +494,21 @@
       <p class="note-small">A confirmação do boleto pode levar até 3 dias úteis após o pagamento.</p>
     </div>
 
-    <!-- Cartão: aguardando -->
+    <!-- Cartão: pagamento na página do Asaas -->
     <div id="card-result" style="display:none">
-      <div class="result-icon" id="card-icon"><span class="icon-badge">{{ layout.icon("clock", 26) }}</span></div>
-      <div class="result-title" id="card-title">Processando pagamento…</div>
-      <div class="result-subtitle" id="card-subtitle">Aguarde enquanto confirmamos seu cartão.</div>
+      <div class="result-icon"><span class="icon-badge">{{ layout.icon("credit-card", 26) }}</span></div>
+      <div class="result-title">Finalize o pagamento com cartão</div>
+      <div class="result-subtitle">Abrimos a página segura do Asaas em uma nova aba. Se ela não abriu, use o botão abaixo.</div>
+
+      <a id="card-pay-link" href="#" target="_blank" rel="noopener" class="btn-boleto-pdf">
+        {{ layout.icon("lock", 16) }} Pagar com cartão no Asaas
+      </a>
+
+      <div class="status-box status-waiting" id="card-status">
+        <div class="spinner"></div>
+        <span>Aguardando confirmação do pagamento…</span>
+      </div>
+      <p class="note-small">Mantenha esta aba aberta: a confirmação aparece aqui automaticamente.</p>
     </div>
 
   </div><!-- /#result-section -->
@@ -585,42 +553,6 @@ cpfEl.addEventListener('input', function() {
   const pos = this.selectionStart;
   this.value = maskCpfCnpj(this.value);
   this.placeholder = this.value.replace(/\D/g,'').length <= 11 ? '000.000.000-00' : '00.000.000/0001-00';
-});
-
-const cardNumEl = document.getElementById('card_number');
-cardNumEl.addEventListener('input', function() {
-  let d = this.value.replace(/\D/g,'').slice(0,16);
-  this.value = d.replace(/(\d{4})(?=\d)/g,'$1 ');
-});
-
-const cardHolderEl = document.getElementById('card_holder');
-cardHolderEl.addEventListener('input', function() { this.value = this.value.toUpperCase(); });
-
-// Auto-fill holder name from name field
-document.getElementById('name').addEventListener('blur', function() {
-  if (!cardHolderEl.value) cardHolderEl.value = this.value.toUpperCase();
-});
-
-const expiryEl = document.getElementById('card_expiry');
-expiryEl.addEventListener('input', function() {
-  let d = this.value.replace(/\D/g,'').slice(0,4);
-  if (d.length > 2) d = d.slice(0,2) + '/' + d.slice(2);
-  this.value = d;
-});
-
-const cepEl = document.getElementById('card_postal_code');
-cepEl.addEventListener('input', function() {
-  let d = this.value.replace(/\D/g,'').slice(0,8);
-  if (d.length > 5) d = d.slice(0,5) + '-' + d.slice(5);
-  this.value = d;
-});
-
-const phoneEl = document.getElementById('card_phone');
-phoneEl.addEventListener('input', function() {
-  let d = this.value.replace(/\D/g,'').slice(0,11);
-  if (d.length > 6) d = '(' + d.slice(0,2) + ') ' + d.slice(2,7) + '-' + d.slice(7);
-  else if (d.length > 2) d = '(' + d.slice(0,2) + ') ' + d.slice(2);
-  this.value = d;
 });
 
 // ── Submissão via AJAX ───────────────────────────────────────────────────────
@@ -700,19 +632,14 @@ function showBoletoResult(data) {
 
 function showCardResult(data) {
   document.getElementById('card-result').style.display = 'block';
-  if (data.confirmed) {
-    document.getElementById('card-icon').innerHTML = {{ ('<span class="icon-badge is-success">'|safe ~ layout.icon("check-circle", 26) ~ '</span>'|safe)|tojson }};
-    document.getElementById('card-title').textContent = 'Pagamento aprovado!';
-    document.getElementById('card-subtitle').textContent = 'Seu acesso foi liberado. Redirecionando…';
-    const dest = _setupToken ? '/login/definir-senha?t=' + encodeURIComponent(_setupToken) : '/';
-    setTimeout(() => { window.location.href = dest; }, 2000);
+  const link = document.getElementById('card-pay-link');
+  if (data.invoice_url) {
+    link.href = data.invoice_url;
+    window.open(data.invoice_url, '_blank', 'noopener');
   } else {
-    document.getElementById('card-icon').innerHTML = {{ ('<span class="icon-badge is-danger">'|safe ~ layout.icon("x-circle", 26) ~ '</span>'|safe)|tojson }};
-    document.getElementById('card-title').textContent = 'Pagamento não aprovado';
-    document.getElementById('card-subtitle').innerHTML =
-      'Verifique os dados do cartão e tente novamente.<br>' +
-      '<a href="/checkout" style="color:var(--primary);font-weight:700">← Voltar ao checkout</a>';
+    link.style.display = 'none';
   }
+  startPolling(data.payment_id, 'card-status');
 }
 
 // ── Polling de confirmação ───────────────────────────────────────────────────
@@ -727,7 +654,8 @@ function startPolling(paymentId, statusBoxId) {
         const box = document.getElementById(statusBoxId);
         box.className = 'status-box status-confirmed';
         box.innerHTML = {{ layout.icon("check-circle", 16)|tojson }} + '<span>Pagamento confirmado! Redirecionando…</span>';
-        const dest = _setupToken ? '/login/definir-senha?t=' + encodeURIComponent(_setupToken) : '/';
+        const dest = data.login_required ? '/login'
+          : (_setupToken ? '/login/definir-senha?t=' + encodeURIComponent(_setupToken) : '/');
         setTimeout(() => { window.location.href = dest; }, 2000);
       }
     } catch (e) { /* ignora erros de polling */ }

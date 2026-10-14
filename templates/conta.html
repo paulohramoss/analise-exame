@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meus dados — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <style>
+        .account-head { margin-bottom: 1.25rem; }
+        .account-head h1 { margin: 0 0 .35rem; }
+        .account-head p { margin: 0; color: var(--text-muted); }
+        .account-grid { display: grid; gap: 1rem; }
+        .account-card h2 { display: flex; align-items: center; gap: .5rem; }
+        .account-card ul { margin: .5rem 0 1rem 1.1rem; color: var(--text-muted); font-size: .92rem; }
+        .account-card li { margin-bottom: .25rem; }
+        .danger-zone { border-color: var(--danger-border); }
+        .danger-zone h2 { color: var(--danger-dark); }
+        .delete-form { display: grid; gap: .75rem; max-width: 420px; }
+        .delete-form label { font-size: .85rem; font-weight: 700; }
+        .delete-form input { width: 100%; }
+        .btn-danger {
+            background: var(--danger); color: #fff; border: none; border-radius: 10px;
+            padding: .7rem 1.1rem; font-weight: 800; cursor: pointer; justify-self: start;
+        }
+        .btn-danger:hover { filter: brightness(.95); }
+        .muted-note { font-size: .82rem; color: var(--text-muted); margin-top: .75rem; }
+    </style>
+</head>
+<body>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("conta") }}
+    {% endcall %}
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    {{ layout.icon('x-circle' if category == 'error' else 'check-circle') }}
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="account-head">
+            <h1>Meus dados</h1>
+            <p>Seus direitos como titular de dados pessoais (LGPD, art. 18){% if email %} — conta <strong>{{ email }}</strong>{% endif %}.</p>
+        </div>
+
+        {% if not has_account %}
+            <div class="card">
+                <p>Esta área vale para contas de cliente. No acesso administrativo ou local não há dados de conta para exportar ou excluir.</p>
+            </div>
+        {% else %}
+        <div class="account-grid">
+            <section class="card account-card">
+                <h2>{{ layout.icon("download", 20) }} Baixar uma cópia dos seus dados</h2>
+                <p class="card-description">Arquivo JSON com tudo o que guardamos sobre você:</p>
+                <ul>
+                    <li>cadastro (nome, e-mail, CPF/CNPJ);</li>
+                    <li>cobranças e planos contratados;</li>
+                    <li>laudos gerados, descrições clínicas e validações registradas;</li>
+                    <li>histórico de acessos (data, IP e navegador).</li>
+                </ul>
+                <a class="btn-primary" href="/conta/dados.json">Baixar meus dados (JSON)</a>
+            </section>
+
+            <section class="card account-card danger-zone">
+                <h2>{{ layout.icon("x-circle", 20) }} Excluir minha conta</h2>
+                <p class="card-description">A exclusão é <strong>definitiva</strong>: apaga o cadastro, todos os laudos (com imagens, feedbacks e validações), as sessões e o histórico de acessos, e encerra o acesso ao plano.</p>
+                <p class="card-description">Os registros de cobrança são mantidos, sem vínculo com o cadastro, porque a lei exige a guarda de documentos fiscais (LGPD, art. 16, I). Baixe seus dados antes, se quiser guardar os laudos.</p>
+                <form class="delete-form" method="POST" action="/conta/excluir"
+                      onsubmit="return confirm('Excluir a conta e todos os laudos? Esta ação não pode ser desfeita.');">
+                    <div>
+                        <label for="senha">Sua senha</label>
+                        <input type="password" id="senha" name="senha" required autocomplete="current-password">
+                    </div>
+                    <div>
+                        <label for="confirmacao">Digite {{ confirmation_word }} para confirmar</label>
+                        <input type="text" id="confirmacao" name="confirmacao" required autocomplete="off" placeholder="{{ confirmation_word }}">
+                    </div>
+                    <button type="submit" class="btn-danger">Excluir conta e dados</button>
+                </form>
+                <p class="muted-note">Dúvidas sobre seus dados? Fale com o suporte antes de excluir.</p>
+            </section>
+        </div>
+        {% endif %}
+    </main>
+
+    {{ layout.site_footer() }}
+</body>
+</html>

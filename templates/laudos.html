@@ -159,7 +159,7 @@
                         <p class="history-snippet">{{ item.descricao_usuario[:180] }}{% if item.descricao_usuario|length > 180 %}...{% endif %}</p>
                         {% endif %}
                     </div>
-                    <a class="btn-secondary" href="{{ url_for('laudo_detalhe', analise_id=item.id) }}">Abrir laudo</a>
+                    <a class="btn-secondary" href="{{ url_for('laudos.laudo_detalhe', analise_id=item.id) }}">Abrir laudo</a>
                 </article>
                 {% endfor %}
             </div>

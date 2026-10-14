@@ -53,10 +53,21 @@ webhooks_asaas ──> eventos brutos do Asaas, correlacionados por asaas_paymen
 - **`external_reference` em `pagamentos`** pode vir em dois formatos:
   `"email"` (legado) ou `"email\|plano"` (atual). Ver
   `buscar_pagamento_confirmado_por_email` em `core/db.py`.
+- **`clientes.sessao_versao`** vai dentro do cookie premium (`sv`). A cada
+  requisição o app compara as duas; incrementar a coluna (troca de senha,
+  estorno, ou manualmente) derruba todas as sessões do cliente.
+- **Validade do plano** = data de confirmação do pagamento (`confirmedDate`
+  em `payload_asaas`, ou `created_at` da cobrança) + duração do plano. Login
+  com plano vencido é recusado e o cookie nunca passa do fim do plano.
+- **RLS** está ligado em todas as tabelas (`2026-10-13-rls-tabelas.sql`),
+  só com a policy `service_role_all`: a chave anon não acessa nada.
 - **`diagnosticos_validados.grau_concordancia`** (0-100) é o campo que
   determina se um caso entra como exemplo de calibração no prompt: só casos
-  com `grau_concordancia >= 80` (padrão) são reaproveitados, via
-  `buscar_caso_validado_referencia`, cacheado em memória por 15 minutos.
+  com `grau_concordancia >= 80` (padrão) **e** `aprovado_para_referencia = true`
+  são reaproveitados, via `buscar_caso_validado_referencia`, cacheado em
+  memória por 15 minutos. A aprovação é manual (admin, no Supabase): o texto
+  é livre e entra no prompt de todos os clientes, então precisa de curadoria
+  (sem dados identificáveis, sem instruções ao modelo).
 - **`analises` tem colunas opcionais** (`responsavel_*`) adicionadas depois
   da criação inicial da tabela. `salvar_analise`/`listar_analises`/
   `buscar_analise` fazem *fallback* automático (tentam com essas colunas,
@@ -66,3 +77,22 @@ webhooks_asaas ──> eventos brutos do Asaas, correlacionados por asaas_paymen
 - **Nenhuma tabela guarda os bytes da imagem do exame** — só metadados
   (hash MD5, tamanho, MIME). Isso significa que não é possível reabrir ou
   re-auditar a imagem original a partir do banco hoje.
+
+## Retenção de dados (LGPD)
+
+Prazos aplicados diariamente por `aplicar_retencao_dados()` (pg_cron, migration
+`2026-10-13-retencao-dados.sql`):
+
+| Dado | Prazo | Motivo |
+|------|-------|--------|
+| `analises` do trial (sem conta) | 90 dias | sem titular cadastrado para consultar depois |
+| `sessoes_acesso` | 12 meses | auditoria de acesso ao plano |
+| `webhooks_asaas` | 12 meses | o status final fica em `pagamentos` |
+| `gastos_diarios` | 90 dias | só o dia corrente é usado (e o histórico de custos) |
+| `logs_acesso` | 12 meses | partições descartadas por `criar_particoes_logs()`; Marco Civil exige ≥ 6 meses |
+| laudos de clientes | enquanto a conta existir | o titular exclui pela página `/conta` |
+| `pagamentos` | guarda fiscal | mantidos sem vínculo após a exclusão da conta (LGPD art. 16, I) |
+
+A descrição clínica passa por `core/privacy.py` (remove nome, CPF, CNS, RG,
+telefone, e-mail e data de nascimento) antes de ir aos modelos de IA e ao banco.
+

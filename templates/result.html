@@ -7,6 +7,7 @@
     {% import "_layout.html" as layout %}
     {{ layout.head_assets() }}
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <script src="{{ static_url('laudo-ui.js') }}"></script>
     <script src="{{ static_url('laudo-pdf.js') }}" defer></script>
     <style>
         .exam-images-gallery {
@@ -337,7 +338,7 @@
                 </div>
 
                 <div class="report-content" id="report-content">
-                    {{ analysis | safe }}
+                    {{ analysis }}
                 </div>
             </div>
 
@@ -383,37 +384,9 @@
     <script type="application/json" id="data-exam-meta">{{ {"exam_type": exam_type, "references_used": references_used, "analysis_id": analysis_id}|tojson }}</script>
     <script type="application/json" id="data-analysis-id">{{ (analysis_id or '')|tojson }}</script>
     <script>
-        // Converte markdown para HTML simples para o laudo
-        function renderMarkdown(element) {
-            let html = element.innerHTML.trim();
-
-            // Headers (aceita espaços opcionais antes do #)
-            html = html.replace(/^\s*### (.+)$/gm, '<h4>$1</h4>');
-            html = html.replace(/^\s*## (.+)$/gm, '<h3>$1</h3>');
-            html = html.replace(/^\s*# (.+)$/gm, '<h2>$1</h2>');
-
-            // Bold
-            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-            // Italic
-            html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-            // Lists
-            html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-            html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-
-            // Numbered lists
-            html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
-
-            // Paragraphs
-            html = html.replace(/\n\n/g, '</p><p>');
-            html = '<p>' + html + '</p>';
-
-            element.innerHTML = html;
-        }
 
         const reportContent = document.getElementById('report-content');
-        renderMarkdown(reportContent);
+        renderLaudoInto(reportContent, reportContent.textContent);
 
         function copyReport() {
             copyToClipboard(reportContent.innerText)
@@ -426,7 +399,7 @@
             const userDesc = JSON.parse(document.getElementById('data-user-desc').textContent || 'null');
             const examMeta = JSON.parse(document.getElementById('data-exam-meta').textContent || '{}');
             const analysisId = examMeta.analysis_id;
-            const refs = Number(examMeta.references_used || 0);
+            const consensus = JSON.parse(document.getElementById('data-consensus').textContent || 'null');
             const images = Array.from(document.querySelectorAll('.exam-images-gallery img'))
                 .map((img, i) => ({ src: img.src, label: `Imagem ${i + 1}` }));
 
@@ -435,11 +408,7 @@
                 generatedAt: laudoNowBR(),
                 documentId: analysisId ? String(analysisId).slice(0, 8).toUpperCase() : '',
                 responsible,
-                meta: [
-                    { label: 'Região', value: examMeta.exam_type },
-                    { label: 'Referências usadas', value: refs > 0 ? `${refs} ${refs === 1 ? 'imagem' : 'imagens'}` : 'Sem referência' },
-                    { label: 'Imagens analisadas', value: String(images.length) },
-                ],
+                meta: laudoPdfMeta({ ...examMeta, num_images: images.length }, consensus),
                 clinicalInfo: userDesc,
                 images,
             });

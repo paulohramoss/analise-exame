@@ -1,0 +1,16 @@
+{
+  "id": "exemplo-joelho-lca",
+  "images": ["images/exemplo-joelho-lca.jpg"],
+  "description": "RM do joelho direito, 28 anos, masculino, entorse em pivô no futebol há 3 semanas, instabilidade",
+  "expected_region": "joelho",
+  "expected_findings": [
+    ["rotura do lca", "ruptura do lca", "rotura do ligamento cruzado anterior", "ruptura do ligamento cruzado anterior", "lesao do lca"],
+    ["edema osseo", "contusao ossea", "edema da medula ossea"],
+    ["derrame articular"]
+  ],
+  "forbidden_findings": [
+    ["rotura do lcp", "ruptura do ligamento cruzado posterior"]
+  ],
+  "pass_score": 0.7,
+  "notes": "Caso de EXEMPLO do formato. A imagem não está no repositório: coloque um exame anonimizado em evals/images/ (ver README)."
+}

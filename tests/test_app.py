@@ -13,7 +13,10 @@ from unittest.mock import MagicMock
 import pytest
 from werkzeug.security import generate_password_hash
 
-import app as flask_app_module
+from web.routes import billing as billing_routes
+from web import config
+from core import db
+from web import security
 from core import asaas
 
 
@@ -31,64 +34,76 @@ def test_login_post_missing_fields_shows_error(client):
 
 
 def test_login_post_email_without_active_plan_shows_error(client, monkeypatch):
-    monkeypatch.setattr(flask_app_module.db, "buscar_pagamento_confirmado_por_email", lambda email: None)
+    monkeypatch.setattr(db, "buscar_pagamento_confirmado_por_email", lambda email, **_: None)
 
     resp = client.post("/login", data={"email": "sem-plano@example.com", "senha": "qualquer123"})
 
     assert resp.status_code == 200
-    assert "sem plano ativo" in resp.get_data(as_text=True)
+    assert "E-mail ou senha inválidos" in resp.get_data(as_text=True)
 
 
 def test_login_post_wrong_password_shows_error(client, monkeypatch):
     monkeypatch.setattr(
-        flask_app_module.db, "buscar_pagamento_confirmado_por_email",
-        lambda email: ("pay_1", "cliente@example.com|anual"),
+        db, "buscar_pagamento_confirmado_por_email",
+        lambda email, **_: ("pay_1", "cliente@example.com|anual"),
     )
     monkeypatch.setattr(
-        flask_app_module.db, "buscar_senha_hash_cliente",
+        db, "buscar_senha_hash_cliente",
         lambda email: generate_password_hash("senha-correta"),
     )
 
     resp = client.post("/login", data={"email": "cliente@example.com", "senha": "senha-errada"})
 
     assert resp.status_code == 200
-    assert "Senha incorreta" in resp.get_data(as_text=True)
+    assert "E-mail ou senha inválidos" in resp.get_data(as_text=True)
 
 
 def test_login_post_correct_password_sets_premium_cookie(client, monkeypatch):
     monkeypatch.setattr(
-        flask_app_module.db, "buscar_pagamento_confirmado_por_email",
-        lambda email: ("pay_1", "cliente@example.com|anual"),
+        db, "buscar_pagamento_confirmado_por_email",
+        lambda email, **_: ("pay_1", "cliente@example.com|anual"),
     )
     monkeypatch.setattr(
-        flask_app_module.db, "buscar_senha_hash_cliente",
+        db, "buscar_senha_hash_cliente",
         lambda email: generate_password_hash("senha-correta"),
     )
-    monkeypatch.setattr(flask_app_module.db, "buscar_cliente_id_por_email", lambda email: "cliente-1")
-    monkeypatch.setattr(flask_app_module.db, "buscar_pagamento_id", lambda payment_id: "pagamento-1")
-    monkeypatch.setattr(flask_app_module.db, "salvar_sessao", MagicMock())
+    monkeypatch.setattr(db, "buscar_cliente_id_por_email", lambda email: "cliente-1")
+    monkeypatch.setattr(db, "buscar_pagamento_id", lambda payment_id: "pagamento-1")
+    monkeypatch.setattr(db, "salvar_sessao", MagicMock())
 
     resp = client.post("/login", data={"email": "cliente@example.com", "senha": "senha-correta"})
 
     assert resp.status_code == 302
-    assert flask_app_module.PREMIUM_COOKIE in resp.headers.get("Set-Cookie", "")
+    assert security.PREMIUM_COOKIE in resp.headers.get("Set-Cookie", "")
 
 
-def test_login_post_without_password_set_redirects_to_definir_senha(client, monkeypatch):
+def test_login_post_without_password_set_does_not_hand_out_setup_link(client, monkeypatch):
+    """Conta sem senha não pode ganhar link de definição só por quem digita o e-mail."""
     monkeypatch.setattr(
-        flask_app_module.db, "buscar_pagamento_confirmado_por_email",
-        lambda email: ("pay_1", "cliente@example.com|anual"),
+        db, "buscar_pagamento_confirmado_por_email",
+        lambda email, **_: ("pay_1", "cliente@example.com|anual"),
     )
-    monkeypatch.setattr(flask_app_module.db, "buscar_senha_hash_cliente", lambda email: None)
+    monkeypatch.setattr(db, "buscar_senha_hash_cliente", lambda email: None)
 
     resp = client.post("/login", data={"email": "cliente@example.com", "senha": "qualquer123"})
 
-    assert resp.status_code == 302
-    assert "/login/definir-senha" in resp.headers["Location"]
+    assert resp.status_code == 200
+    assert "definir-senha" not in resp.headers.get("Location", "")
+    assert security.PREMIUM_COOKIE not in resp.headers.get("Set-Cookie", "")
+
+
+def test_login_post_is_rate_limited(client, monkeypatch):
+    monkeypatch.setattr(db, "buscar_pagamento_confirmado_por_email", lambda email, **_: None)
+    statuses = [
+        client.post("/login", data={"email": "alvo@example.com", "senha": f"tentativa{i}"}).status_code
+        for i in range(11)
+    ]
+    assert statuses[:10] == [200] * 10
+    assert statuses[10] == 429
 
 
 def test_login_already_premium_redirects_home(client, monkeypatch):
-    monkeypatch.setattr(flask_app_module, "is_premium", lambda req: True)
+    monkeypatch.setattr(security, "is_premium", lambda req: True)
     resp = client.get("/login")
     assert resp.status_code == 302
 
@@ -97,7 +112,7 @@ def test_login_already_premium_redirects_home(client, monkeypatch):
 
 def test_admin_entrar_without_admin_key_configured_returns_403(client, monkeypatch):
     monkeypatch.setenv("ADMIN_KEY", "")
-    monkeypatch.setattr(flask_app_module, "_is_local_runtime", lambda: False)
+    monkeypatch.setattr(config, "is_local_runtime", lambda: False)
 
     resp = client.get("/admin/entrar?key=qualquer")
 
@@ -118,14 +133,14 @@ def test_admin_entrar_with_correct_key_sets_admin_cookie(client, monkeypatch):
     resp = client.get("/admin/entrar?key=chave-correta")
 
     assert resp.status_code == 302
-    assert flask_app_module._ADMIN_COOKIE in resp.headers.get("Set-Cookie", "")
+    assert security.ADMIN_COOKIE in resp.headers.get("Set-Cookie", "")
 
 
 def test_admin_sair_removes_admin_cookie(client):
     resp = client.get("/admin/sair")
     assert resp.status_code == 302
     set_cookie = resp.headers.get("Set-Cookie", "")
-    assert flask_app_module._ADMIN_COOKIE in set_cookie
+    assert security.ADMIN_COOKIE in set_cookie
 
 
 # ── /checkout/pay ─────────────────────────────────────────────────────────────
@@ -164,7 +179,7 @@ def test_checkout_pay_invalid_email_returns_400(client, email):
 
 
 def test_checkout_pay_rejects_domain_without_mx(client, monkeypatch):
-    monkeypatch.setattr(flask_app_module, "validar_email_cadastro",
+    monkeypatch.setattr(billing_routes, "validar_email_cadastro",
                         lambda e: ("", "O domínio deste e-mail não existe ou não recebe mensagens."))
     resp = client.post("/checkout/pay", data=_valid_pix_form(email="arroz@arroz.com"))
     assert resp.status_code == 400
@@ -186,16 +201,6 @@ def test_checkout_pay_password_mismatch_returns_400(client):
     resp = client.post("/checkout/pay", data=_valid_pix_form(senha_confirmar="outra-senha"))
     assert resp.status_code == 400
     assert "não coincidem" in resp.get_json()["error"]
-
-
-def test_checkout_pay_credit_card_missing_card_number_returns_400(client):
-    resp = client.post(
-        "/checkout/pay",
-        data=_valid_pix_form(billing_type="CREDIT_CARD", card_expiry="12/30", card_cvv="123",
-                              card_postal_code="12345000", card_address_number="100"),
-    )
-    assert resp.status_code == 400
-    assert "cartão" in resp.get_json()["error"].lower()
 
 
 def test_checkout_pay_without_asaas_api_key_returns_503(client, monkeypatch):
@@ -222,9 +227,9 @@ def test_checkout_pay_pix_success_returns_qr_code(client, monkeypatch):
     monkeypatch.setattr(
         asaas, "get_pix_qr_code", lambda payment_id: {"encodedImage": "img-b64", "payload": "00020126"}
     )
-    monkeypatch.setattr(flask_app_module.db, "upsert_cliente", lambda *a, **k: "cliente-1")
-    monkeypatch.setattr(flask_app_module.db, "salvar_senha_cliente", MagicMock())
-    monkeypatch.setattr(flask_app_module.db, "salvar_pagamento", MagicMock())
+    monkeypatch.setattr(db, "upsert_cliente", lambda *a, **k: "cliente-1")
+    monkeypatch.setattr(db, "salvar_senha_cliente", MagicMock())
+    monkeypatch.setattr(db, "salvar_pagamento", MagicMock())
 
     resp = client.post("/checkout/pay", data=_valid_pix_form())
 
@@ -234,36 +239,65 @@ def test_checkout_pay_pix_success_returns_qr_code(client, monkeypatch):
     assert body["billing_type"] == "PIX"
     assert body["payment_id"] == "pay_1"
     assert body["pix_qr_image"] == "img-b64"
+    # Marca este navegador como dono da cobrança — só ele recebe o acesso no polling.
+    assert security.owns_checkout(_request_with_cookies(resp), "pay_1")
+    assert not security.owns_checkout(_request_with_cookies(resp), "pay_outro")
 
 
-def test_checkout_pay_credit_card_confirmed_sets_premium_cookie(client, monkeypatch):
+def _request_with_cookies(resp):
+    from http.cookies import SimpleCookie
+
+    jar = SimpleCookie()
+    for header in resp.headers.getlist("Set-Cookie"):
+        jar.load(header)
+
+    class _Req:
+        cookies = {key: morsel.value for key, morsel in jar.items()}
+
+    return _Req()
+
+
+def _mock_asaas_checkout(monkeypatch, create_payment):
     monkeypatch.setattr(asaas, "create_customer", lambda name, email, cpf_cnpj: {"id": "cus_1"})
-    monkeypatch.setattr(
-        asaas, "create_payment",
-        lambda **kwargs: {"id": "pay_1", "status": "CONFIRMED"},
-    )
-    monkeypatch.setattr(flask_app_module.db, "upsert_cliente", lambda *a, **k: "cliente-1")
-    monkeypatch.setattr(flask_app_module.db, "salvar_senha_cliente", MagicMock())
-    monkeypatch.setattr(flask_app_module.db, "salvar_pagamento", MagicMock())
-    monkeypatch.setattr(flask_app_module.db, "buscar_senha_hash_cliente", lambda email: "hash-existente")
-    monkeypatch.setattr(flask_app_module.db, "atualizar_status_pagamento", MagicMock())
-    monkeypatch.setattr(flask_app_module.db, "buscar_pagamento_id", lambda payment_id: "pagamento-1")
-    monkeypatch.setattr(flask_app_module.db, "salvar_sessao", MagicMock())
+    monkeypatch.setattr(asaas, "create_payment", create_payment)
+    monkeypatch.setattr(db, "upsert_cliente", lambda *a, **k: "cliente-1")
+    monkeypatch.setattr(db, "salvar_senha_cliente", MagicMock())
+    monkeypatch.setattr(db, "salvar_pagamento", MagicMock())
 
+
+def test_checkout_pay_credit_card_returns_asaas_invoice_without_card_data(client, monkeypatch):
+    create_payment = MagicMock(return_value={"id": "pay_1", "invoiceUrl": "https://asaas.example/i/pay_1"})
+    _mock_asaas_checkout(monkeypatch, create_payment)
+
+    # Campos de cartão enviados por um formulário antigo são simplesmente ignorados.
     resp = client.post(
         "/checkout/pay",
-        data=_valid_pix_form(
-            billing_type="CREDIT_CARD",
-            card_number="4111111111111111",
-            card_expiry="12/30",
-            card_cvv="123",
-            card_postal_code="12345000",
-            card_address_number="100",
-        ),
+        data=_valid_pix_form(billing_type="CREDIT_CARD", card_number="4111111111111111", card_cvv="123"),
     )
 
     assert resp.status_code == 200
     body = resp.get_json()
-    assert body["success"] is True
-    assert body["confirmed"] is True
-    assert flask_app_module.PREMIUM_COOKIE in resp.headers.get("Set-Cookie", "")
+    assert body == {
+        "success": True,
+        "billing_type": "CREDIT_CARD",
+        "payment_id": "pay_1",
+        "invoice_url": "https://asaas.example/i/pay_1",
+    }
+    kwargs = create_payment.call_args.kwargs
+    assert kwargs["billing_type"] == "CREDIT_CARD"
+    assert not any("card" in key for key in kwargs)
+    # Acesso só depois da confirmação, pelo polling — nunca na criação da cobrança.
+    assert security.PREMIUM_COOKIE not in resp.headers.get("Set-Cookie", "")
+
+
+def test_checkout_pay_asaas_error_does_not_leak_details(client, monkeypatch):
+    def _fail(**kwargs):
+        raise RuntimeError("401 Unauthorized — access_token=$aact_SEGREDO")
+
+    _mock_asaas_checkout(monkeypatch, _fail)
+
+    resp = client.post("/checkout/pay", data=_valid_pix_form())
+
+    assert resp.status_code == 502
+    assert "SEGREDO" not in resp.get_data(as_text=True)
+    assert "401" not in resp.get_json()["error"]

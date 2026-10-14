@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custos e qualidade — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <style>
+        .costs-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .costs-head h1 { margin: 0 0 .3rem; }
+        .costs-head p { margin: 0; color: var(--text-muted); font-size: .9rem; }
+        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+        .kpi { padding: .9rem 1rem; }
+        .kpi .label { font-size: .75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+        .kpi .value { font-size: 1.5rem; font-weight: 800; margin-top: .2rem; font-variant-numeric: tabular-nums; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: .88rem; font-variant-numeric: tabular-nums; }
+        th, td { padding: .55rem .6rem; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+        th:first-child, td:first-child { text-align: left; }
+        th { font-size: .75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+        tr.is-alert td { background: var(--danger-light); }
+        .rate-bad { color: var(--danger-dark); font-weight: 800; }
+        .note { font-size: .82rem; color: var(--text-muted); margin-top: .75rem; }
+        .day-filter a { margin-left: .4rem; }
+    </style>
+</head>
+<body>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("") }}
+    {% endcall %}
+
+    <main class="container">
+        <div class="costs-head">
+            <div>
+                <h1>Custos e qualidade</h1>
+                <p>Análises concluídas, custo estimado (USD) e taxa de "consenso rápido" — laudo de um só modelo porque o outro ou a síntese não coube no tempo.</p>
+            </div>
+            <div class="day-filter">
+                {% for option in (7, 14, 30) %}
+                    <a href="?dias={{ option }}" class="btn-secondary{{ ' is-current' if days == option }}">{{ option }} dias</a>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% if not persistent %}
+            <div class="alert alert-error">
+                {{ layout.icon('x-circle') }}
+                Sem Redis nem Supabase configurados: os contadores ficam só na memória deste processo e o histórico mostra apenas hoje.
+            </div>
+        {% endif %}
+
+        {% set total_analyses = rows | sum(attribute='analises') %}
+        {% set total_cost = rows | sum(attribute='custo_usd') %}
+        {% set today = rows[0] %}
+        <div class="kpis">
+            <div class="card kpi"><div class="label">Análises ({{ days }} dias)</div><div class="value">{{ total_analyses }}</div></div>
+            <div class="card kpi"><div class="label">Custo ({{ days }} dias)</div><div class="value">US$ {{ '%.2f' | format(total_cost) }}</div></div>
+            <div class="card kpi"><div class="label">Custo médio/análise</div><div class="value">US$ {{ '%.3f' | format(total_cost / total_analyses if total_analyses else 0) }}</div></div>
+            <div class="card kpi"><div class="label">Consenso rápido hoje</div>
+                <div class="value{{ ' rate-bad' if today.analises >= alert_minimum and today.taxa_consenso_rapido >= alert_ratio }}">{{ '%.0f' | format(today.taxa_consenso_rapido * 100) }}%</div></div>
+        </div>
+
+        <div class="card table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Dia (UTC)</th>
+                        {% for mode in modes %}<th>{{ mode }}: análises</th><th>{{ mode }}: US$</th>{% endfor %}
+                        <th>Total US$</th>
+                        <th>Consenso rápido</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        {% set alert = row.analises >= alert_minimum and row.taxa_consenso_rapido >= alert_ratio %}
+                        <tr class="{{ 'is-alert' if alert }}">
+                            <td>{{ row.dia }}</td>
+                            {% for mode in modes %}
+                                <td>{{ row.modos[mode].analises }}</td>
+                                <td>{{ '%.4f' | format(row.modos[mode].custo_usd) }}</td>
+                            {% endfor %}
+                            <td>{{ '%.4f' | format(row.custo_usd) }}</td>
+                            <td class="{{ 'rate-bad' if alert }}">{{ '%.0f' | format(row.taxa_consenso_rapido * 100) }}%</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="note">Alerta (log de erro, enviado ao Sentry) quando o consenso rápido passa de {{ '%.0f' | format(alert_ratio * 100) }}% com pelo menos {{ alert_minimum }} análises no dia — ajuste em CONSENSUS_FALLBACK_ALERT_RATIO e CONSENSUS_FALLBACK_ALERT_MIN_ANALYSES. Custo estimado pela tabela de preços do .env.</p>
+    </main>
+
+    {{ layout.site_footer() }}
+</body>
+</html>

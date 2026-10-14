@@ -12,7 +12,8 @@ tests/test_async_routes.py.
 import io
 from unittest.mock import MagicMock
 
-import app as flask_app_module
+from core import analyzer
+from web import config
 
 FAKE_RESULT = {
     "success": True,
@@ -27,15 +28,11 @@ FAKE_RESULT = {
 
 
 def _mock_analyze(monkeypatch, result=None):
-    # app.py importa analyze_exam_from_bytes diretamente no seu namespace no
-    # carregamento do módulo (from core.analyzer import ...), então o caminho
-    # síncrono das rotas precisa ser mockado em flask_app_module, não em
-    # core.analyzer (isso só afetaria o worker assíncrono, que reimporta em
-    # tempo de execução — ver core/jobs.py).
-    monkeypatch.setattr(
-        flask_app_module, "analyze_exam_from_bytes",
-        MagicMock(return_value=dict(result or FAKE_RESULT)),
-    )
+    # As rotas e o worker chamam analyzer.analyze_exam_from_bytes pelo módulo,
+    # então um único mock em core.analyzer cobre o caminho síncrono e a fila.
+    mock = MagicMock(return_value=dict(result or FAKE_RESULT))
+    monkeypatch.setattr(analyzer, "analyze_exam_from_bytes", mock)
+    return mock
 
 
 def _upload_payload(**extra):
@@ -45,7 +42,7 @@ def _upload_payload(**extra):
 
 
 def _login_as_admin(client):
-    key = flask_app_module._get_admin_key()
+    key = config.get_admin_key()
     resp = client.get(f"/admin/entrar?key={key}")
     assert resp.status_code in (302, 303)
 
@@ -105,10 +102,7 @@ def test_analyze_sync_success_renders_result(client, monkeypatch):
 
 
 def test_analyze_sync_analyzer_failure_flashes_and_redirects(client, monkeypatch):
-    monkeypatch.setattr(
-        flask_app_module, "analyze_exam_from_bytes",
-        MagicMock(side_effect=Exception("boom")),
-    )
+    monkeypatch.setattr(analyzer, "analyze_exam_from_bytes", MagicMock(side_effect=Exception("boom")))
     _login_as_admin(client)
 
     resp = client.post(
@@ -171,6 +165,60 @@ def test_trial_analyze_sync_success(client, monkeypatch):
 
 
 # ── /api/analyze ──────────────────────────────────────────────────────────────
+
+def test_api_analyze_without_key_returns_401_and_never_calls_ai(client, monkeypatch):
+    """Antes, sem X-API-Key a rota usava nossas chaves Gemini/Anthropic de graça."""
+    analyze_mock = _mock_analyze(monkeypatch)
+
+    resp = client.post(
+        "/api/analyze", data=_upload_payload(description="joelho"), content_type="multipart/form-data"
+    )
+
+    assert resp.status_code == 401
+    analyze_mock.assert_not_called()
+
+
+def test_api_analyze_with_unknown_key_returns_401(client, monkeypatch):
+    analyze_mock = _mock_analyze(monkeypatch)
+
+    resp = client.post(
+        "/api/analyze",
+        data=_upload_payload(description="joelho"),
+        content_type="multipart/form-data",
+        headers={"X-API-Key": "chave-qualquer-de-gemini"},
+    )
+
+    assert resp.status_code == 401
+    analyze_mock.assert_not_called()
+
+
+def test_api_analyze_disabled_when_no_access_keys_configured(client, monkeypatch):
+    monkeypatch.setenv("API_ACCESS_KEYS", "")
+    resp = client.post("/api/analyze", data={}, headers={"X-API-Key": "chave"})
+    assert resp.status_code == 401
+
+
+def test_api_analyze_status_requires_key(client):
+    resp = client.get("/api/analyze/status/qualquer-job")
+    assert resp.status_code == 401
+
+
+def test_api_analyze_error_does_not_leak_exception_text(client, monkeypatch):
+    def _boom(**kwargs):
+        raise RuntimeError("segredo interno: projects/123 key=abc")
+
+    monkeypatch.setattr(analyzer, "analyze_exam_from_bytes", _boom)
+
+    resp = client.post(
+        "/api/analyze",
+        data=_upload_payload(description="joelho"),
+        content_type="multipart/form-data",
+        headers={"X-API-Key": "chave"},
+    )
+
+    assert resp.status_code == 500
+    assert "segredo interno" not in resp.get_data(as_text=True)
+
 
 def test_api_analyze_no_image_returns_400(client):
     resp = client.post("/api/analyze", data={}, headers={"X-API-Key": "chave"})

@@ -71,28 +71,21 @@ def test_create_payment_invalid_billing_type_falls_back_to_undefined(monkeypatch
     assert captured["json"]["billingType"] == "UNDEFINED"
 
 
-def test_create_payment_credit_card_attaches_card_payload(monkeypatch):
+def test_create_payment_credit_card_never_sends_card_data(monkeypatch):
+    """Cartão é pago na página do Asaas (invoiceUrl): o app não envia dados de cartão."""
     captured = {}
 
     def fake_post(url, json, headers, timeout):
         captured["json"] = json
-        return _fake_response(json_data={"id": "pay_456"})
+        return _fake_response(json_data={"id": "pay_456", "invoiceUrl": "https://asaas.example/i/pay_456"})
 
     monkeypatch.setattr(asaas.requests, "post", fake_post)
 
-    card = {"number": "4111", "holderName": "Fulano"}
-    holder_info = {"email": "fulano@example.com"}
-    asaas.create_payment(
-        customer_id="cus_1",
-        value=97.0,
-        description="Plano",
-        billing_type="CREDIT_CARD",
-        credit_card=card,
-        credit_card_holder_info=holder_info,
-    )
+    asaas.create_payment(customer_id="cus_1", value=97.0, description="Plano", billing_type="CREDIT_CARD")
 
-    assert captured["json"]["creditCard"] == card
-    assert captured["json"]["creditCardHolderInfo"] == holder_info
+    assert captured["json"]["billingType"] == "CREDIT_CARD"
+    assert "creditCard" not in captured["json"]
+    assert "creditCardHolderInfo" not in captured["json"]
 
 
 def test_is_payment_confirmed_true_for_confirmed_status(monkeypatch):

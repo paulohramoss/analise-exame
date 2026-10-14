@@ -7,6 +7,7 @@
     {% import "_layout.html" as layout %}
     {{ layout.head_assets() }}
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <script src="{{ static_url('laudo-ui.js') }}"></script>
     <script src="{{ static_url('laudo-pdf.js') }}" defer></script>
     <style>
         .professional-summary {
@@ -295,7 +296,7 @@
                 </div>
             </div>
             <div class="report-content" id="report-content">
-                {{ analysis | safe }}
+                {{ analysis }}
             </div>
         </div>
 
@@ -327,23 +328,11 @@
     <script type="application/json" id="data-generated-at">{{ (laudo.created_at|datetime_br)|tojson }}</script>
     <script type="application/json" id="data-user-desc">{{ user_description|default('', true)|tojson }}</script>
     <script type="application/json" id="data-analysis-id">{{ analysis_id|tojson }}</script>
+    <script type="application/json" id="data-exam-meta">{{ {"exam_type": exam_type, "references_used": laudo.get("referencias_usadas") or 0, "num_images": laudo.get("num_imagens") or 1}|tojson }}</script>
     <script>
-        function renderMarkdown(element) {
-            let html = element.innerHTML.trim();
-            html = html.replace(/^\s*### (.+)$/gm, '<h4>$1</h4>');
-            html = html.replace(/^\s*## (.+)$/gm, '<h3>$1</h3>');
-            html = html.replace(/^\s*# (.+)$/gm, '<h2>$1</h2>');
-            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-            html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-            html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-            html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-            html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
-            html = html.replace(/\n\n/g, '</p><p>');
-            element.innerHTML = '<p>' + html + '</p>';
-        }
 
         const reportContent = document.getElementById('report-content');
-        renderMarkdown(reportContent);
+        renderLaudoInto(reportContent, reportContent.textContent);
 
         const responsible = JSON.parse(document.getElementById('data-responsible').textContent || 'null');
         const consensus = JSON.parse(document.getElementById('data-consensus').textContent || 'null');
@@ -363,6 +352,7 @@
                 generatedAt: generatedAt || laudoNowBR(),
                 documentId: analysisId ? String(analysisId).slice(0, 8).toUpperCase() : '',
                 responsible: responsible || { name: 'Responsável não salvo neste histórico' },
+                meta: laudoPdfMeta(JSON.parse(document.getElementById('data-exam-meta').textContent || '{}'), consensus),
                 clinicalInfo: userDesc,
             });
         }

@@ -1,12 +1,12 @@
 # MedAI Analyzer
 
-> Analisador inteligente de exames médicos por imagem, com geração automatizada de laudos estruturados via Google Gemini.
+> Analisador de exames de imagem musculoesqueléticos, com laudo estruturado gerado por consenso entre Google Gemini e Claude.
 
 ---
 
 ## Visão Geral
 
-O **MedAI Analyzer** é uma aplicação web que utiliza a API multimodal do **Google Gemini** para analisar imagens de exames médicos (Ressonância Magnética, Raio-X, Tomografia, entre outros). O sistema detecta automaticamente o tipo de exame, busca imagens de referência normais para comparação e gera um laudo estruturado com achados clínicos, hipóteses diagnósticas e recomendações.
+O **MedAI Analyzer** (plataforma Three Health) analisa imagens de exames ortopédicos — RM, Raio-X, TC e US de joelho, coluna, ombro, quadril, pé/tornozelo, mão/punho e cotovelo. O sistema identifica a região anatômica, compara com imagens de referência normais e gera um laudo estruturado com achados classificados por força de evidência, impressão diagnóstica e conduta. Com a chave da Anthropic configurada, Gemini e Claude analisam o exame de forma independente e uma síntese de consenso produz o laudo final.
 
 > **Aviso clínico:** Esta ferramenta destina-se exclusivamente ao uso como auxiliar por profissionais de saúde habilitados. **Não substitui** o diagnóstico médico especializado.
 
@@ -14,12 +14,16 @@ O **MedAI Analyzer** é uma aplicação web que utiliza a API multimodal do **Go
 
 ## Funcionalidades
 
-- Upload de imagens nos formatos PNG, JPG, JPEG e WEBP
-- Detecção automática do tipo de exame a partir da descrição
-- Busca de imagens de referência normais (Wikimedia Commons) para análise comparativa
-- Geração de laudo estruturado via Google Gemini (modelo multimodal)
-- Interface web responsiva, sem dependências de frameworks externos
-- API REST para integração programática com outros sistemas
+- Upload de PNG, JPG, WEBP, GIF e **DICOM** (`.dcm`, convertido e com metadados anonimizados)
+- Detecção da região anatômica pela descrição/nome do arquivo e, se preciso, pela própria imagem
+- Comparação com imagens de referência normais (`reference_data/<região>/`)
+- Laudo por consenso dual Gemini + Claude (ou só Gemini, sem chave Anthropic)
+- Planos pagos (Asaas: PIX, boleto, cartão na página do Asaas), trial gratuito embutível por iframe
+- Histórico de laudos, dashboard da clínica e validação clínica dos laudos
+- API REST autenticada por chave (`/api/analyze`)
+- Fila assíncrona opcional (Redis + RQ) e orçamento de custo diário por escopo
+- LGPD: identificadores removidos do texto clínico, exportação e exclusão de conta pelo titular, retenção automática
+- Painel interno de custos e qualidade (`/admin/custos`) e avaliação de laudos (`evals/`)
 
 ---
 
@@ -27,22 +31,34 @@ O **MedAI Analyzer** é uma aplicação web que utiliza a API multimodal do **Go
 
 ```
 analise-exame/
-├── app.py                    # Aplicação Flask — rotas e ponto de entrada
-├── requirements.txt          # Dependências Python
-├── .env.example              # Template de variáveis de ambiente
-├── core/
-│   ├── analyzer.py           # Lógica de análise com a API do Gemini
-│   └── reference_images.py   # Busca e gerenciamento de imagens de referência
-├── templates/
-│   ├── index.html            # Página de upload de exame
-│   └── result.html           # Página de exibição do laudo
-└── static/
-    └── style.css             # Estilos da interface
+├── app.py                  # Monta a aplicação Flask (create_app); objeto WSGI `app`
+├── worker.py               # Worker da fila de análise (RQ) — processo separado
+├── api/index.py            # Entrada da Vercel (reexporta `app`)
+├── web/                    # Camada HTTP
+│   ├── routes/             # Blueprints: analysis, laudos, billing, auth
+│   ├── security.py         # Cookies/tokens assinados, sessão premium, IP do cliente
+│   ├── accounts.py         # Plano ativo e emissão da sessão
+│   ├── uploads.py          # Upload e conversão de DICOM
+│   ├── costs.py            # Orçamento de custo e cota do trial
+│   ├── presentation.py     # Formatação e mensagens ao usuário
+│   ├── hooks.py            # before/after request, CSRF, cabeçalhos de segurança
+│   ├── access_log.py       # Log de acesso assíncrono
+│   ├── extensions.py       # Rate limiter
+│   └── config.py           # Ambiente, planos, chaves e modelos
+├── core/                   # Regras sem dependência do Flask
+│   ├── analyzer.py         # Análise com Gemini/Claude, consenso, normalização de imagem
+│   ├── reference_images.py # Detecção da região e imagens de referência
+│   ├── db.py               # Persistência no Supabase
+│   ├── jobs.py             # Fila assíncrona (RQ)
+│   ├── cost_tracking.py    # Custo por análise e contadores diários
+│   ├── privacy.py          # Remove identificadores do texto clínico (LGPD)
+│   ├── asaas.py, mailer.py, email_validation.py, ttl_cache.py, ...
+├── templates/, static/     # Interface (Jinja + CSS/JS sem framework)
+├── reference_data/         # Imagens normais por região e atlas em PDF
+├── supabase_migrations/    # schema.sql consolidado + migrations datadas
+├── evals/                  # Avaliação de qualidade dos laudos (casos + pontuação)
+└── tests/                  # pytest
 ```
-
-> A árvore acima é ilustrativa. O `core/` também tem `db.py` (Supabase),
-> `asaas.py` (pagamentos), `cost_tracking.py`, `logging_config.py` e
-> `jobs.py` (fila assíncrona) — veja os arquivos para detalhes.
 
 ---
 
@@ -59,8 +75,9 @@ consolidado e idempotente — seguro rodar num projeto novo ou no existente).
 
 ### Pré-requisitos
 
-- Python 3.9+
+- Python 3.12 (versão usada no CI e na Vercel; o código exige no mínimo 3.10)
 - Chave de API do Google Gemini — obtenha em [aistudio.google.com](https://aistudio.google.com/app/apikey)
+- Opcional: chave da Anthropic (consenso dual), Supabase (persistência), Asaas (pagamentos), Redis (fila)
 
 ### 1. Clonar o repositório
 
@@ -84,8 +101,12 @@ venv\Scripts\activate
 ### 3. Instalar dependências
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # desenvolvimento (inclui pytest, ruff, pip-audit)
 ```
+
+Em produção a Vercel instala `requirements.txt`. Os dois arquivos são
+**travados** (todas as versões, inclusive transitivas) e gerados pelo
+`pip-compile` — veja [Dependências](#dependências).
 
 ### 4. Configurar variáveis de ambiente
 
@@ -119,6 +140,79 @@ python app.py
 ```
 
 Acesse a interface em: `http://localhost:5000`
+
+### 6. Rodar os testes
+
+```bash
+pytest -q
+```
+
+```bash
+ruff check .
+```
+
+Os testes não usam rede nem o seu `.env` (ver `tests/conftest.py`).
+
+---
+
+## Privacidade (LGPD)
+
+- **Minimização:** a descrição clínica passa por `core/privacy.py` antes de ir
+  aos modelos de IA e ao banco — nome, CPF/CNPJ, CNS, RG, telefone, e-mail e
+  data de nascimento viram `[removido]`. O DICOM só guarda hashes dos UIDs.
+- **Direitos do titular:** em `/conta` o cliente baixa seus dados (JSON) e
+  exclui a conta (senha + confirmação). A exclusão apaga laudos, imagens,
+  validações, sessões e logs; as cobranças ficam, sem vínculo, por guarda fiscal.
+- **Retenção:** prazos aplicados diariamente pelo banco — ver
+  [`docs/SCHEMA.md`](docs/SCHEMA.md#retenção-de-dados-lgpd).
+
+---
+
+## Observabilidade
+
+- **`/admin/custos`** (com o acesso admin): análises, custo estimado e taxa de
+  "consenso rápido" por dia e por modo (premium, trial, API).
+- **Alerta:** se o consenso rápido passar de `CONSENSUS_FALLBACK_ALERT_RATIO`
+  no dia, sai um log de erro (Sentry) uma vez por dia.
+- **`trace_id`:** toda resposta traz `X-Trace-Id`; o mesmo id aparece nos logs
+  JSON do processo web e do worker que processou o job.
+
+---
+
+## Avaliação de qualidade dos laudos
+
+Antes de trocar prompt, modelo ou orçamento de tempo, rode o conjunto de casos
+de referência e compare com a execução anterior — ver
+[`evals/README.md`](evals/README.md).
+
+```bash
+python -m evals.run_eval --baseline evals/results/<execucao-anterior>.json
+```
+
+---
+
+## Dependências
+
+- `requirements.in` / `requirements-dev.in` — dependências **diretas**, com a
+  versão mínima aceita. É aqui que se adiciona ou remove um pacote.
+- `requirements.txt` / `requirements-dev.txt` — lock gerado; não edite à mão.
+
+Depois de mudar um `.in`, ou para atualizar um pacote específico:
+
+```bash
+pip-compile --strip-extras requirements.in
+```
+
+```bash
+pip-compile --strip-extras requirements-dev.in
+```
+
+```bash
+pip-compile --strip-extras --upgrade-package flask requirements.in
+```
+
+O CI roda `pip-audit -r requirements.txt` e **falha** se o lock tiver alguma
+vulnerabilidade conhecida.
 
 ---
 
@@ -175,9 +269,14 @@ A aplicação expõe um endpoint para integração programática.
 
 **Endpoint:** `POST /api/analyze`
 
+A rota exige uma chave de acesso cadastrada em `API_ACCESS_KEYS` (ver
+`.env.example`). Sem chaves configuradas, a API fica desligada (401). As
+análises usam as chaves Gemini/Anthropic do servidor e entram no orçamento de
+custo diário.
+
 ```bash
 curl -X POST http://localhost:5000/api/analyze \
-  -H "X-API-Key: sua_chave_gemini" \
+  -H "X-API-Key: sua_chave_de_acesso" \
   -F "exam_image=@/caminho/para/exame.jpg" \
   -F "description=Ressonância magnética do joelho direito"
 ```
@@ -187,7 +286,7 @@ curl -X POST http://localhost:5000/api/analyze \
 ```json
 {
   "success": true,
-  "exam_type": "ressonancia_joelho",
+  "exam_type": "joelho",
   "analysis": "## 1. IDENTIFICAÇÃO DO EXAME\n...",
   "references_used": 2,
   "model_used": "gemini-2.5-flash"
@@ -198,13 +297,21 @@ curl -X POST http://localhost:5000/api/analyze \
 
 ## Tipos de Exame Suportados
 
-| Tipo de Exame         | Palavras-chave detectadas             |
-|-----------------------|---------------------------------------|
-| Ressonância Cerebral  | `cerebro`, `cranio`, `brain`, `mri head` |
-| Ressonância Joelho    | `joelho`, `knee`, `tibial`, `femoral` |
-| Raio-X Tórax          | `torax`, `pulm`, `chest`, `xray`      |
-| Ressonância Coluna    | `coluna`, `lombar`, `cervical`, `spine` |
-| Tomografia Crânio     | `tomografia`, `ct scan`, `tac`        |
+A plataforma é focada em **ortopedia/musculoesquelético**. A região é detectada
+pelo nome do arquivo e pela descrição clínica (palavras inteiras, sem acento; a
+região com mais termos encontrados vence) e, se nada casar, visualmente pelo
+Gemini. Lista completa em `EXAM_TYPE_KEYWORDS` (`core/reference_images.py`).
+
+| Região          | Exemplos de termos detectados                               |
+|-----------------|-------------------------------------------------------------|
+| `joelho`        | joelho, menisco, patela, LCA, côndilo femoral, platô tibial |
+| `coluna`        | coluna, lombar, cervical, hérnia de disco, L4, L5, S1       |
+| `ombro`         | ombro, manguito rotador, supraespinhal, acrômio, clavícula  |
+| `quadril`       | quadril, acetábulo, cabeça/colo femoral, trocânter, pelve   |
+| `pe_tornozelo`  | pé, tornozelo, calcâneo, tálus, metatarso, fáscia plantar   |
+| `mao_punho`     | mão, punho, carpo, escafoide, rádio distal, falange         |
+| `cotovelo`      | cotovelo, epicôndilo, olécrano, cabeça do rádio, ulna       |
+| `geral`         | nenhuma região identificada                                 |
 
 ---
 
@@ -213,7 +320,7 @@ curl -X POST http://localhost:5000/api/analyze \
 | Camada     | Tecnologia                              |
 |------------|-----------------------------------------|
 | Backend         | Python 3, Flask                                                     |
-| IA              | Google Gemini 2.5 Flash (multimodal), Claude Sonnet (consenso dual) |
+| IA              | Google Gemini (`GEMINI_MODEL`) + Claude (`CLAUDE_MODEL`) em consenso dual |
 | Fila (opcional) | Redis + RQ (worker separado — ver "Fila de análise assíncrona")     |
 | Banco de dados  | Supabase (Postgres)                                                 |
 | Monitoramento   | Sentry (opcional), logging estruturado (JSON)                       |

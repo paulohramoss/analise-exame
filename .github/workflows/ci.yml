@@ -17,8 +17,11 @@ jobs:
           cache: "pip"
           cache-dependency-path: requirements-dev.txt
 
-      - name: Instalar dependências
+      - name: Instalar dependências (lock)
         run: pip install -r requirements-dev.txt
+
+      - name: Conferir dependências instaladas
+        run: pip check
 
       - name: Lint (ruff)
         run: ruff check .
@@ -32,8 +35,8 @@ jobs:
         run: pytest -q
 
       - name: Scan de vulnerabilidades em dependências (pip-audit)
-        # Não bloqueia o build ainda: há CVEs conhecidos em deps pinadas
-        # (flask, Werkzeug, requests, python-dotenv) pendentes de bump avaliado
-        # separadamente. Reporta no log até isso ser resolvido.
-        continue-on-error: true
+        # Bloqueia o build: o lock (requirements.txt, gerado por pip-compile a
+        # partir de requirements.in) não pode ter CVE conhecido. Para corrigir:
+        #   pip-compile --strip-extras --upgrade-package <pacote> requirements.in
+        #   pip-compile --strip-extras --upgrade-package <pacote> requirements-dev.in
         run: pip-audit -r requirements.txt
