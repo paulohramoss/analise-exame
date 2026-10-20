@@ -803,21 +803,34 @@ def _analyze_with_claude(
     ai_session_id: str | None = None,
     ai_trace_id: str | None = None,
     posthog_distinct_id: str | None = None,
+    stop_at: Callable[[], float] | None = None,
 ) -> tuple[str, dict | None] | None:
-    """Análise independente com Claude. Retorna (texto, uso_de_tokens) ou None em caso de falha."""
+    """Análise independente com Claude. Retorna (texto, uso_de_tokens) ou None em caso de falha.
+
+    Usa streaming: sem ele o timeout HTTP valia para o laudo inteiro, e um laudo
+    longo do Claude (>45s) estourava com ReadTimeout. Agora timeout_seconds é o
+    limite entre chunks, e o prazo total vem de stop_at() (relido a cada chunk,
+    para poder ser estendido quando o Gemini falha) ou de timeout_seconds.
+    """
     try:
         logger.info("Claude: iniciando análise independente...")
+        started = time.monotonic()
         client = _make_anthropic_client(anthropic_api_key, timeout_seconds, posthog_client)
         content = _build_claude_content(
             exam_images, exam_type, user_description, reference_images, validated_case_text
         )
-        message = client.messages.create(
+        with client.messages.stream(
             model=_CLAUDE_MODEL,
             max_tokens=_CLAUDE_ANALYSIS_MAX_TOKENS,
             messages=[{"role": "user", "content": content}],
             timeout=timeout_seconds,
             **_posthog_generation_kwargs(ai_session_id, ai_trace_id, posthog_distinct_id),
-        )
+        ) as stream:
+            for _ in stream.text_stream:
+                limit = stop_at() if stop_at else started + timeout_seconds
+                if time.monotonic() > limit:
+                    raise TimeoutError("Claude: análise excedeu o prazo.")
+            message = stream.get_final_message()
         logger.info("Claude: análise concluída.")
         return message.content[0].text, _extract_claude_usage(_CLAUDE_MODEL, message)
     except Exception:
@@ -959,6 +972,17 @@ def _run_dual_analysis(
     """
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
     cancel_event = threading.Event()
+    gemini_failed = threading.Event()
+    claude_soft_deadline = time.monotonic() + _CLAUDE_ANALYSIS_TIMEOUT_SECONDS
+    if deadline:
+        claude_soft_deadline = min(claude_soft_deadline, deadline)
+
+    def _claude_stop_at() -> float:
+        # Com o Gemini fora, o laudo depende só do Claude: ele ganha o orçamento inteiro.
+        if gemini_failed.is_set() and deadline:
+            return deadline
+        return claude_soft_deadline
+
     gemini_text = ""
     claude_result = ""
     usage: list[dict] = []
@@ -975,6 +999,9 @@ def _run_dual_analysis(
             ai_trace_id,
             posthog_distinct_id,
         )
+        gemini_future.add_done_callback(
+            lambda f: gemini_failed.set() if not f.cancelled() and f.exception() is not None else None
+        )
         claude_future = executor.submit(
             _analyze_with_claude,
             anthropic_api_key,
@@ -988,6 +1015,7 @@ def _run_dual_analysis(
             ai_session_id,
             ai_trace_id,
             posthog_distinct_id,
+            _claude_stop_at,
         )
 
         done, pending = concurrent.futures.wait(
@@ -1091,6 +1119,7 @@ def _produce_final_analysis(
             anthropic_api_key, exam_images, exam_type, user_description, reference_images,
             _remaining_seconds(deadline, _CLAUDE_ANALYSIS_TIMEOUT_SECONDS), validated_case_text,
             posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
+            stop_at=(lambda: deadline) if deadline else None,
         )
         if not claude_pair:
             raise RuntimeError("Claude: análise falhou e o Gemini está indisponível.")

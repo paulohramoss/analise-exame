@@ -362,3 +362,37 @@ def test_claude_only_when_gemini_key_missing(monkeypatch):
 
     assert result["analysis"] == "laudo do claude"
     assert result["usage"] == []
+
+
+def _streaming_claude_client(chunks):
+    client = MagicMock()
+    stream = client.messages.stream.return_value.__enter__.return_value
+    stream.text_stream = chunks
+    stream.get_final_message.return_value = MagicMock(
+        content=[MagicMock(text="laudo")], usage=MagicMock(input_tokens=1, output_tokens=1)
+    )
+    return client
+
+
+def test_claude_stream_stops_when_deadline_passes(monkeypatch):
+    client = _streaming_claude_client(iter(["a", "b"]))
+    monkeypatch.setattr(analyzer.anthropic, "Anthropic", lambda **kwargs: client)
+
+    result = analyzer._analyze_with_claude(
+        "k", [(b"x", "image/png")], "joelho", "", [], stop_at=lambda: 0.0
+    )
+
+    assert result is None
+
+
+def test_claude_deadline_is_reread_each_chunk(monkeypatch):
+    """O prazo pode ser estendido no meio do laudo (Gemini falhou durante a geração)."""
+    limits = iter([float("inf"), float("inf")])
+    client = _streaming_claude_client(iter(["a", "b"]))
+    monkeypatch.setattr(analyzer.anthropic, "Anthropic", lambda **kwargs: client)
+
+    text, _ = analyzer._analyze_with_claude(
+        "k", [(b"x", "image/png")], "joelho", "", [], stop_at=lambda: next(limits)
+    )
+
+    assert text == "laudo"

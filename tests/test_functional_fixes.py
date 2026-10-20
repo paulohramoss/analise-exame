@@ -154,14 +154,17 @@ def test_consensus_labels_come_from_models_actually_used():
 def test_claude_model_is_configurable(monkeypatch):
     monkeypatch.setattr(analyzer, "_CLAUDE_MODEL", "claude-sonnet-5-5")
     client = MagicMock()
-    client.messages.create.return_value = MagicMock(
+    stream = client.messages.stream.return_value.__enter__.return_value
+    stream.text_stream = iter(["lau", "do"])
+    stream.get_final_message.return_value = MagicMock(
         content=[MagicMock(text="laudo")], usage=MagicMock(input_tokens=10, output_tokens=5)
     )
     monkeypatch.setattr(analyzer.anthropic, "Anthropic", lambda **kwargs: client)
 
     text, usage = analyzer._analyze_with_claude("k", [(b"x", "image/png")], "joelho", "", [])
 
-    assert client.messages.create.call_args.kwargs["model"] == "claude-sonnet-5-5"
+    assert text == "laudo"
+    assert client.messages.stream.call_args.kwargs["model"] == "claude-sonnet-5-5"
     assert usage["model"] == "claude-sonnet-5-5"
 
 
