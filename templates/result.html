@@ -388,6 +388,8 @@
         const reportContent = document.getElementById('report-content');
         renderLaudoInto(reportContent, reportContent.textContent);
 
+        const responsible = JSON.parse(document.getElementById('data-responsible').textContent || 'null');
+
         function copyReport() {
             copyToClipboard(reportContent.innerText)
                 .then(() => showToast('Laudo copiado para a área de transferência.'))
@@ -395,7 +397,6 @@
         }
 
         function downloadPDF() {
-            const responsible = JSON.parse(document.getElementById('data-responsible').textContent || 'null');
             const userDesc = JSON.parse(document.getElementById('data-user-desc').textContent || 'null');
             const examMeta = JSON.parse(document.getElementById('data-exam-meta').textContent || '{}');
             const analysisId = examMeta.analysis_id;
