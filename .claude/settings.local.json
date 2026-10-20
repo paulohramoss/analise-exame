@@ -34,7 +34,17 @@
       "Bash(.venv/bin/pip index *)",
       "Bash(.venv/bin/pip check *)",
       "Bash(.venv/bin/python -c \"import supabase; print\\('supabase', supabase.__version__ if hasattr\\(supabase,'__version__'\\) else 'ok'\\)\")",
-      "Bash(.venv/bin/python scripts/auditar_emails.py --sem-dns)"
+      "Bash(.venv/bin/python scripts/auditar_emails.py --sem-dns)",
+      "PowerShell(python -m pytest -q 2>&1)",
+      "PowerShell(python -m ruff check . 2>&1)",
+      "PowerShell(git log -S\"const responsible = JSON.parse\" --oneline -- templates/result.html)",
+      "mcp__claude_ai_Vercel__list_teams",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Vercel__list_projects",
+      "mcp__claude_ai_Vercel__get_runtime_logs",
+      "PowerShell(if \\(Test-Path .env\\) { Get-Content .env | ForEach-Object { \\($_ -split '=',2\\)[0] } } else { 'no .env' })",
+      "PowerShell($tmp = \"$env:TEMP\\\\claude\\\\c--Users-s123-Desktop-exame-analise-exame\\\\09fd9ee9-5330-4d8d-a974-7aceaa7720a2\\\\scratchpad\\\\old_result.html\"; git show f26665f:templates/result.html | Out-File -Encoding utf8 $tmp; python -c \"import subprocess,sys; sys.path.insert\\(0,'tests'\\); import test_product_quality as t; r=subprocess.run\\(['node','-e',t._FEEDBACK_HARNESS,sys.argv[1]],capture_output=True,text=True,encoding='utf-8'\\); print\\(r.returncode, r.stderr.strip\\(\\).splitlines\\(\\)[-1] if r.stderr else r.stdout\\)\" $tmp)",
+      "PowerShell($tmp = \"$env:TEMP\\\\claude\\\\c--Users-s123-Desktop-exame-analise-exame\\\\09fd9ee9-5330-4d8d-a974-7aceaa7720a2\\\\scratchpad\\\\old_result.html\"; python -c \"import subprocess,sys; sys.path.insert\\(0,'tests'\\); import test_product_quality as t; r=subprocess.run\\(['node','-e',t._FEEDBACK_HARNESS,sys.argv[1]],capture_output=True,text=True,encoding='utf-8'\\); print\\([l for l in r.stderr.splitlines\\(\\) if 'Error' in l][:2]\\)\" $tmp)"
     ]
   }
 }

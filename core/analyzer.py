@@ -239,8 +239,8 @@ def _open_gemini_circuit(exc: Exception) -> None:
     with _gemini_circuit_lock:
         _gemini_circuit_open_until = time.monotonic() + _GEMINI_CIRCUIT_COOLDOWN_SECONDS
     logger.error(
-        "Gemini indisponível (%s). Usando apenas Claude pelos próximos %.0fs.",
-        type(exc).__name__, _GEMINI_CIRCUIT_COOLDOWN_SECONDS,
+        "Gemini indisponível (%s: %s). Usando apenas Claude pelos próximos %.0fs.",
+        type(exc).__name__, str(exc)[:300], _GEMINI_CIRCUIT_COOLDOWN_SECONDS,
     )
 
 

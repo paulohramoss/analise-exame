@@ -14,7 +14,7 @@ import os
 import time
 from functools import wraps
 
-from flask import Response, current_app, flash, g, redirect, request, url_for
+from flask import Response, current_app, flash, g, jsonify, redirect, request, url_for
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from markupsafe import Markup
 
@@ -307,6 +307,10 @@ def premium_required(f):
                     'data: {"type":"error","message":"Acesso não autorizado. Contrate um plano para continuar."}\n\n',
                     content_type="text/event-stream",
                 )
+            # fetch() com JSON (feedback, validação) espera JSON: um redirect para a
+            # página inicial faria o response.json() do navegador falhar sem mensagem útil.
+            if request.is_json or "application/json" in (request.headers.get("Accept") or ""):
+                return jsonify({"error": "Sessão expirada. Entre novamente para continuar."}), 401
             flash(Markup(
                 'Para analisar exames, <a href="/planos" style="font-weight:700;">contrate um plano</a>.'
             ), "error")

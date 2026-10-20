@@ -452,7 +452,7 @@
                 try {
                     const response = await fetch('/feedback', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                         body: JSON.stringify({
                             analysis_id: JSON.parse(document.getElementById('data-analysis-id').textContent || 'null'),
                             feedback: selectedFeedback,
@@ -461,16 +461,18 @@
                             responsible_role: responsible?.role || ''
                         })
                     });
-                    const data = await response.json();
+                    const data = await response.json().catch(() => ({}));
                     if (!response.ok || !data.success) {
-                        throw new Error(data.error || 'Não foi possível salvar.');
+                        throw new Error(data.error || 'Não foi possível salvar o feedback. Tente novamente.');
                     }
                     feedbackStatus.textContent = data.message || 'Feedback salvo.';
                     feedbackStatus.className = 'feedback-status success';
                     if (feedbackCard) feedbackCard.classList.add('feedback-saved');
                 } catch (error) {
                     feedbackSubmit.disabled = false;
-                    feedbackStatus.textContent = error.message;
+                    feedbackStatus.textContent = error instanceof TypeError
+                        ? 'Falha de conexão. Verifique sua internet e tente novamente.'
+                        : error.message;
                     feedbackStatus.className = 'feedback-status error';
                 }
             });

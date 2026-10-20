@@ -35,13 +35,14 @@
             </div>
             <div class="formal-field">
                 <label for="reviewer_role_{{ analysis_id }}">Perfil do validador</label>
+                {% set current_role = responsible_role|default('', true) %}
+                {% set role_options = ["Médico", "Radiologista", "Ortopedista", "Fisioterapeuta", "Laudista", "Outro profissional de saúde"] %}
                 <select id="reviewer_role_{{ analysis_id }}" name="reviewer_role">
-                    <option value="{{ responsible_role|default('', true) }}">{{ responsible_role|default('Profissional de saúde', true) }}</option>
-                    <option value="Radiologista">Radiologista</option>
-                    <option value="Ortopedista">Ortopedista</option>
-                    <option value="Fisioterapeuta">Fisioterapeuta</option>
-                    <option value="Laudista">Laudista</option>
-                    <option value="Outro profissional de saúde">Outro profissional de saúde</option>
+                    {% if not current_role %}<option value="" selected>— Selecione —</option>{% endif %}
+                    {% if current_role and current_role not in role_options %}<option value="{{ current_role }}" selected>{{ current_role }}</option>{% endif %}
+                    {% for role in role_options %}
+                    <option value="{{ role }}"{% if role == current_role %} selected{% endif %}>{{ role }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <div class="formal-field formal-field-compact">

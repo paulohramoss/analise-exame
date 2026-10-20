@@ -273,13 +273,68 @@ def test_shared_markdown_renderer_escapes_and_structures():
     process.stdout.write(JSON.stringify({ html, meta: window.laudoPdfMeta({ exam_type: 'Joelho' }, null) }));
     """
     out = subprocess.run(["node", "-e", script, str(ROOT / "static/laudo-ui.js")],
-                         capture_output=True, text=True, check=True).stdout
+                         capture_output=True, text=True, encoding="utf-8", check=True).stdout
     data = json.loads(out)
     assert "<img" not in data["html"] and "&lt;img" in data["html"]
     assert "<h3>3. ACHADOS</h3>" in data["html"]
     assert "<ol><li><strong>[FORTE]</strong>" in data["html"]
     assert "<blockquote>descartado: nada</blockquote>" in data["html"]
     assert [m["label"] for m in data["meta"]] == ["Região", "Imagens analisadas", "Referências usadas"]
+
+
+_FEEDBACK_HARNESS = """
+const fs = require('fs');
+const html = fs.readFileSync(process.argv[1], 'utf8');
+const scripts = [...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)].map(m => m[1]);
+const pageScript = scripts[scripts.length - 1];
+
+const listeners = {};
+const el = (id, extra = {}) => ({
+  id, textContent: '', value: '', className: '', disabled: false, dataset: {},
+  classList: { toggle() {}, add() {} }, focus() {},
+  addEventListener(type, fn) { listeners[id + ':' + type] = fn; }, ...extra,
+});
+const data = {
+  'data-responsible': JSON.stringify({ name: 'Dra. Ana', role: 'Fisioterapeuta' }),
+  'data-analysis-id': JSON.stringify('a1'), 'data-user-desc': '""', 'data-consensus': '{}',
+  'data-exam-meta': '{}',
+};
+const nodes = {};
+const partial = el('btn-partial', { dataset: { feedback: 'partial' } });
+global.document = {
+  getElementById: id => nodes[id] || (nodes[id] = el(id, { textContent: data[id] || '' })),
+  querySelectorAll: sel => (sel === '[data-feedback]' ? [partial] : []),
+};
+global.renderLaudoInto = () => {};
+let sent = null;
+global.fetch = async (url, opts) => {
+  sent = { url, opts };
+  return { ok: false, status: 302, json: async () => { throw new SyntaxError('The string did not match the expected pattern.'); } };
+};
+
+new Function(pageScript)();
+listeners['btn-partial:click']();
+nodes['feedback-comment'].value = 'imagem ruim';
+listeners['submit-feedback:click']().then(() => {
+  process.stdout.write(JSON.stringify({
+    body: JSON.parse(sent.opts.body), accept: sent.opts.headers.Accept, status: nodes['feedback-status'].textContent,
+  }));
+});
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node não instalado")
+@pytest.mark.parametrize("name", ["result.html", "laudo_detalhe.html"])
+def test_feedback_submit_sends_responsible_and_handles_non_json(name):
+    # Regressão: "Can't find variable: responsible" ao salvar feedback (variável
+    # declarada só dentro de downloadPDF) e erro críptico quando a resposta não é JSON.
+    out = subprocess.run(["node", "-e", _FEEDBACK_HARNESS, str(ROOT / "templates" / name)],
+                         capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    data = json.loads(out)
+    assert data["body"]["responsible_name"] == "Dra. Ana"
+    assert data["body"]["responsible_role"] == "Fisioterapeuta"
+    assert data["accept"] == "application/json"
+    assert data["status"] == "Não foi possível salvar o feedback. Tente novamente."
 
 
 def test_report_pages_use_the_shared_renderer():

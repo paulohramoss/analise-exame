@@ -18,7 +18,7 @@ from web import config
 from core import db
 import flask
 from core import mailer
-from web import security
+from web import presentation, security
 
 
 def _login_as_admin(client):
@@ -297,8 +297,10 @@ def test_dashboard_clinica_renders_with_empty_data(client):
 # ── /feedback ─────────────────────────────────────────────────────────────────
 
 def test_feedback_requires_premium(client):
+    # fetch() espera JSON: redirect para HTML quebrava o response.json() no navegador.
     resp = client.post("/feedback", json={"analysis_id": "a1", "feedback": "agree"})
-    assert resp.status_code == 302
+    assert resp.status_code == 401
+    assert "Sessão expirada" in resp.get_json()["error"]
 
 
 def test_feedback_invalid_type_returns_400(client):
@@ -344,7 +346,33 @@ def test_feedback_success(client, monkeypatch):
 
 def test_validacao_clinica_requires_premium(client):
     resp = client.post("/validacao-clinica", json={"analysis_id": "a1", "final_diagnosis": "ok"})
+    assert resp.status_code == 401
+
+
+def test_validacao_clinica_form_without_premium_still_redirects(client):
+    resp = client.post("/validacao-clinica", data={"analysis_id": "a1", "final_diagnosis": "ok"})
     assert resp.status_code == 302
+
+
+def test_validacao_form_role_select_has_no_duplicates(client, monkeypatch):
+    _login_as_admin(client)
+    monkeypatch.setattr(
+        db, "buscar_analise",
+        lambda analise_id, cliente_id=None, include_all=False: {
+            "id": "a1", "analise_completa": "laudo", "tipo_exame": "joelho",
+        },
+    )
+    monkeypatch.setattr(
+        presentation, "responsible_info_from_row", lambda row: {"name": "Dra. Ana", "role": "Fisioterapeuta"}
+    )
+
+    html = client.get("/laudos/a1").get_data(as_text=True)
+    select = re.search(r'<select id="reviewer_role_a1".*?</select>', html, re.S).group(0)
+    values = re.findall(r'<option value="([^"]*)"', select)
+
+    assert len(values) == len(set(values))
+    assert re.search(r'<option value="Fisioterapeuta" selected>', select)
+    assert "Médico" in values
 
 
 def test_validacao_clinica_missing_diagnosis_returns_400(client):
