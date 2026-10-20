@@ -396,3 +396,19 @@ def test_claude_deadline_is_reread_each_chunk(monkeypatch):
     )
 
     assert text == "laudo"
+
+
+def test_claude_text_cut_by_max_tokens_ends_on_complete_paragraph():
+    text = "## 1. IDENTIFICAÇÃO\nJoelho.\n\n## 2. ACHADOS\nRotura do LCA.\n\n## 3. URGÊNCIA\nAtrasos reduzem a viabilidade do rep"
+    message = MagicMock(stop_reason="max_tokens", content=[MagicMock(text=text)])
+
+    result = analyzer._close_truncated_text(message)
+
+    assert "viabilidade do rep" not in result
+    assert "Rotura do LCA." in result
+    assert result.endswith(analyzer._TRUNCATION_NOTICE)
+
+
+def test_claude_text_complete_is_untouched():
+    message = MagicMock(stop_reason="end_turn", content=[MagicMock(text="laudo completo")])
+    assert analyzer._close_truncated_text(message) == "laudo completo"

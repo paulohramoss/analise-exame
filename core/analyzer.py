@@ -434,6 +434,7 @@ def build_analysis_prompt(exam_type: str, num_images: int = 1) -> str:
 Você é um sistema de análise de imagens musculoesqueléticas da plataforma Three Health.
 Seu objetivo é produzir a análise mais precisa, profunda e útil possível do exame fornecido.
 Responda diretamente com o conteúdo estruturado abaixo — sem saudações, introduções, apresentações ou assinaturas.
+Seja completo, mas objetivo: o laudo inteiro deve caber em até 1.500 palavras.
 
 **BASE DE CONHECIMENTO:**
 - **Atlas(es) fornecido(s) acima** — referência primária de anatomia musculoesquelética normal
@@ -791,6 +792,26 @@ def _build_claude_content(
     return content
 
 
+_TRUNCATION_NOTICE = (
+    "\n\n> Laudo resumido: o texto atingiu o limite de tamanho e foi encerrado no último trecho completo."
+)
+
+
+def _close_truncated_text(message) -> str:
+    """Texto do Claude; se parou por max_tokens, corta no último parágrafo completo.
+
+    Sem isso, um laudo longo terminava no meio de uma palavra ("...viabilidade do rep").
+    """
+    text = message.content[0].text
+    if getattr(message, "stop_reason", None) != "max_tokens":
+        return text
+    logger.warning("Claude: resposta atingiu max_tokens; laudo encerrado no último parágrafo completo.")
+    cut = text.rstrip().rfind("\n\n")
+    if cut > len(text) // 2:
+        text = text[:cut]
+    return text.rstrip() + _TRUNCATION_NOTICE
+
+
 def _analyze_with_claude(
     anthropic_api_key: str,
     exam_images: list[tuple[bytes, str]],
@@ -832,7 +853,7 @@ def _analyze_with_claude(
                     raise TimeoutError("Claude: análise excedeu o prazo.")
             message = stream.get_final_message()
         logger.info("Claude: análise concluída.")
-        return message.content[0].text, _extract_claude_usage(_CLAUDE_MODEL, message)
+        return _close_truncated_text(message), _extract_claude_usage(_CLAUDE_MODEL, message)
     except Exception:
         logger.warning("Claude: análise falhou.", exc_info=True)
         return None
@@ -936,7 +957,7 @@ RELATÓRIO DE CONSENSO FINAL:"""
             **_posthog_generation_kwargs(ai_session_id, ai_trace_id, posthog_distinct_id),
         )
         logger.info("Síntese: relatório de consenso concluído.")
-        return message.content[0].text, _extract_claude_usage(_CLAUDE_MODEL, message)
+        return _close_truncated_text(message), _extract_claude_usage(_CLAUDE_MODEL, message)
     except Exception:
         logger.warning("Síntese falhou. Retornando análise Gemini.", exc_info=True)
         return gemini_analysis, None
