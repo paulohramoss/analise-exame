@@ -212,6 +212,43 @@ def _is_quota_exhausted(exc: Exception) -> bool:
     )
 
 
+# Circuit breaker do Gemini: um erro de permissão/autenticação (403/401, chave
+# inválida, billing bloqueado) não se resolve sozinho em segundos. Enquanto o
+# circuito estiver aberto, as análises vão direto para o Claude, sem tentar o
+# Gemini (e sem mostrar "Erro de permissão" ao usuário). Estado por processo.
+_GEMINI_CIRCUIT_COOLDOWN_SECONDS = float(os.environ.get("GEMINI_CIRCUIT_COOLDOWN_SECONDS", "600"))
+_gemini_circuit_lock = threading.Lock()
+_gemini_circuit_open_until = 0.0
+
+
+def _is_gemini_unusable(exc: Exception) -> bool:
+    code = getattr(exc, "code", None)
+    if code in (401, 403):
+        return True
+    msg = str(exc).lower()
+    return (
+        "permission_denied" in msg
+        or "api key not valid" in msg
+        or "api_key_invalid" in msg
+        or "invalid api key" in msg
+    )
+
+
+def _open_gemini_circuit(exc: Exception) -> None:
+    global _gemini_circuit_open_until
+    with _gemini_circuit_lock:
+        _gemini_circuit_open_until = time.monotonic() + _GEMINI_CIRCUIT_COOLDOWN_SECONDS
+    logger.error(
+        "Gemini indisponível (%s). Usando apenas Claude pelos próximos %.0fs.",
+        type(exc).__name__, _GEMINI_CIRCUIT_COOLDOWN_SECONDS,
+    )
+
+
+def _gemini_circuit_is_open() -> bool:
+    with _gemini_circuit_lock:
+        return time.monotonic() < _gemini_circuit_open_until
+
+
 def _is_retryable(exc: Exception) -> bool:
     # Erros da SDK do Gemini (google.genai.errors.APIError e subclasses) trazem
     # o código HTTP real em `.code` — usar isso em vez de procurar dígitos na
@@ -280,6 +317,9 @@ def _generate_with_retry(
                 return response
             except Exception as exc:
                 last_exc = exc
+                if _is_gemini_unusable(exc):
+                    _open_gemini_circuit(exc)
+                    raise
                 if _is_retryable(exc):
                     if attempt < _MAX_RETRIES:
                         logger.warning(
@@ -1042,8 +1082,21 @@ def _produce_final_analysis(
 ) -> tuple[str, str, list[dict]]:
     """
     Executa a análise (dual Gemini+Claude quando anthropic_api_key é fornecida,
-    senão apenas Gemini) e retorna (texto_final, modelo_usado, uso_de_tokens).
+    senão apenas Gemini; apenas Claude quando gemini_client é None) e retorna
+    (texto_final, modelo_usado, uso_de_tokens).
     """
+    if gemini_client is None:
+        logger.info("Gemini indisponível: executando apenas Claude...")
+        claude_pair = _analyze_with_claude(
+            anthropic_api_key, exam_images, exam_type, user_description, reference_images,
+            _remaining_seconds(deadline, _CLAUDE_ANALYSIS_TIMEOUT_SECONDS), validated_case_text,
+            posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
+        )
+        if not claude_pair:
+            raise RuntimeError("Claude: análise falhou e o Gemini está indisponível.")
+        claude_text, claude_usage = claude_pair
+        return claude_text, _CLAUDE_MODEL, [claude_usage] if claude_usage else []
+
     if not anthropic_api_key:
         response = _generate_with_retry(
             gemini_client,
@@ -1145,12 +1198,19 @@ def analyze_exam_from_bytes(
         ai_session_id = f"analysis-{ai_trace_id}"
     else:
         ai_session_id = None
-    gemini_client = _make_gemini_client(api_key, posthog_client)
+    # Sem chave do Gemini ou com o circuito aberto (erro de permissão recente),
+    # e com Claude disponível: análise só com Claude.
+    use_gemini = bool(api_key) and not (anthropic_api_key and _gemini_circuit_is_open())
+    if not use_gemini and not anthropic_api_key:
+        raise RuntimeError("Nenhum provedor de IA configurado.")
+    gemini_client = _make_gemini_client(api_key, posthog_client) if use_gemini else None
 
     keyword_type = detect_exam_type(exam_filename, user_description)
     if keyword_type != "geral":
         exam_type = keyword_type
         logger.debug("Tipo de exame detectado por keywords: %s", exam_type)
+    elif gemini_client is None:
+        exam_type = keyword_type
     else:
         _notify(on_progress, "identificando_regiao")
         visual_type = detect_exam_type_from_image(
@@ -1170,16 +1230,22 @@ def analyze_exam_from_bytes(
             exam_type = keyword_type
             logger.debug("Tipo de exame detectado por fallback: %s", exam_type)
 
-    reference_pdfs = get_reference_pdfs() if _INCLUDE_REFERENCE_PDF else []
+    if gemini_client is not None and anthropic_api_key and _gemini_circuit_is_open():
+        gemini_client = None  # a detecção acabou de receber erro de permissão
+
+    reference_pdfs = get_reference_pdfs() if _INCLUDE_REFERENCE_PDF and gemini_client is not None else []
     reference_images = get_reference_images_as_bytes(exam_type)
     validated_case_text = _format_validated_case_reference(
         db.buscar_caso_validado_referencia(exam_type)
     )
 
-    content_parts, refs_used = _build_content_parts(
-        gemini_client, exam_images, exam_type, user_description,
-        reference_pdfs, reference_images, validated_case_text,
-    )
+    if gemini_client is None:
+        content_parts, refs_used = [], len(reference_images)
+    else:
+        content_parts, refs_used = _build_content_parts(
+            gemini_client, exam_images, exam_type, user_description,
+            reference_pdfs, reference_images, validated_case_text,
+        )
 
     _notify(on_progress, "analisando")
     final_analysis, model_used, usage = _produce_final_analysis(

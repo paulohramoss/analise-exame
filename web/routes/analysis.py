@@ -207,7 +207,7 @@ def analyze():
     responsible_info = presentation.responsible_info_from_form()
 
     api_key = config.get_api_key()
-    if not api_key:
+    if not config.has_ai_provider():
         return _back(presentation.gemini_key_missing_message())
     if costs.blocked_by_cost_budget("premium"):
         return _back("Limite de gasto diário atingido. Tente novamente mais tarde ou contate o suporte.")
@@ -315,7 +315,7 @@ def trial_analyze():
         return jsonify({"error": "Confirme o consentimento LGPD e a ciência de que a IA é ferramenta de apoio."}), 400
 
     api_key = config.get_api_key()
-    if not api_key:
+    if not config.has_ai_provider():
         return jsonify({"error": "Serviço temporariamente indisponível. Tente novamente mais tarde."}), 503
 
     if costs.blocked_by_cost_budget("trial"):
@@ -428,7 +428,7 @@ def api_analyze():
         return jsonify({"error": _API_KEY_ERROR}), 401
 
     api_key = config.get_api_key()
-    if not api_key:
+    if not config.has_ai_provider():
         return jsonify({"error": "Serviço temporariamente indisponível."}), 503
 
     if costs.blocked_by_cost_budget("api"):

@@ -82,5 +82,10 @@ def get_anthropic_api_key() -> str:
     return os.environ.get("ANTHROPIC_API_KEY", "")
 
 
+def has_ai_provider() -> bool:
+    """Gemini ou Claude configurado: com só o Claude a análise roda sem o Gemini."""
+    return bool(get_api_key() or get_anthropic_api_key())
+
+
 def get_model_name() -> str:
     return os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
