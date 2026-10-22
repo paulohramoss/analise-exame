@@ -95,22 +95,17 @@
         return STAGES[stage] || '';
     }
 
-    /* Metadados do PDF — os mesmos campos, na mesma ordem, nas três páginas. */
-    function laudoPdfMeta(exam, consensus) {
+    /* Metadados do PDF — os mesmos campos, na mesma ordem, nas três páginas.
+       O laudo nunca expõe o fornecedor/modelo de IA usado: sempre "Software próprio". */
+    function laudoPdfMeta(exam) {
         exam = exam || {};
         const refs = Number(exam.references_used || 0);
-        const meta = [
+        return [
             { label: 'Região', value: exam.exam_type || '—' },
             { label: 'Imagens analisadas', value: String(exam.num_images || 1) },
             { label: 'Referências usadas', value: refs > 0 ? `${refs} ${refs === 1 ? 'imagem' : 'imagens'}` : 'Sem referência' },
+            { label: 'Análise por IA', value: 'Software próprio' },
         ];
-        if (consensus && consensus.model_a) {
-            meta.push({
-                label: 'Análise por IA',
-                value: consensus.enabled ? `${consensus.model_a} + ${consensus.model_b} (consenso)` : consensus.model_a,
-            });
-        }
-        return meta;
     }
 
     window.laudoPdfMeta = laudoPdfMeta;

@@ -279,7 +279,8 @@ def test_shared_markdown_renderer_escapes_and_structures():
     assert "<h3>3. ACHADOS</h3>" in data["html"]
     assert "<ol><li><strong>[FORTE]</strong>" in data["html"]
     assert "<blockquote>descartado: nada</blockquote>" in data["html"]
-    assert [m["label"] for m in data["meta"]] == ["Região", "Imagens analisadas", "Referências usadas"]
+    assert [m["label"] for m in data["meta"]] == ["Região", "Imagens analisadas", "Referências usadas", "Análise por IA"]
+    assert data["meta"][-1]["value"] == "Software próprio"
 
 
 _FEEDBACK_HARNESS = """
