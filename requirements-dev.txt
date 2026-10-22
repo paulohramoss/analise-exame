@@ -35,7 +35,7 @@ cachecontrol==0.14.4
     # via
     #   cachecontrol
     #   pip-audit
-certifi==2026.7.22
+certifi==2026.10.19
     # via
     #   -c requirements.txt
     #   httpcore
@@ -252,7 +252,7 @@ packaging==26.2
     #   pip-requirements-parser
     #   pytest
     #   wheel
-pillow==12.3.0
+pillow==13.0.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
