@@ -25,6 +25,13 @@
             padding: .7rem 1.1rem; font-weight: 800; cursor: pointer; justify-self: start;
         }
         .btn-danger:hover { filter: brightness(.95); }
+        .backup-warning {
+            border: 1px solid var(--warning-border); background: #fffbeb; color: var(--warning-dark);
+            border-radius: 10px; padding: .85rem 1rem; font-size: .88rem;
+        }
+        .backup-warning strong { display: flex; align-items: center; gap: .4rem; }
+        .backup-warning p { margin: .35rem 0 .6rem; }
+        .backup-warning .consent-check { margin: .75rem 0 0; }
         .muted-note { font-size: .82rem; color: var(--text-muted); margin-top: .75rem; }
     </style>
 </head>
@@ -73,6 +80,22 @@
                 <p class="card-description">Os registros de cobrança são mantidos, sem vínculo com o cadastro, porque a lei exige a guarda de documentos fiscais (LGPD, art. 16, I). Baixe seus dados antes, se quiser guardar os laudos.</p>
                 <form class="delete-form" method="POST" action="/conta/excluir"
                       onsubmit="return confirm('Excluir a conta e todos os laudos? Esta ação não pode ser desfeita.');">
+                    {% if backup and not backup.copia_em_dia %}
+                    <div class="backup-warning" role="alert">
+                        <strong>{{ layout.icon("alert-triangle", 16) }} Os prontuários dos seus pacientes serão apagados.</strong>
+                        <p>
+                            {% if backup.exportado_em %}Os prontuários mudaram depois da última cópia que você baixou ({{ backup.exportado_em|datetime_br }}).
+                            {% else %}Você ainda não baixou uma cópia dos seus dados.{% endif %}
+                            {% if backup.pacientes %}São {{ backup.pacientes }} {{ 'paciente' if backup.pacientes == 1 else 'pacientes' }} com cadastro, tratamentos e evolução.{% endif %}
+                            Depois da exclusão não há como recuperá-los.
+                        </p>
+                        <a class="btn-secondary btn-small" href="/conta/dados.json">Baixar meus dados agora</a>
+                        <label class="consent-check">
+                            <input type="checkbox" name="ciente_prontuarios" value="accepted" required>
+                            <span>Entendo que os prontuários e a evolução dos meus pacientes serão apagados sem cópia.</span>
+                        </label>
+                    </div>
+                    {% endif %}
                     <div>
                         <label for="senha">Sua senha</label>
                         <input type="password" id="senha" name="senha" required autocomplete="current-password">

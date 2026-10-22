@@ -14,6 +14,11 @@
 --
 -- Idempotente. Não altera dados existentes.
 
+-- Quando o profissional baixou a cópia dos dados (/conta/dados.json). A tela de
+-- exclusão da conta avisa se algum prontuário mudou depois disso.
+alter table public.clientes
+    add column if not exists dados_exportados_em timestamptz;
+
 create table if not exists public.pacientes (
     id                uuid primary key default gen_random_uuid(),
     cliente_id        uuid not null references public.clientes (id) on delete cascade,
@@ -48,8 +53,12 @@ create table if not exists public.tratamentos (
     regiao        text,
     data_inicio   date not null,
     data_fim      date,                        -- null = em andamento
-    created_at    timestamptz not null default now()
+    created_at    timestamptz not null default now(),
+    updated_at    timestamptz not null default now()
 );
+
+alter table public.tratamentos
+    add column if not exists updated_at timestamptz not null default now();
 
 create index if not exists tratamentos_paciente_idx
     on public.tratamentos (paciente_id, data_inicio);

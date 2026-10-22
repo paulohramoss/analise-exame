@@ -942,7 +942,7 @@ def encerrar_tratamento(tratamento_id: str, paciente_id: str, cliente_id: str, d
         return False
     try:
         res = (
-            db.table("tratamentos").update({"data_fim": data_fim})
+            db.table("tratamentos").update({"data_fim": data_fim, "updated_at": datetime.now(timezone.utc).isoformat()})
             .eq("id", tratamento_id).eq("paciente_id", paciente_id).eq("cliente_id", cliente_id).execute()
         )
         return bool(res.data)
@@ -1106,6 +1106,67 @@ def _exportar_prontuarios(db, cliente_id: str) -> list[dict]:
         paciente["tratamentos"] = [t for t in tratamentos if t["paciente_id"] == paciente["id"]]
         paciente["evolucoes"] = [e for e in evolucoes if e["paciente_id"] == paciente["id"]]
     return pacientes
+
+
+def marcar_exportacao_dados(cliente_id: str) -> None:
+    """Registra quando o profissional baixou a cópia dos dados (inclui os prontuários)."""
+    db = _get_client()
+    if not db or not cliente_id:
+        return
+    try:
+        db.table("clientes").update(
+            {"dados_exportados_em": datetime.now(timezone.utc).isoformat()}
+        ).eq("id", cliente_id).execute()
+    except Exception:
+        logger.exception("Erro em marcar_exportacao_dados")
+
+
+def _mais_recente(db, tabela: str, coluna: str, cliente_id: str) -> str | None:
+    rows = (
+        db.table(tabela).select(coluna).eq("cliente_id", cliente_id)
+        .order(coluna, desc=True).limit(1).execute().data or []
+    )
+    return rows[0][coluna] if rows else None
+
+
+def resumo_backup_prontuarios(cliente_id: str) -> dict | None:
+    """Quantos pacientes o profissional tem e se a última cópia baixada cobre tudo.
+
+    `copia_em_dia` é False quando nunca houve exportação ou quando algum
+    prontuário mudou depois dela: excluir a conta nesse estado apaga dados
+    que o profissional não tem guardados. None se o banco não respondeu.
+    """
+    db = _get_client()
+    if not db or not cliente_id:
+        return None
+    try:
+        pacientes = len(
+            db.table("pacientes").select("id").eq("cliente_id", cliente_id).execute().data or []
+        )
+        cliente = (
+            db.table("clientes").select("dados_exportados_em").eq("id", cliente_id).limit(1).execute().data or [{}]
+        )[0]
+        exportado_em = cliente.get("dados_exportados_em")
+        alteracoes = [
+            _mais_recente(db, "pacientes", "updated_at", cliente_id),
+            _mais_recente(db, "tratamentos", "updated_at", cliente_id),
+            _mais_recente(db, "evolucoes", "created_at", cliente_id),
+        ]
+        ultima = max((_parse_ts(a) for a in alteracoes if a), default=None)
+        exportado = _parse_ts(exportado_em) if exportado_em else None
+        return {
+            "pacientes": pacientes,
+            "exportado_em": exportado_em,
+            "copia_em_dia": pacientes == 0 or (exportado is not None and (ultima is None or exportado >= ultima)),
+        }
+    except Exception:
+        logger.exception("Erro em resumo_backup_prontuarios")
+        return None
+
+
+def _parse_ts(value: str) -> datetime:
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def excluir_dados_cliente(cliente_id: str) -> bool:

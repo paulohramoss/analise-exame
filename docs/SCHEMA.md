@@ -99,6 +99,12 @@ webhooks_asaas ──> eventos brutos do Asaas, correlacionados por asaas_paymen
   análise, só idade, sexo e o resumo dos tratamentos pré-preenchem o contexto clínico.
 - Excluir o paciente apaga tratamentos e evoluções; os laudos continuam, com
   `paciente_id = null`. Excluir a conta do profissional apaga os prontuários.
+- `clientes.dados_exportados_em` guarda quando o profissional baixou a cópia dos
+  dados. Se nunca baixou, ou se algum prontuário mudou depois (`pacientes.updated_at`,
+  `tratamentos.updated_at`, `evolucoes.created_at`), a exclusão da conta mostra o
+  aviso e exige a confirmação `ciente_prontuarios` (`db.resumo_backup_prontuarios`).
+- O prontuário exige conta de profissional com plano ativo: sem plano a rota
+  redireciona para os planos; admin e acesso local não cadastram pacientes.
 
 ## Retenção de dados (LGPD)
 

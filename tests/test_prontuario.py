@@ -399,6 +399,79 @@ def test_vincular_laudo_existente(client, fake_prontuario):
     assert len(fake_prontuario.vinculos) == 1  # paciente de outro profissional: nada muda
 
 
+def test_sem_conta_profissional_nao_cadastra_paciente(client, fake_prontuario):
+    client.get(f"/admin/entrar?key={config.get_admin_key()}")
+    resp = client.post("/pacientes/novo", data={"nome": "Ana Lima", "cpf": CPF_B, "consentimento": "accepted"})
+    assert resp.status_code == 302 and resp.headers["Location"].endswith("/pacientes")
+    assert "pac-novo" not in fake_prontuario.pacientes
+
+
+def test_sem_plano_nao_acessa_prontuario(client, fake_prontuario):
+    resp = client.post("/pacientes/novo", data={"nome": "Ana Lima", "cpf": CPF_B, "consentimento": "accepted"})
+    assert resp.status_code == 302 and resp.headers["Location"] == "/"
+    assert "pac-novo" not in fake_prontuario.pacientes
+
+
+# ── Exclusão da conta x cópia dos prontuários ─────────────────────────────────
+
+def _conta_com_pacientes(client, monkeypatch, copia_em_dia, exportado_em=None):
+    from werkzeug.security import generate_password_hash
+
+    monkeypatch.setattr(db, "buscar_sessao_cliente", lambda e: {"id": "cliente-a", "sessao_versao": 0})
+    monkeypatch.setattr(db, "buscar_senha_hash_cliente", lambda e: generate_password_hash("senha"))
+    monkeypatch.setattr(db, "resumo_backup_prontuarios", lambda cid: {
+        "pacientes": 3, "exportado_em": exportado_em, "copia_em_dia": copia_em_dia,
+    })
+    excluir = MagicMock(return_value=True)
+    monkeypatch.setattr(db, "excluir_dados_cliente", excluir)
+    _login_as(client, "a@example.com")
+    return excluir
+
+
+def test_exclusao_sem_copia_exige_ciencia_dos_prontuarios(client, monkeypatch):
+    excluir = _conta_com_pacientes(client, monkeypatch, copia_em_dia=False)
+
+    html = client.get("/conta").get_data(as_text=True)
+    assert "Você ainda não baixou uma cópia" in html and "3 pacientes" in html
+
+    resp = client.post("/conta/excluir", data={"senha": "senha", "confirmacao": "EXCLUIR"})
+    assert resp.headers["Location"].endswith("/conta")
+    excluir.assert_not_called()
+
+    client.post("/conta/excluir", data={"senha": "senha", "confirmacao": "EXCLUIR", "ciente_prontuarios": "accepted"})
+    excluir.assert_called_once_with("cliente-a")
+
+
+def test_exclusao_com_copia_em_dia_apaga_sem_aviso_extra(client, monkeypatch):
+    excluir = _conta_com_pacientes(client, monkeypatch, copia_em_dia=True, exportado_em="2026-10-20T10:00:00+00:00")
+    assert "ciente_prontuarios" not in client.get("/conta").get_data(as_text=True)
+    client.post("/conta/excluir", data={"senha": "senha", "confirmacao": "EXCLUIR"})
+    excluir.assert_called_once_with("cliente-a")
+
+
+def test_aviso_quando_prontuario_mudou_depois_da_copia(client, monkeypatch):
+    _conta_com_pacientes(client, monkeypatch, copia_em_dia=False, exportado_em="2026-10-01T10:00:00+00:00")
+    assert "mudaram depois da última cópia" in client.get("/conta").get_data(as_text=True)
+
+
+@pytest.mark.parametrize("exportado_em,alteracoes,pacientes,em_dia", [
+    (None, [], 0, True),                                          # sem pacientes: nada a perder
+    (None, ["2026-10-01T00:00:00+00:00"], 2, False),              # nunca baixou
+    ("2026-10-05T00:00:00+00:00", ["2026-10-01T00:00:00+00:00"], 2, True),
+    ("2026-10-05T00:00:00+00:00", ["2026-10-09T00:00:00+00:00"], 2, False),  # mudou depois
+])
+def test_resumo_backup_prontuarios(monkeypatch, exportado_em, alteracoes, pacientes, em_dia):
+    results = [
+        [{"id": f"p{i}"} for i in range(pacientes)],
+        [{"dados_exportados_em": exportado_em}],
+        [{"updated_at": a} for a in alteracoes],
+        [],
+        [],
+    ]
+    monkeypatch.setattr(db, "_get_client", lambda: _FakeClient(results=results))
+    assert db.resumo_backup_prontuarios("cliente-a")["copia_em_dia"] is em_dia
+
+
 # ── Linha do tempo e gráfico ──────────────────────────────────────────────────
 
 def test_idade():
