@@ -48,6 +48,21 @@
             margin-top: 0.35rem;
         }
 
+        .patient-link-row {
+            display: flex;
+            gap: 0.6rem;
+            margin-top: 0.35rem;
+        }
+
+        .patient-link-row select {
+            flex: 1;
+            padding: 0.55rem 0.7rem;
+            border: 1px solid var(--border-input);
+            border-radius: 7px;
+            font-family: inherit;
+            background: var(--surface);
+        }
+
         .consensus-card {
             border: 1px solid var(--primary-border);
             background: #f8fbff;
@@ -286,6 +301,40 @@
             </div>
             {% endif %}
         </div>
+
+        {% if can_link_patient %}
+        <div class="card patient-link-card">
+            {% if paciente %}
+            <div class="professional-summary">
+                <div>
+                    <span class="professional-eyebrow">Paciente</span>
+                    <h2 class="professional-name">{{ paciente.nome }}</h2>
+                    <p class="professional-details">CPF {{ paciente.cpf_mascarado }}</p>
+                </div>
+                <div class="professional-status">
+                    <a class="btn-secondary" href="{{ url_for('pacientes.detalhe', paciente_id=paciente.id) }}">Abrir prontuário</a>
+                    <form method="POST" action="{{ url_for('pacientes.vincular_laudo', analise_id=analysis_id) }}">
+                        <input type="hidden" name="paciente_id" value="">
+                        <button type="submit" class="btn-ghost btn-small">Desvincular</button>
+                    </form>
+                </div>
+            </div>
+            {% elif pacientes %}
+            <form method="POST" action="{{ url_for('pacientes.vincular_laudo', analise_id=analysis_id) }}" class="patient-link-form">
+                <label for="paciente_id"><span class="professional-eyebrow">Vincular ao prontuário de um paciente</span></label>
+                <div class="patient-link-row">
+                    <select name="paciente_id" id="paciente_id" required>
+                        <option value="">— Selecione o paciente —</option>
+                        {% for p in pacientes %}<option value="{{ p.id }}">{{ p.nome }} — CPF {{ p.cpf_mascarado }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" class="btn-secondary">Vincular</button>
+                </div>
+            </form>
+            {% else %}
+            <p class="card-description">Este laudo não está ligado a nenhum paciente. <a href="{{ url_for('pacientes.novo') }}">Cadastre um paciente</a> para acompanhar a evolução no prontuário.</p>
+            {% endif %}
+        </div>
+        {% endif %}
 
         <div class="card report-card">
             <div class="report-header">

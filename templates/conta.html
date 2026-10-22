@@ -61,6 +61,7 @@
                     <li>cadastro (nome, e-mail, CPF/CNPJ);</li>
                     <li>cobranças e planos contratados;</li>
                     <li>laudos gerados, descrições clínicas e validações registradas;</li>
+                    <li>prontuários dos seus pacientes (cadastro, tratamentos e evolução);</li>
                     <li>histórico de acessos (data, IP e navegador).</li>
                 </ul>
                 <a class="btn-primary" href="/conta/dados.json">Baixar meus dados (JSON)</a>
@@ -68,7 +69,7 @@
 
             <section class="card account-card danger-zone">
                 <h2>{{ layout.icon("x-circle", 20) }} Excluir minha conta</h2>
-                <p class="card-description">A exclusão é <strong>definitiva</strong>: apaga o cadastro, todos os laudos (com imagens, feedbacks e validações), as sessões e o histórico de acessos, e encerra o acesso ao plano.</p>
+                <p class="card-description">A exclusão é <strong>definitiva</strong>: apaga o cadastro, todos os laudos (com imagens, feedbacks e validações), os prontuários dos pacientes, as sessões e o histórico de acessos, e encerra o acesso ao plano.</p>
                 <p class="card-description">Os registros de cobrança são mantidos, sem vínculo com o cadastro, porque a lei exige a guarda de documentos fiscais (LGPD, art. 16, I). Baixe seus dados antes, se quiser guardar os laudos.</p>
                 <form class="delete-form" method="POST" action="/conta/excluir"
                       onsubmit="return confirm('Excluir a conta e todos os laudos? Esta ação não pode ser desfeita.');">

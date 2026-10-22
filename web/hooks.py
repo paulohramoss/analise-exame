@@ -213,3 +213,4 @@ def _register_jinja(app: Flask, build_version: str) -> None:
     app.jinja_env.globals["static_url"] = static_url
     app.jinja_env.filters["datetime_br"] = presentation.format_datetime_br
     app.jinja_env.filters["exam_label"] = presentation.format_exam_label
+    app.jinja_env.filters["date_br"] = presentation.format_date_br

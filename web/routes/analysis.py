@@ -18,7 +18,7 @@ from flask import Blueprint, flash, g, jsonify, redirect, render_template, reque
 
 from core import analyzer, cost_tracking, db, jobs, privacy
 from core.build_info import get_build_version
-from web import config, costs, posthog, presentation, security, uploads
+from web import config, costs, posthog, presentation, prontuario, security, uploads
 from web.extensions import rate_limit
 
 logger = logging.getLogger(__name__)
@@ -178,12 +178,50 @@ def health():
     return jsonify(body), 503 if degraded else 200
 
 
+def _patient_options(cliente_id: str | None) -> list[dict]:
+    """Pacientes do profissional para o seletor da análise.
+
+    Idade e sexo preenchem o contexto clínico (sem nome/CPF, que nunca vão para
+    a IA); os tratamentos vêm de /pacientes/<id>/contexto ao escolher o paciente.
+    """
+    if not cliente_id or g.get("is_admin"):
+        return []
+    options = []
+    for paciente in db.listar_pacientes(cliente_id):
+        options.append({
+            "id": paciente["id"],
+            "nome": paciente["nome"],
+            "cpf_mascarado": paciente["cpf_mascarado"],
+            "idade": prontuario.idade(paciente.get("data_nascimento")),
+            "sexo": paciente.get("sexo") if paciente.get("sexo") in {"Masculino", "Feminino"} else "",
+        })
+    return options
+
+
+def _selected_patient_id() -> str | None:
+    """paciente_id do formulário, só se for um paciente do profissional logado.
+
+    Levanta ValueError se veio um id que não pertence a quem está logado.
+    """
+    paciente_id = (request.form.get("paciente_id") or "").strip()
+    if not paciente_id:
+        return None
+    cliente_id = None if g.get("is_admin") else g.get("cliente_id")
+    if not cliente_id or not db.buscar_paciente(paciente_id, cliente_id):
+        raise ValueError(paciente_id)
+    return paciente_id
+
+
 @bp.route("/")
 def index():
+    premium = security.is_premium(request)
     return render_template(
         "index.html",
-        premium=security.is_premium(request),
+        premium=premium,
         max_images=uploads.max_images_for_request(),
+        prontuario_disponivel=premium and bool(g.get("cliente_id")) and not g.get("is_admin"),
+        pacientes=_patient_options(g.get("cliente_id")) if premium else [],
+        paciente_selecionado=request.args.get("paciente") or "",
     )
 
 
@@ -219,13 +257,22 @@ def analyze():
     if not upload_items:
         return _back(f"Formato de arquivo não suportado. Use: {', '.join(sorted(uploads.ALLOWED_EXTENSIONS))}")
 
+    try:
+        paciente_id = _selected_patient_id()
+    except ValueError:
+        uploads.cleanup_upload_files(upload_items)
+        return _back("Paciente não encontrado no seu cadastro.")
+
     prepared = _AnalysisInput.from_uploads(upload_items, request.form.get("description", "").strip())
-    persist = prepared.persist_fields(cliente_id=g.get("cliente_id"), responsavel=responsible_info)
+    persist = prepared.persist_fields(
+        cliente_id=g.get("cliente_id"), responsavel=responsible_info, paciente_id=paciente_id,
+    )
 
     job_id = _enqueue("premium", prepared, persist, display_extra={
         "images_data": prepared.display_images,
         "user_description_display": prepared.user_description,
         "responsible": responsible_info,
+        "paciente_id": paciente_id,
     })
     if posthog.posthog_client is not None:
         posthog.posthog_client.capture(
@@ -249,6 +296,7 @@ def analyze():
         user_description=prepared.user_description,
         responsible=responsible_info,
         analysis_id=result["analise_id"],
+        paciente_id=paciente_id,
     )
 
 
@@ -294,6 +342,7 @@ def analyze_resultado(job_id: str):
         user_description=result.get("user_description_display", ""),
         responsible=result.get("responsible") or {"name": "", "role": ""},
         analysis_id=result.get("analise_id"),
+        paciente_id=result.get("paciente_id"),
     )
 
 

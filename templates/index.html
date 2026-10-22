@@ -343,6 +343,34 @@
             </p>
 
             <form action="/analyze" method="POST" enctype="multipart/form-data" id="upload-form" novalidate>
+                {% if prontuario_disponivel %}
+                <!-- Paciente do prontuário (opcional) -->
+                <section class="form-step">
+                    <div class="form-step-head">
+                        <span class="form-step-num">{{ layout.icon("users", 14) }}</span>
+                        <div class="form-step-title">
+                            <h3 class="form-step-heading">Paciente <span class="form-step-tag">Opcional</span></h3>
+                            <span class="form-step-hint">O laudo entra no prontuário do paciente. Nome e CPF não são enviados à IA.</span>
+                        </div>
+                    </div>
+                    <div class="form-step-body">
+                        {% if pacientes %}
+                        <div class="form-group">
+                            <label for="paciente_id">Vincular ao prontuário de</label>
+                            <select name="paciente_id" id="paciente_id">
+                                <option value="">— Laudo avulso, sem paciente —</option>
+                                {% for p in pacientes %}
+                                <option value="{{ p.id }}" data-idade="{{ p.idade if p.idade is not none else '' }}" data-sexo="{{ p.sexo }}"{% if p.id == paciente_selecionado %} selected{% endif %}>{{ p.nome }} — CPF {{ p.cpf_mascarado }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% else %}
+                        <p class="form-step-hint">Nenhum paciente cadastrado. <a href="{{ url_for('pacientes.novo') }}">Cadastre um paciente</a> para acompanhar exames e evolução no prontuário.</p>
+                        {% endif %}
+                    </div>
+                </section>
+                {% endif %}
+
                 <!-- Etapa 1: imagens -->
                 <section class="form-step">
                     <div class="form-step-head">
@@ -809,6 +837,34 @@
                 loadingOverlay.style.display = 'none';
             }
         });
+    </script>
+    <script>
+    // Ao escolher o paciente, pré-preenche idade, sexo e tratamentos do prontuário
+    // (só campos vazios: o que o profissional digitou tem prioridade).
+    (function () {
+        const select = document.getElementById('paciente_id');
+        if (!select) return;
+        const fillIfEmpty = (id, value) => {
+            const field = document.getElementById(id);
+            if (field && !field.value && value) field.value = value;
+        };
+        async function applyPatientContext() {
+            const option = select.selectedOptions[0];
+            if (!option || !option.value) return;
+            fillIfEmpty('patient_age', option.dataset.idade);
+            fillIfEmpty('patient_sex', option.dataset.sexo);
+            try {
+                const resp = await fetch('/pacientes/' + encodeURIComponent(option.value) + '/contexto', {
+                    headers: { 'Accept': 'application/json' },
+                });
+                if (!resp.ok) return;
+                const data = await resp.json();
+                fillIfEmpty('previous_treatments', data.tratamentos);
+            } catch (e) { /* contexto é só conveniência */ }
+        }
+        select.addEventListener('change', applyPatientContext);
+        if (select.value) applyPatientContext();
+    })();
     </script>
 </body>
 </html>

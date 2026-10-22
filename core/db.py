@@ -12,8 +12,10 @@ import hashlib
 import importlib
 import logging
 import os
+from datetime import datetime, timezone
 from functools import lru_cache
 
+from core import patient_crypto
 from core.ttl_cache import TTLCache
 from collections import Counter
 
@@ -352,8 +354,12 @@ def salvar_analise(
     cliente_id: str | None = None,
     sessao_id: str | None = None,
     responsavel: dict | None = None,
+    paciente_id: str | None = None,
 ) -> str | None:
-    """Persiste resultado de análise da IA. Retorna UUID da análise ou None."""
+    """Persiste resultado de análise da IA. Retorna UUID da análise ou None.
+
+    paciente_id já deve ter sido conferido como do mesmo cliente_id (rota).
+    """
     db = _get_client()
     if not db:
         return None
@@ -373,6 +379,8 @@ def salvar_analise(
             "cliente_id": cliente_id,
             "sessao_id": sessao_id,
         }
+        if paciente_id:
+            data["paciente_id"] = paciente_id
         if responsavel:
             data.update({
                 "responsavel_nome": responsavel.get("name") or None,
@@ -401,7 +409,7 @@ def listar_analises(
 
     columns = (
         "id, created_at, tipo_exame, modelo_ia, referencias_usadas, num_imagens, "
-        "modo, descricao_usuario, modalidade, tempo_processamento_ms, "
+        "modo, descricao_usuario, modalidade, tempo_processamento_ms, paciente_id, "
         "responsavel_nome, responsavel_perfil, responsavel_registro, responsavel_instituicao"
     )
     try:
@@ -429,7 +437,7 @@ def buscar_analise(
 
     columns = (
         "id, created_at, tipo_exame, analise_completa, modelo_ia, referencias_usadas, "
-        "num_imagens, modo, descricao_usuario, modalidade, tempo_processamento_ms, cliente_id, "
+        "num_imagens, modo, descricao_usuario, modalidade, tempo_processamento_ms, cliente_id, paciente_id, "
         "responsavel_nome, responsavel_perfil, responsavel_registro, responsavel_instituicao"
     )
     try:
@@ -718,6 +726,308 @@ def salvar_diagnostico_validado(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# PRONTUÁRIO — pacientes, tratamentos e evolução
+#
+# Todo acesso filtra por cliente_id: cada profissional só enxerga os próprios
+# pacientes (não há visão admin). Nome e CPF ficam cifrados (core/patient_crypto).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PACIENTE_COLUMNS = (
+    "id, cliente_id, nome_cifrado, cpf_cifrado, data_nascimento, sexo, observacoes, "
+    "consentimento_em, created_at, updated_at"
+)
+
+PACIENTE_DUPLICADO = "duplicado"
+PACIENTE_INDISPONIVEL = "indisponivel"
+
+
+def _paciente_from_row(row: dict) -> dict:
+    """Linha do banco → paciente com nome/CPF em claro (as colunas cifradas saem)."""
+    cpf = patient_crypto.decrypt(row.get("cpf_cifrado"))
+    paciente = {k: v for k, v in row.items() if k not in {"nome_cifrado", "cpf_cifrado"}}
+    paciente.update({
+        "nome": patient_crypto.decrypt(row.get("nome_cifrado")),
+        "cpf": patient_crypto.format_cpf(cpf),
+        "cpf_mascarado": patient_crypto.mask_cpf(cpf),
+    })
+    return paciente
+
+
+def _cpf_ja_cadastrado(db, cliente_id: str, cpf_hash: str, exceto_id: str | None = None) -> bool:
+    query = db.table("pacientes").select("id").eq("cliente_id", cliente_id).eq("cpf_hash", cpf_hash)
+    if exceto_id:
+        query = query.neq("id", exceto_id)
+    return bool(query.limit(1).execute().data)
+
+
+def criar_paciente(
+    cliente_id: str,
+    nome: str,
+    cpf: str,
+    data_nascimento: str | None = None,
+    sexo: str | None = None,
+    observacoes: str = "",
+) -> tuple[str | None, str | None]:
+    """Cadastra o paciente. Retorna (id, None) ou (None, PACIENTE_DUPLICADO | PACIENTE_INDISPONIVEL)."""
+    db = _get_client()
+    if not db or not cliente_id or not patient_crypto.is_configured():
+        return None, PACIENTE_INDISPONIVEL
+    try:
+        cpf_hash = patient_crypto.cpf_hash(cpf)
+        if _cpf_ja_cadastrado(db, cliente_id, cpf_hash):
+            return None, PACIENTE_DUPLICADO
+        res = db.table("pacientes").insert({
+            "cliente_id": cliente_id,
+            "nome_cifrado": patient_crypto.encrypt(nome),
+            "cpf_cifrado": patient_crypto.encrypt(patient_crypto.cpf_digits(cpf)),
+            "cpf_hash": cpf_hash,
+            "data_nascimento": data_nascimento or None,
+            "sexo": sexo or None,
+            "observacoes": observacoes or None,
+        }).execute()
+        if not res.data:
+            return None, PACIENTE_INDISPONIVEL
+        return res.data[0]["id"], None
+    except Exception:
+        logger.exception("Erro em criar_paciente")
+        return None, PACIENTE_INDISPONIVEL
+
+
+def atualizar_paciente(
+    paciente_id: str,
+    cliente_id: str,
+    nome: str,
+    cpf: str,
+    data_nascimento: str | None = None,
+    sexo: str | None = None,
+    observacoes: str = "",
+) -> str | None:
+    """Atualiza o cadastro. Retorna None se deu certo, ou o código do erro."""
+    db = _get_client()
+    if not db or not cliente_id or not patient_crypto.is_configured():
+        return PACIENTE_INDISPONIVEL
+    try:
+        cpf_hash = patient_crypto.cpf_hash(cpf)
+        if _cpf_ja_cadastrado(db, cliente_id, cpf_hash, exceto_id=paciente_id):
+            return PACIENTE_DUPLICADO
+        res = (
+            db.table("pacientes").update({
+                "nome_cifrado": patient_crypto.encrypt(nome),
+                "cpf_cifrado": patient_crypto.encrypt(patient_crypto.cpf_digits(cpf)),
+                "cpf_hash": cpf_hash,
+                "data_nascimento": data_nascimento or None,
+                "sexo": sexo or None,
+                "observacoes": observacoes or None,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", paciente_id).eq("cliente_id", cliente_id).execute()
+        )
+        return None if res.data else PACIENTE_INDISPONIVEL
+    except Exception:
+        logger.exception("Erro em atualizar_paciente")
+        return PACIENTE_INDISPONIVEL
+
+
+def listar_pacientes(cliente_id: str | None, limit: int = 1000) -> list[dict]:
+    """Pacientes do profissional, em ordem alfabética (o nome só existe decifrado)."""
+    db = _get_client()
+    if not db or not cliente_id:
+        return []
+    try:
+        res = (
+            db.table("pacientes").select(_PACIENTE_COLUMNS)
+            .eq("cliente_id", cliente_id).order("created_at", desc=True).limit(limit).execute()
+        )
+        pacientes = [_paciente_from_row(row) for row in res.data or []]
+        return sorted(pacientes, key=lambda p: p["nome"].casefold())
+    except Exception:
+        logger.exception("Erro em listar_pacientes")
+        return []
+
+
+def buscar_paciente(paciente_id: str, cliente_id: str | None) -> dict | None:
+    """Paciente do profissional, ou None (inexistente ou de outro profissional)."""
+    db = _get_client()
+    if not db or not paciente_id or not cliente_id:
+        return None
+    try:
+        res = (
+            db.table("pacientes").select(_PACIENTE_COLUMNS)
+            .eq("id", paciente_id).eq("cliente_id", cliente_id).limit(1).execute()
+        )
+        return _paciente_from_row(res.data[0]) if res.data else None
+    except Exception:
+        logger.exception("Erro em buscar_paciente")
+        return None
+
+
+def excluir_paciente(paciente_id: str, cliente_id: str) -> bool:
+    """Apaga o paciente, tratamentos e evoluções (cascata). Os laudos ficam, sem vínculo."""
+    db = _get_client()
+    if not db or not paciente_id or not cliente_id:
+        return False
+    try:
+        res = db.table("pacientes").delete().eq("id", paciente_id).eq("cliente_id", cliente_id).execute()
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em excluir_paciente")
+        return False
+
+
+def listar_analises_paciente(paciente_id: str, cliente_id: str) -> list[dict]:
+    """Laudos vinculados ao paciente, do mais antigo para o mais recente."""
+    db = _get_client()
+    if not db or not paciente_id or not cliente_id:
+        return []
+    try:
+        res = (
+            db.table("analises")
+            .select("id, created_at, tipo_exame, modalidade, modelo_ia, num_imagens, descricao_usuario")
+            .eq("paciente_id", paciente_id).eq("cliente_id", cliente_id)
+            .order("created_at").execute()
+        )
+        return res.data or []
+    except Exception:
+        logger.exception("Erro em listar_analises_paciente")
+        return []
+
+
+def vincular_analise_paciente(analise_id: str, paciente_id: str | None, cliente_id: str) -> bool:
+    """Liga (ou, com paciente_id=None, desliga) um laudo do profissional a um paciente dele."""
+    db = _get_client()
+    if not db or not analise_id or not cliente_id:
+        return False
+    try:
+        res = (
+            db.table("analises").update({"paciente_id": paciente_id})
+            .eq("id", analise_id).eq("cliente_id", cliente_id).execute()
+        )
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em vincular_analise_paciente")
+        return False
+
+
+def salvar_tratamento(
+    paciente_id: str,
+    cliente_id: str,
+    tipo: str,
+    data_inicio: str,
+    descricao: str = "",
+    regiao: str = "",
+    data_fim: str | None = None,
+) -> str | None:
+    db = _get_client()
+    if not db or not paciente_id or not cliente_id:
+        return None
+    try:
+        res = db.table("tratamentos").insert({
+            "paciente_id": paciente_id,
+            "cliente_id": cliente_id,
+            "tipo": tipo,
+            "descricao": descricao or None,
+            "regiao": regiao or None,
+            "data_inicio": data_inicio,
+            "data_fim": data_fim or None,
+        }).execute()
+        return res.data[0]["id"] if res.data else None
+    except Exception:
+        logger.exception("Erro em salvar_tratamento")
+        return None
+
+
+def encerrar_tratamento(tratamento_id: str, paciente_id: str, cliente_id: str, data_fim: str) -> bool:
+    db = _get_client()
+    if not db or not tratamento_id or not cliente_id:
+        return False
+    try:
+        res = (
+            db.table("tratamentos").update({"data_fim": data_fim})
+            .eq("id", tratamento_id).eq("paciente_id", paciente_id).eq("cliente_id", cliente_id).execute()
+        )
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em encerrar_tratamento")
+        return False
+
+
+def listar_tratamentos(paciente_id: str, cliente_id: str) -> list[dict]:
+    db = _get_client()
+    if not db or not paciente_id or not cliente_id:
+        return []
+    try:
+        res = (
+            db.table("tratamentos")
+            .select("id, tipo, descricao, regiao, data_inicio, data_fim, created_at")
+            .eq("paciente_id", paciente_id).eq("cliente_id", cliente_id)
+            .order("data_inicio").execute()
+        )
+        return res.data or []
+    except Exception:
+        logger.exception("Erro em listar_tratamentos")
+        return []
+
+
+def salvar_evolucao(
+    paciente_id: str,
+    cliente_id: str,
+    data: str,
+    dor_eva: int | None = None,
+    funcao: int | None = None,
+    nota: str = "",
+) -> str | None:
+    """Registro de evolução: dor (EVA 0-10), função (0-100, maior = melhor) e nota livre."""
+    db = _get_client()
+    if not db or not paciente_id or not cliente_id:
+        return None
+    try:
+        res = db.table("evolucoes").insert({
+            "paciente_id": paciente_id,
+            "cliente_id": cliente_id,
+            "data": data,
+            "dor_eva": dor_eva,
+            "funcao": funcao,
+            "nota": nota or None,
+        }).execute()
+        return res.data[0]["id"] if res.data else None
+    except Exception:
+        logger.exception("Erro em salvar_evolucao")
+        return None
+
+
+def listar_evolucoes(paciente_id: str, cliente_id: str) -> list[dict]:
+    db = _get_client()
+    if not db or not paciente_id or not cliente_id:
+        return []
+    try:
+        res = (
+            db.table("evolucoes")
+            .select("id, data, dor_eva, funcao, nota, created_at")
+            .eq("paciente_id", paciente_id).eq("cliente_id", cliente_id)
+            .order("data").order("created_at").execute()
+        )
+        return res.data or []
+    except Exception:
+        logger.exception("Erro em listar_evolucoes")
+        return []
+
+
+def registrar_acesso_prontuario(cliente_id: str | None, paciente_id: str | None, acao: str) -> None:
+    """Trilha de auditoria: quem abriu ou alterou qual prontuário, e quando."""
+    db = _get_client()
+    if not db or not cliente_id:
+        return
+    try:
+        db.table("acessos_prontuario").insert({
+            "cliente_id": cliente_id,
+            "paciente_id": paciente_id,
+            "acao": acao,
+        }).execute()
+    except Exception:
+        logger.exception("Erro em registrar_acesso_prontuario")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # DIREITOS DO TITULAR (LGPD art. 18)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -770,17 +1080,40 @@ def exportar_dados_cliente(cliente_id: str) -> dict | None:
                 db.table("sessoes_acesso").select("ip_address, user_agent, created_at")
                 .eq("cliente_id", cliente_id).order("created_at", desc=True).execute().data or []
             ),
+            "pacientes": _exportar_prontuarios(db, cliente_id),
         }
     except Exception:
         logger.exception("Erro em exportar_dados_cliente")
         return None
 
 
+def _exportar_prontuarios(db, cliente_id: str) -> list[dict]:
+    """Pacientes do profissional (nome/CPF em claro), cada um com tratamentos e evoluções."""
+    pacientes = [
+        _paciente_from_row(row) for row in (
+            db.table("pacientes").select(_PACIENTE_COLUMNS).eq("cliente_id", cliente_id).execute().data or []
+        )
+    ]
+    tratamentos = db.table("tratamentos").select(
+        "paciente_id, tipo, descricao, regiao, data_inicio, data_fim, created_at"
+    ).eq("cliente_id", cliente_id).execute().data or []
+    evolucoes = db.table("evolucoes").select(
+        "paciente_id, data, dor_eva, funcao, nota, created_at"
+    ).eq("cliente_id", cliente_id).execute().data or []
+    for paciente in pacientes:
+        paciente.pop("cliente_id", None)
+        paciente.pop("cpf_mascarado", None)
+        paciente["tratamentos"] = [t for t in tratamentos if t["paciente_id"] == paciente["id"]]
+        paciente["evolucoes"] = [e for e in evolucoes if e["paciente_id"] == paciente["id"]]
+    return pacientes
+
+
 def excluir_dados_cliente(cliente_id: str) -> bool:
     """Elimina os dados pessoais do cliente (LGPD art. 18, VI).
 
-    Apaga laudos (e, em cascata, imagens, feedbacks e validações), sessões,
-    logs de acesso e o cadastro. As cobranças em `pagamentos` permanecem — sem
+    Apaga laudos (e, em cascata, imagens, feedbacks e validações), prontuários
+    dos pacientes (com tratamentos e evoluções), sessões, logs de acesso e o
+    cadastro. As cobranças em `pagamentos` permanecem — sem
     vínculo com o cadastro (cliente_id vira NULL pela FK) — porque registros
     fiscais têm guarda obrigatória por lei (LGPD art. 16, I).
     """
@@ -789,6 +1122,8 @@ def excluir_dados_cliente(cliente_id: str) -> bool:
         return False
     try:
         db.table("analises").delete().eq("cliente_id", cliente_id).execute()
+        db.table("pacientes").delete().eq("cliente_id", cliente_id).execute()
+        db.table("acessos_prontuario").delete().eq("cliente_id", cliente_id).execute()
         db.table("sessoes_acesso").delete().eq("cliente_id", cliente_id).execute()
         db.table("logs_acesso").delete().eq("cliente_id", cliente_id).execute()
         db.table("clientes").delete().eq("id", cliente_id).execute()

@@ -53,7 +53,21 @@ def laudo_detalhe(analise_id: str):
         user_description=row.get("descricao_usuario") or "",
         responsible=presentation.responsible_info_from_row(row),
         consensus=presentation.build_consensus_info(row.get("modelo_ia") or "", row.get("analise_completa") or ""),
+        **_patient_link_context(row),
     )
+
+
+def _patient_link_context(row: dict) -> dict:
+    """Paciente do laudo e opções para vincular — só para o profissional dono (admin não vê prontuário)."""
+    cliente_id = None if g.get("is_admin") else g.get("cliente_id")
+    if not cliente_id or row.get("cliente_id") != cliente_id:
+        return {"paciente": None, "pacientes": [], "can_link_patient": False}
+    paciente = db.buscar_paciente(row["paciente_id"], cliente_id) if row.get("paciente_id") else None
+    return {
+        "paciente": paciente,
+        "pacientes": [] if paciente else db.listar_pacientes(cliente_id),
+        "can_link_patient": True,
+    }
 
 
 @bp.route("/clinica/dashboard")

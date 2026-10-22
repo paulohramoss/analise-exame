@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pacientes — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <link rel="stylesheet" href="{{ static_url('prontuario.css') }}">
+</head>
+<body>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("pacientes") }}
+    {% endcall %}
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    {{ layout.icon('x-circle' if category == 'error' else 'check-circle') }}
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">Pacientes</h1>
+                <p class="page-subtitle">Prontuário de cada paciente: exames analisados, tratamentos e evolução ao longo do tempo.</p>
+            </div>
+            {% if has_account %}
+            <a href="{{ url_for('pacientes.novo') }}" class="btn-primary">{{ layout.icon("plus", 18, "btn-icon") }} Novo paciente</a>
+            {% endif %}
+        </div>
+
+        {% if not has_account %}
+        <div class="card">
+            <p>O prontuário está disponível para contas de profissional. No acesso administrativo ou local não há pacientes cadastrados.</p>
+        </div>
+        {% else %}
+        <div class="card">
+            <form class="search-form pt-form" method="GET" action="{{ url_for('pacientes.lista') }}" role="search">
+                <input type="search" name="q" value="{{ busca }}" placeholder="Buscar por nome ou CPF" aria-label="Buscar paciente">
+                <button type="submit" class="btn-secondary">{{ layout.icon("search", 16) }} Buscar</button>
+            </form>
+
+            {% if pacientes %}
+            <div class="patient-list">
+                {% for p in pacientes %}
+                <article class="patient-item">
+                    <div>
+                        <h2 class="patient-name">{{ p.nome or 'Nome indisponível' }}</h2>
+                        <div class="patient-meta">
+                            <span>CPF {{ p.cpf_mascarado }}</span>
+                            {% if p.idade is not none %}<span>{{ p.idade }} anos</span>{% endif %}
+                            {% if p.sexo %}<span>{{ p.sexo }}</span>{% endif %}
+                            <span>Cadastro em {{ p.created_at|datetime_br }}</span>
+                        </div>
+                    </div>
+                    <a class="btn-secondary" href="{{ url_for('pacientes.detalhe', paciente_id=p.id) }}">Abrir prontuário</a>
+                </article>
+                {% endfor %}
+            </div>
+            {% elif busca %}
+            <div class="empty-state">
+                <h2>Nenhum paciente encontrado</h2>
+                <p>Nenhum nome ou CPF corresponde a "{{ busca }}".</p>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <h2>Nenhum paciente cadastrado</h2>
+                <p>Cadastre um paciente para reunir exames, tratamentos e evolução no mesmo prontuário.</p>
+                <a href="{{ url_for('pacientes.novo') }}" class="btn-primary" style="margin-top:1rem">Cadastrar primeiro paciente</a>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </main>
+
+    {{ layout.site_footer() }}
+</body>
+</html>

@@ -1,6 +1,6 @@
 """Formatação para templates, leitura de formulários e mensagens ao usuário."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from flask import request
 
@@ -109,6 +109,18 @@ def format_datetime_br(value) -> str:
         return dt.strftime("%d/%m/%Y %H:%M")
     except Exception:
         return str(value)
+
+
+def format_date_br(value) -> str:
+    """Data (date ou "AAAA-MM-DD…") como DD/MM/AAAA."""
+    if not value:
+        return ""
+    if isinstance(value, str):
+        try:
+            value = date.fromisoformat(value[:10])
+        except ValueError:
+            return value
+    return value.strftime("%d/%m/%Y")
 
 
 # ── Resultado da análise ──────────────────────────────────────────────────────

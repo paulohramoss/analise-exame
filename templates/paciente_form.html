@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ 'Editar paciente' if editing else 'Novo paciente' }} — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <link rel="stylesheet" href="{{ static_url('prontuario.css') }}">
+</head>
+<body>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("pacientes") }}
+    {% endcall %}
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    {{ layout.icon('x-circle' if category == 'error' else 'check-circle') }}
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">{{ 'Editar cadastro' if editing else 'Novo paciente' }}</h1>
+                <p class="page-subtitle">Só você, profissional responsável, tem acesso a este prontuário.</p>
+            </div>
+        </div>
+
+        <div class="privacy-note">
+            {{ layout.icon("lock", 18) }}
+            <span>Nome e CPF ficam cifrados no banco e <strong>nunca são enviados à IA</strong>. A análise dos exames recebe apenas idade, sexo e o contexto clínico.</span>
+        </div>
+
+        <div class="card">
+            <form class="pt-form" method="POST"
+                  action="{{ url_for('pacientes.editar', paciente_id=paciente.id) if editing else url_for('pacientes.novo') }}">
+                <div class="pt-field">
+                    <label for="nome">Nome completo</label>
+                    <input type="text" id="nome" name="nome" value="{{ paciente.nome or '' }}" required maxlength="160" autocomplete="off">
+                </div>
+                <div class="pt-grid">
+                    <div>
+                        <label for="cpf">CPF</label>
+                        <input type="text" id="cpf" name="cpf" value="{{ paciente.cpf or '' }}" required inputmode="numeric" maxlength="14" placeholder="000.000.000-00" autocomplete="off">
+                    </div>
+                    <div>
+                        <label for="data_nascimento">Data de nascimento</label>
+                        <input type="date" id="data_nascimento" name="data_nascimento" value="{{ paciente.data_nascimento or '' }}">
+                    </div>
+                    <div>
+                        <label for="sexo">Sexo</label>
+                        <select id="sexo" name="sexo">
+                            <option value="">— Selecione —</option>
+                            {% for s in sexos %}
+                            <option value="{{ s }}"{% if paciente.sexo == s %} selected{% endif %}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="pt-field">
+                    <label for="observacoes">Observações clínicas</label>
+                    <textarea id="observacoes" name="observacoes" rows="3" maxlength="3000" placeholder="Comorbidades, lado dominante, alergias, cirurgias prévias...">{{ paciente.observacoes or '' }}</textarea>
+                </div>
+
+                {% if not editing %}
+                <label class="consent-check">
+                    <input type="checkbox" name="consentimento" value="accepted" required>
+                    <span>Confirmo que o paciente foi informado e autorizou o registro dos seus dados pessoais e de saúde neste prontuário (LGPD, art. 11), e que posso excluí-los a pedido dele.</span>
+                </label>
+                {% endif %}
+
+                <div class="pt-actions">
+                    <button type="submit" class="btn-primary">{{ 'Salvar alterações' if editing else 'Cadastrar paciente' }}</button>
+                    <a class="btn-ghost" href="{{ url_for('pacientes.detalhe', paciente_id=paciente.id) if editing else url_for('pacientes.lista') }}">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    {{ layout.site_footer() }}
+</body>
+</html>

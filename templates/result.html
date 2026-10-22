@@ -275,6 +275,13 @@
         {% endwith %}
 
         <!-- Cabeçalho profissional da análise -->
+        {% if paciente_id and analysis_id %}
+        <div class="alert alert-success">
+            {{ layout.icon('check-circle') }}
+            Laudo salvo no prontuário do paciente. <a href="{{ url_for('pacientes.detalhe', paciente_id=paciente_id) }}">Abrir prontuário</a>
+        </div>
+        {% endif %}
+
         <div class="result-meta card">
             <div class="professional-summary">
                 <div>

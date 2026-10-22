@@ -20,6 +20,7 @@ O **MedAI Analyzer** (plataforma Three Health) analisa imagens de exames ortopé
 - Laudo por consenso dual Gemini + Claude (ou só Gemini, sem chave Anthropic)
 - Planos pagos (Asaas: PIX, boleto, cartão na página do Asaas), trial gratuito embutível por iframe
 - Histórico de laudos, dashboard da clínica e validação clínica dos laudos
+- Prontuário de pacientes: cadastro com nome e CPF (cifrados), laudos vinculados, tratamentos, evolução (dor e função) com gráfico e linha do tempo. Cada profissional vê só os próprios pacientes
 - API REST autenticada por chave (`/api/analyze`)
 - Fila assíncrona opcional (Redis + RQ) e orçamento de custo diário por escopo
 - LGPD: identificadores removidos do texto clínico, exportação e exclusão de conta pelo titular, retenção automática
