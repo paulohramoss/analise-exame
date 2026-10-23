@@ -21,7 +21,7 @@ from google import genai
 from google.genai import types
 from PIL import Image, ImageOps
 
-from core import annotations
+from core import annotations, pubmed
 from core.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -1472,6 +1472,14 @@ def analyze_exam_from_bytes(
         posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
     )
 
+    # Referências do PubMed: só termos do dicionário saem para o NCBI (nada do
+    # paciente). Roda em paralelo com a marcação das imagens.
+    references_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    references_future = references_executor.submit(
+        pubmed.find_references, final_analysis, exam_type, user_description,
+    )
+    references_executor.shutdown(wait=False)
+
     marcacoes: list[dict] = []
     if _ANNOTATIONS_ENABLED:
         _notify(on_progress, "marcando_achados")
@@ -1481,11 +1489,21 @@ def analyze_exam_from_bytes(
         )
         usage.extend(annotation_usage)
 
+    try:
+        references = references_future.result(timeout=pubmed.timeout_seconds() + 2)
+    except Exception:
+        logger.warning("Referências do PubMed indisponíveis.", exc_info=True)
+        references = []
+    references_section = pubmed.format_section(references)
+    if references_section:
+        final_analysis = f"{final_analysis.rstrip()}\n\n{references_section}"
+
     result = {
         "success": True,
         "exam_type": exam_type,
         "analysis": final_analysis,
         "annotations": marcacoes,
+        "references": references,
         "references_used": refs_used,
         "model_used": model_used,
         "num_images": len(exam_images),

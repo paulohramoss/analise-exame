@@ -18,6 +18,7 @@ O **MedAI Analyzer** (plataforma Three Health) analisa imagens de exames ortopé
 - Detecção da região anatômica pela descrição/nome do arquivo e, se preciso, pela própria imagem
 - Comparação com imagens de referência normais (`reference_data/<região>/`)
 - Laudo por consenso dual Gemini + Claude (ou só Gemini, sem chave Anthropic)
+- Referências científicas do PubMed ao final de cada laudo: para cada lesão encontrada, artigos sobre o diagnóstico e o tratamento (revisões sistemáticas, meta-análises e diretrizes), com PMID e DOI
 - Achados circulados dentro das imagens por grau de certeza (verde = forte, amarelo = moderado, vermelho = baixo), com a localização exata de cada estrutura alterada, na tela e no PDF
 - Planos pagos (Asaas: PIX, boleto, cartão na página do Asaas), trial gratuito embutível por iframe
 - Histórico de laudos, dashboard da clínica e validação clínica dos laudos
