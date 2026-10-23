@@ -49,7 +49,11 @@ Regras:
 - "imagem": número da imagem do exame (1 a {num_images}) em que o achado é visível. Se o achado
   aparece em mais de uma imagem, repita o achado uma vez para cada imagem.
 - "box_2d": [ymin, xmin, ymax, xmax] em coordenadas normalizadas de 0 a 1000 em relação à imagem
-  inteira, envolvendo de perto a estrutura alterada.
+  inteira (0,0 = canto superior esquerdo; y cresce para baixo, x para a direita). A ordem é
+  y antes de x. A caixa deve envolver JUSTO a alteração em si (o sinal anômalo, a rotura, o
+  edema, o traço de fratura) — não a estrutura inteira nem a articulação toda.
+- Use a imagem como ela aparece: não espelhe nem gire mentalmente, e ignore textos, réguas e
+  bordas da tela do visualizador.
 - "estrutura": nome curto da estrutura (ex.: "Menisco medial").
 - "local": localização anatômica exata (ex.: "corno posterior do menisco medial, junção
   meniscocapsular, joelho direito, plano sagital").
@@ -62,6 +66,73 @@ Responda APENAS com JSON, sem texto antes ou depois, no formato:
 LAUDO FINAL:
 {analysis}
 """
+
+
+def build_refinement_prompt(estrutura: str, local: str) -> str:
+    """Segunda passada: a IA vê só um recorte ampliado ao redor da primeira estimativa."""
+    return f"""Esta imagem é um RECORTE AMPLIADO de um exame musculoesquelético, centrado onde foi
+estimado o achado abaixo:
+
+Estrutura: {estrutura}
+Local: {local}
+
+TAREFA: devolva a caixa que envolve JUSTO a alteração (o sinal anômalo, a rotura, o edema, o
+traço de fratura) dentro DESTE recorte, em coordenadas normalizadas de 0 a 1000 relativas ao
+recorte: [ymin, xmin, ymax, xmax] (y antes de x; 0,0 = canto superior esquerdo).
+Se a alteração não estiver visível neste recorte, devolva "box_2d": null.
+
+Responda APENAS com JSON: {{"box_2d": [ymin, xmin, ymax, xmax]}}
+"""
+
+
+def parse_refinement(text: str) -> list[int] | None:
+    """Caixa do recorte (0-1000) ou None se ilegível/ausente."""
+    data = _extract_json(text)
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        data = data[0]
+    if not isinstance(data, dict):
+        return None
+    return _clean_box(data.get("box_2d"))
+
+
+def crop_window(box: list[int], context: float = 0.9, min_side: int = 160) -> list[int]:
+    """Janela de recorte (0-1000) ao redor da caixa: a caixa + `context` de folga de cada
+    lado, com pelo menos `min_side` (16% da imagem) para a IA enxergar o entorno."""
+    ymin, xmin, ymax, xmax = box
+
+    def _span(lo: int, hi: int) -> tuple[int, int]:
+        half = max((hi - lo) * (1 + 2 * context), min_side) / 2
+        center = (lo + hi) / 2
+        start, end = center - half, center + half
+        if start < 0:
+            start, end = 0, min(1000, end - start)
+        if end > 1000:
+            start, end = max(0, start - (end - 1000)), 1000
+        return int(round(start)), int(round(end))
+
+    y0, y1 = _span(ymin, ymax)
+    x0, x1 = _span(xmin, xmax)
+    return [y0, x0, y1, x1]
+
+
+def refined_box(window: list[int], local_box: list[int] | None, coarse: list[int]) -> list[int]:
+    """Converte a caixa do recorte para a imagem inteira.
+
+    Fica com a estimativa original quando o refinamento não ajuda: sem caixa, ou
+    caixa que ocupa quase o recorte todo (a IA só devolveu o recorte de volta).
+    """
+    if not local_box:
+        return coarse
+    y0, x0, y1, x1 = window
+    ly0, lx0, ly1, lx1 = local_box
+    if (ly1 - ly0) * (lx1 - lx0) > 0.9 * 1000 * 1000:
+        return coarse
+    scale_y, scale_x = (y1 - y0) / 1000, (x1 - x0) / 1000
+    box = [
+        int(round(y0 + ly0 * scale_y)), int(round(x0 + lx0 * scale_x)),
+        int(round(y0 + ly1 * scale_y)), int(round(x0 + lx1 * scale_x)),
+    ]
+    return _clean_box(box) or coarse
 
 
 def _extract_json(text: str):

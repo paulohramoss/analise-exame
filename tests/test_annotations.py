@@ -107,7 +107,7 @@ def test_locate_findings_cai_para_claude_quando_gemini_falha(monkeypatch):
 
 def test_locate_findings_nunca_derruba_o_laudo(monkeypatch):
     monkeypatch.setattr(analyzer, "_generate_with_retry", MagicMock(side_effect=RuntimeError("boom")))
-    assert analyzer._locate_findings(object(), "m", "", [(b"a", "image/png")], "laudo") == ([], None)
+    assert analyzer._locate_findings(object(), "m", "", [(b"a", "image/png")], "laudo") == ([], [])
 
 
 def test_analise_inclui_marcacoes_quando_ligado(monkeypatch):
@@ -118,7 +118,7 @@ def test_analise_inclui_marcacoes_quando_ligado(monkeypatch):
     monkeypatch.setattr(analyzer, "get_reference_images_as_bytes", lambda t: [])
     monkeypatch.setattr(analyzer, "_produce_final_analysis", lambda *a, **k: ("## 3. ACHADOS\n[FORTE] LCA", "m", []))
     locate = MagicMock(return_value=([{"numero": 1, "imagem": 1, "estrutura": "LCA", "local": "LCA",
-                                       "certeza": "forte", "box_2d": [1, 1, 100, 100]}], None))
+                                       "certeza": "forte", "box_2d": [1, 1, 100, 100]}], []))
     monkeypatch.setattr(analyzer, "_locate_findings", locate)
     stages = []
 
@@ -127,6 +127,74 @@ def test_analise_inclui_marcacoes_quando_ligado(monkeypatch):
     assert result["annotations"][0]["estrutura"] == "LCA"
     assert locate.call_args.args[4] == "## 3. ACHADOS\n[FORTE] LCA"  # localiza o laudo final
     assert "marcando_achados" in stages
+
+
+# ── Refinamento com recorte ampliado ──────────────────────────────────────────
+
+def test_crop_window_da_folga_e_respeita_bordas():
+    assert annotations.crop_window([450, 450, 550, 550]) == [360, 360, 640, 640]
+    assert annotations.crop_window([0, 0, 40, 40]) == [0, 0, 160, 160]       # tamanho mínimo, encostado na borda
+    assert annotations.crop_window([960, 960, 1000, 1000]) == [840, 840, 1000, 1000]
+
+
+def test_refined_box_converte_do_recorte_para_a_imagem():
+    window = [200, 400, 600, 800]  # recorte de 400x400 (em 0-1000)
+    assert annotations.refined_box(window, [250, 500, 500, 750], [0, 0, 999, 999]) == [300, 600, 400, 700]
+
+
+def test_refined_box_mantem_estimativa_quando_nao_ajuda():
+    coarse = [300, 300, 400, 400]
+    assert annotations.refined_box([200, 200, 500, 500], None, coarse) == coarse
+    assert annotations.refined_box([200, 200, 500, 500], [0, 0, 1000, 1000], coarse) == coarse  # devolveu o recorte
+
+
+@pytest.mark.parametrize("texto,esperado", [
+    ('{"box_2d": [100, 200, 300, 400]}', [100, 200, 300, 400]),
+    ('[{"box_2d": [100, 200, 300, 400]}]', [100, 200, 300, 400]),
+    ('{"box_2d": null}', None),
+    ("lixo", None),
+])
+def test_parse_refinement(texto, esperado):
+    assert annotations.parse_refinement(texto) == esperado
+
+
+def _png(width=400, height=300):
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("L", (width, height), 90).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_refinamento_recorta_amplia_e_reposiciona(monkeypatch):
+    sent = []
+
+    def _fake_generate(client, model, contents, **kwargs):
+        from PIL import Image
+        import io
+
+        sent.append(Image.open(io.BytesIO(contents[0].inline_data.data)).size)
+        return SimpleNamespace(text='{"box_2d": [250, 250, 750, 750]}', usage_metadata=None)
+
+    monkeypatch.setattr(analyzer, "_generate_with_retry", _fake_generate)
+    marca = {"numero": 1, "imagem": 1, "estrutura": "LCA", "local": "LCA", "certeza": "forte",
+             "box_2d": [450, 450, 550, 550]}
+
+    [refinada], _ = analyzer._refine_findings(object(), "m", [(_png(1200, 900), "image/png")], [marca], deadline=1e18)
+
+    assert max(sent[0]) >= 700  # recorte ampliado antes de ir para a IA
+    assert refinada["box_2d"] == [430, 430, 570, 570]  # centro do recorte [360..640]
+    assert marca["box_2d"] == [450, 450, 550, 550]  # a original não é alterada
+
+
+def test_refinamento_que_falha_mantem_a_primeira_estimativa(monkeypatch):
+    monkeypatch.setattr(analyzer, "_generate_with_retry", MagicMock(side_effect=RuntimeError("503")))
+    marca = {"numero": 1, "imagem": 1, "estrutura": "LCA", "local": "LCA", "certeza": "forte",
+             "box_2d": [450, 450, 550, 550]}
+    [refinada], usage = analyzer._refine_findings(object(), "m", [(_png(), "image/png")], [marca], deadline=1e18)
+    assert refinada["box_2d"] == [450, 450, 550, 550] and usage == []
 
 
 # ── Persistência e exibição ───────────────────────────────────────────────────

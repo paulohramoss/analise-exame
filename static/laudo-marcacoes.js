@@ -34,9 +34,9 @@
         const short = Math.min(w, h);
         const cx = ((xmin + xmax) / 2000) * w;
         const cy = ((ymin + ymax) / 2000) * h;
-        // Folga de 15% para o círculo envolver a estrutura sem cobri-la.
-        const rx = Math.max(((xmax - xmin) / 2000) * w * 1.15, short * 0.025);
-        const ry = Math.max(((ymax - ymin) / 2000) * h * 1.15, short * 0.025);
+        // Folga pequena (8%): o círculo envolve a alteração sem cobri-la.
+        const rx = Math.max(((xmax - xmin) / 2000) * w * 1.08, short * 0.018);
+        const ry = Math.max(((ymax - ymin) / 2000) * h * 1.08, short * 0.018);
         const line = Math.max(2, short * 0.006);
 
         ctx.beginPath();
