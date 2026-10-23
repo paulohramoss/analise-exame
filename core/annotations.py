@@ -54,6 +54,8 @@ Regras:
   edema, o traço de fratura) — não a estrutura inteira nem a articulação toda.
 - Use a imagem como ela aparece: não espelhe nem gire mentalmente, e ignore textos, réguas e
   bordas da tela do visualizador.
+- Não marque nada em páginas de documento (laudo ou relatório em texto, ex.: página de PDF):
+  só em imagens de exame.
 - "estrutura": nome curto da estrutura (ex.: "Menisco medial").
 - "local": localização anatômica exata (ex.: "corno posterior do menisco medial, junção
   meniscocapsular, joelho direito, plano sagital").

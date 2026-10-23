@@ -468,6 +468,13 @@ Você recebeu (nesta ordem):
 3. Caso clínico validado por especialista (se fornecido) — exemplo de calibração de um laudo já revisado por profissional para o mesmo tipo de exame; NÃO é um achado deste paciente, use apenas como referência de padrão/rigor
 4. Exame do paciente (imagem ou imagens finais) — objeto da análise
 
+**Páginas de documento:** se alguma imagem do exame for uma página de documento (laudo,
+relatório ou pedido em texto, por exemplo vinda de um PDF), não a analise como imagem
+radiológica: use o conteúdo dela como histórico clínico ou laudo prévio, cite-o como tal na
+correlação clínica e baseie os achados nas imagens de exame propriamente ditas. Se só houver
+páginas de documento, deixe isso explícito em "Qualidade técnica" e restrinja a análise ao que
+o documento descreve, sem afirmar achados que não possam ser vistos.
+
 ---
 
 ## REGRAS DE EVIDÊNCIA — LEIA ANTES DE ANALISAR

@@ -175,6 +175,8 @@ pydicom==3.0.2
     # via -r requirements.in
 pyjwt==2.15.1
     # via supabase-auth
+pypdfium2==5.14.0
+    # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via croniter
 python-dotenv==1.2.4
