@@ -309,6 +309,7 @@ global.document = {
   querySelectorAll: sel => (sel === '[data-feedback]' ? [partial] : []),
 };
 global.renderLaudoInto = () => {};
+global.initExamFindings = () => Promise.resolve();
 let sent = null;
 global.fetch = async (url, opts) => {
   sent = { url, opts };

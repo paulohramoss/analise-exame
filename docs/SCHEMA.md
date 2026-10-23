@@ -87,6 +87,16 @@ webhooks_asaas ──> eventos brutos do Asaas, correlacionados por asaas_paymen
   (hash MD5, tamanho, MIME). Isso significa que não é possível reabrir ou
   re-auditar a imagem original a partir do banco hoje.
 
+## Marcação dos achados nas imagens
+
+- `analises.marcacoes` (jsonb, migration `2026-10-23-marcacoes-laudo.sql`) guarda os
+  achados localizados nas imagens: número, imagem, estrutura, local exato, certeza
+  (`forte` → verde, `moderado` → amarelo, `baixo` → vermelho) e caixa `box_2d`
+  `[ymin, xmin, ymax, xmax]` normalizada de 0 a 1000.
+- Gerada por `core/annotations.py` + `analyzer._locate_findings` depois do laudo
+  final; desenhada no navegador por `static/laudo-marcacoes.js`. Como as imagens não
+  ficam no banco, o laudo salvo mostra só a lista com os locais.
+
 ## Prontuário de pacientes
 
 - Cada profissional só enxerga os próprios pacientes: toda consulta filtra por

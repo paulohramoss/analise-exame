@@ -97,6 +97,10 @@ create table if not exists public.analises (
 create index if not exists analises_cliente_created_idx
     on public.analises (cliente_id, created_at desc);
 
+-- Achados localizados nas imagens (2026-10-23-marcacoes-laudo.sql).
+alter table public.analises
+    add column if not exists marcacoes jsonb;
+
 comment on column public.analises.responsavel_nome is 'Nome do medico, laudista ou profissional responsavel informado no cabecalho do laudo.';
 comment on column public.analises.responsavel_perfil is 'Perfil profissional do responsavel pelo laudo.';
 comment on column public.analises.responsavel_registro is 'Registro profissional do responsavel, quando informado.';

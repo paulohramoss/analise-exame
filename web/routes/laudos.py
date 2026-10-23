@@ -2,7 +2,7 @@
 
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
-from core import db
+from core import annotations, db
 from web import posthog, presentation
 from web.security import premium_required
 
@@ -53,6 +53,7 @@ def laudo_detalhe(analise_id: str):
         user_description=row.get("descricao_usuario") or "",
         responsible=presentation.responsible_info_from_row(row),
         consensus=presentation.build_consensus_info(row.get("modelo_ia") or "", row.get("analise_completa") or ""),
+        annotations=annotations.sanitize_stored(row.get("marcacoes"), row.get("num_imagens")),
         **_patient_link_context(row),
     )
 

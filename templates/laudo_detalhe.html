@@ -8,6 +8,7 @@
     {{ layout.head_assets() }}
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <script src="{{ static_url('laudo-ui.js') }}"></script>
+    <script src="{{ static_url('laudo-marcacoes.js') }}"></script>
     <script src="{{ static_url('laudo-pdf.js') }}" defer></script>
     <style>
         .professional-summary {
@@ -347,6 +348,10 @@
             <div class="report-content" id="report-content">
                 {{ analysis }}
             </div>
+            {% if annotations %}
+            {% with show_toggle=false %}{% include "_achados_marcados.html" %}{% endwith %}
+            <p class="findings-note">As imagens do exame não ficam guardadas no histórico: os círculos aparecem na tela do resultado e no PDF gerado na hora da análise.</p>
+            {% endif %}
         </div>
 
         <div class="card feedback-card" id="feedback-card">
@@ -378,10 +383,14 @@
     <script type="application/json" id="data-user-desc">{{ user_description|default('', true)|tojson }}</script>
     <script type="application/json" id="data-analysis-id">{{ analysis_id|tojson }}</script>
     <script type="application/json" id="data-exam-meta">{{ {"exam_type": exam_type, "references_used": laudo.get("referencias_usadas") or 0, "num_images": laudo.get("num_imagens") or 1}|tojson }}</script>
+    <script type="application/json" id="data-annotations">{{ annotations|default([])|tojson }}</script>
     <script>
 
         const reportContent = document.getElementById('report-content');
         renderLaudoInto(reportContent, reportContent.textContent);
+        const findings = JSON.parse(document.getElementById('data-annotations').textContent || '[]');
+        initExamFindings([], findings,
+            JSON.parse(document.getElementById('data-exam-meta').textContent || '{}').num_images || 1);
 
         const responsible = JSON.parse(document.getElementById('data-responsible').textContent || 'null');
         const consensus = JSON.parse(document.getElementById('data-consensus').textContent || 'null');
@@ -403,6 +412,7 @@
                 responsible: responsible || { name: 'Responsável não salvo neste histórico' },
                 meta: laudoPdfMeta(JSON.parse(document.getElementById('data-exam-meta').textContent || '{}'), consensus),
                 clinicalInfo: userDesc,
+                findings,
             });
         }
 

@@ -21,6 +21,7 @@ from google import genai
 from google.genai import types
 from PIL import Image, ImageOps
 
+from core import annotations
 from core.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,12 @@ _CLAUDE_SYNTHESIS_MAX_TOKENS = int(os.environ.get("CLAUDE_SYNTHESIS_MAX_TOKENS",
 # Tempo mínimo que precisa restar no orçamento para tentar a síntese de consenso.
 _SYNTHESIS_RESERVE_SECONDS = float(os.environ.get("SYNTHESIS_RESERVE_SECONDS", "12"))
 _SYNTHESIS_INPUT_MAX_CHARS = int(os.environ.get("SYNTHESIS_INPUT_MAX_CHARS", "6000"))
+# Marcação dos achados nas imagens (core/annotations.py): chamada extra depois do
+# laudo, com prazo próprio — fora do ANALYSIS_BUDGET_SECONDS, para não roubar
+# tempo do laudo. Se falhar ou estourar o prazo, o laudo sai sem marcações.
+_ANNOTATIONS_ENABLED = os.environ.get("ANNOTATIONS_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+_ANNOTATION_TIMEOUT_SECONDS = float(os.environ.get("ANNOTATION_TIMEOUT_SECONDS", "25"))
+_ANNOTATION_MAX_TOKENS = int(os.environ.get("ANNOTATION_MAX_TOKENS", "2048"))
 _INCLUDE_REFERENCE_PDF = os.environ.get("INCLUDE_REFERENCE_PDF", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 # Reserva de tempo exigida antes de gastar uma chamada extra na detecção visual
@@ -284,6 +291,7 @@ def _generate_with_retry(
     ai_session_id: str | None = None,
     ai_trace_id: str | None = None,
     posthog_distinct_id: str | None = None,
+    response_mime_type: str | None = None,
 ) -> object:
     """Chama generate_content com retry exponencial e fallback de modelos.
 
@@ -308,6 +316,7 @@ def _generate_with_retry(
                         max_output_tokens=max_output_tokens,
                         temperature=0.1,
                         thinking_config=types.ThinkingConfig(thinking_budget=_GEMINI_THINKING_BUDGET),
+                        response_mime_type=response_mime_type,
                         http_options=types.HttpOptions(timeout=int(_remaining_seconds(deadline, _GEMINI_HTTP_TIMEOUT_MS / 1000) * 1000)),
                     ),
                     **_posthog_generation_kwargs(ai_session_id, ai_trace_id, posthog_distinct_id),
@@ -1195,6 +1204,79 @@ def _produce_final_analysis(
     return final_analysis, model_used, usage
 
 
+def _exam_images_with_labels(exam_images: list[tuple[bytes, str]]) -> tuple[list, list]:
+    """Imagens do exame numeradas, nos formatos do Gemini e do Claude."""
+    gemini_parts, claude_content = [], []
+    for i, (img_bytes, img_mime) in enumerate(exam_images, 1):
+        label = f"Imagem {i} do exame:"
+        gemini_parts += [types.Part.from_text(text=label), types.Part.from_bytes(data=img_bytes, mime_type=img_mime)]
+        claude_content += [
+            {"type": "text", "text": label},
+            {"type": "image", "source": {
+                "type": "base64", "media_type": img_mime,
+                "data": base64.standard_b64encode(img_bytes).decode("utf-8"),
+            }},
+        ]
+    return gemini_parts, claude_content
+
+
+def _locate_findings(
+    gemini_client: genai.Client | None,
+    model_name: str,
+    anthropic_api_key: str,
+    exam_images: list[tuple[bytes, str]],
+    analysis: str,
+    posthog_client=None,
+    ai_session_id: str | None = None,
+    ai_trace_id: str | None = None,
+    posthog_distinct_id: str | None = None,
+) -> tuple[list[dict], dict | None]:
+    """Marca os achados do laudo nas imagens. Retorna (marcações, uso_de_tokens).
+
+    Gemini primeiro (é treinado para devolver caixas box_2d); sem ele, Claude.
+    Qualquer falha devolve ([], uso) — o laudo nunca depende das marcações.
+    """
+    prompt = annotations.build_localization_prompt(analysis, len(exam_images))
+    gemini_parts, claude_content = _exam_images_with_labels(exam_images)
+    deadline = time.monotonic() + _ANNOTATION_TIMEOUT_SECONDS
+
+    if gemini_client is not None:
+        try:
+            response = _generate_with_retry(
+                gemini_client, model_name, gemini_parts + [types.Part.from_text(text=prompt)],
+                max_output_tokens=_ANNOTATION_MAX_TOKENS, deadline=deadline,
+                ai_session_id=ai_session_id, ai_trace_id=ai_trace_id, posthog_distinct_id=posthog_distinct_id,
+                response_mime_type="application/json",
+            )
+            return (
+                annotations.parse_localization(response.text, len(exam_images)),
+                _extract_gemini_usage(model_name, response),
+            )
+        except Exception:
+            logger.warning("Marcação dos achados (Gemini) falhou.", exc_info=True)
+            if not anthropic_api_key:
+                return [], None
+
+    if not anthropic_api_key or _deadline_expired(deadline, reserve_seconds=5):
+        return [], None
+    try:
+        client = _make_anthropic_client(anthropic_api_key, _remaining_seconds(deadline, 20), posthog_client)
+        message = client.messages.create(
+            model=_CLAUDE_MODEL,
+            max_tokens=_ANNOTATION_MAX_TOKENS,
+            messages=[{"role": "user", "content": claude_content + [{"type": "text", "text": prompt}]}],
+            timeout=_remaining_seconds(deadline, 20),
+            **_posthog_generation_kwargs(ai_session_id, ai_trace_id, posthog_distinct_id),
+        )
+        return (
+            annotations.parse_localization(message.content[0].text, len(exam_images)),
+            _extract_claude_usage(_CLAUDE_MODEL, message),
+        )
+    except Exception:
+        logger.warning("Marcação dos achados (Claude) falhou.", exc_info=True)
+        return [], None
+
+
 def analyze_exam_from_bytes(
     exam_images_data: list[tuple[bytes, str]] | tuple[bytes, str],
     exam_filename: str,
@@ -1305,10 +1387,21 @@ def analyze_exam_from_bytes(
         posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
     )
 
+    marcacoes: list[dict] = []
+    if _ANNOTATIONS_ENABLED:
+        _notify(on_progress, "marcando_achados")
+        marcacoes, annotation_usage = _locate_findings(
+            gemini_client, model_name, anthropic_api_key, exam_images, final_analysis,
+            posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
+        )
+        if annotation_usage:
+            usage.append(annotation_usage)
+
     result = {
         "success": True,
         "exam_type": exam_type,
         "analysis": final_analysis,
+        "annotations": marcacoes,
         "references_used": refs_used,
         "model_used": model_used,
         "num_images": len(exam_images),

@@ -7,6 +7,7 @@
     {% import "_layout.html" as layout %}
     {{ layout.head_assets() }}
     <script src="{{ static_url('laudo-ui.js') }}"></script>
+    <script src="{{ static_url('laudo-marcacoes.js') }}"></script>
     <script src="{{ static_url('laudo-pdf.js') }}" defer></script>
     <style>
         /* ── Trial Badge ── */
@@ -794,6 +795,7 @@
                     <div class="exam-image-wrapper">
                         <img id="r-image" src="" alt="Exame" class="exam-image">
                     </div>
+                    {% include "_achados_marcados.html" %}
                 </div>
 
                 <!-- Laudo -->
@@ -1195,7 +1197,9 @@
                 referencesUsed > 0
                     ? `${referencesUsed} ${referencesUsed === 1 ? 'imagem' : 'imagens'}`
                     : 'Análise sem referência';
-            document.getElementById('r-image').src = `data:${data.image_mime};base64,${data.image_b64}`;
+            const resultImage = document.getElementById('r-image');
+            resultImage.src = `data:${data.image_mime};base64,${data.image_b64}`;
+            initExamFindings([resultImage], data.annotations || [], 1);
 
             const reportEl = document.getElementById('report-content');
             // O laudo vem da IA: renderLaudoInto escapa o texto e só insere as próprias tags.
@@ -1239,6 +1243,7 @@
                 }, lastResult ? lastResult.consensus : null),
                 clinicalInfo: lastClinicalInfo,
                 images: imgEl && imgEl.src ? [{ src: imgEl.src }] : [],
+                findings: lastResult ? (lastResult.annotations || []) : [],
             });
         }
     </script>

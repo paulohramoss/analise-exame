@@ -355,6 +355,7 @@ def salvar_analise(
     sessao_id: str | None = None,
     responsavel: dict | None = None,
     paciente_id: str | None = None,
+    marcacoes: list[dict] | None = None,
 ) -> str | None:
     """Persiste resultado de análise da IA. Retorna UUID da análise ou None.
 
@@ -381,6 +382,8 @@ def salvar_analise(
         }
         if paciente_id:
             data["paciente_id"] = paciente_id
+        if marcacoes:
+            data["marcacoes"] = marcacoes
         if responsavel:
             data.update({
                 "responsavel_nome": responsavel.get("name") or None,
@@ -437,7 +440,7 @@ def buscar_analise(
 
     columns = (
         "id, created_at, tipo_exame, analise_completa, modelo_ia, referencias_usadas, "
-        "num_imagens, modo, descricao_usuario, modalidade, tempo_processamento_ms, cliente_id, paciente_id, "
+        "num_imagens, modo, descricao_usuario, modalidade, tempo_processamento_ms, cliente_id, paciente_id, marcacoes, "
         "responsavel_nome, responsavel_perfil, responsavel_registro, responsavel_instituicao"
     )
     try:
@@ -503,6 +506,7 @@ def salvar_analise_com_imagens(
         num_imagens=result.get("num_images", len(images)),
         modo=modo,
         tempo_ms=tempo_ms,
+        marcacoes=result.get("annotations") or None,
         **persist,
     )
     if not analise_id:

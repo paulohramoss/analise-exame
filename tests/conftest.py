@@ -34,6 +34,10 @@ os.environ.setdefault("SESSION_CACHE_TTL_SECONDS", "0")
 # Log de acesso síncrono: nada de thread de fundo tocando no db durante testes
 # que substituem o cliente do Supabase (o modo assíncrono tem teste próprio).
 os.environ.setdefault("ACCESS_LOG_ASYNC", "0")
+# Marcação dos achados nas imagens é uma chamada extra à IA depois do laudo: os
+# testes que simulam o modelo não a esperam. Ela tem testes próprios
+# (test_annotations.py), que a ligam explicitamente.
+os.environ.setdefault("ANNOTATIONS_ENABLED", "0")
 
 import fakeredis
 import pytest

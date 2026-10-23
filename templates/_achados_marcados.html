@@ -1,0 +1,17 @@
+{#- Legenda dos achados marcados nas imagens. Preenchida por initExamFindings
+    (static/laudo-marcacoes.js) a partir de #data-annotations. -#}
+<div class="findings-block" id="findings-block">
+    <div class="findings-head">
+        <h3>Achados marcados nas imagens</h3>
+        {% if show_toggle|default(true) %}
+        <button type="button" class="btn-ghost btn-small" id="toggle-marks" hidden aria-pressed="true">Ocultar marcações</button>
+        {% endif %}
+    </div>
+    <div class="findings-key" aria-label="Cores das marcações">
+        <span><i style="border-color:#16a34a"></i> Forte grau de certeza</span>
+        <span><i style="border-color:#eab308"></i> Moderado</span>
+        <span><i style="border-color:#dc2626"></i> Baixo</span>
+    </div>
+    <div id="findings-legend"></div>
+    <p class="findings-note">A posição dos círculos é estimada pela IA e é aproximada: confirme cada achado na imagem original.</p>
+</div>
