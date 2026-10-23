@@ -81,6 +81,8 @@ def test_identifiers_never_reach_the_ai_or_the_database(client, monkeypatch):
 def _login_client(client, monkeypatch, email="a@example.com", cliente_id="cliente-a"):
     monkeypatch.setattr(db, "buscar_sessao_cliente", lambda e: {"id": cliente_id, "sessao_versao": 0})
     monkeypatch.setattr(db, "buscar_senha_hash_cliente", lambda e: generate_password_hash("senha-certa"))
+    # Conta sem pacientes: nada de prontuário a perder na exclusão (ver test_prontuario).
+    monkeypatch.setattr(db, "resumo_backup_prontuarios", lambda cid: {"pacientes": 0, "exportado_em": None, "copia_em_dia": True})
     client.set_cookie(security.PREMIUM_COOKIE, security.generate_premium_token("pay_1", email, 3600))
 
 
@@ -307,6 +309,7 @@ global.document = {
   querySelectorAll: sel => (sel === '[data-feedback]' ? [partial] : []),
 };
 global.renderLaudoInto = () => {};
+global.initExamFindings = () => Promise.resolve();
 let sent = null;
 global.fetch = async (url, opts) => {
   sent = { url, opts };

@@ -8,6 +8,7 @@
     {{ layout.head_assets() }}
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <script src="{{ static_url('laudo-ui.js') }}"></script>
+    <script src="{{ static_url('laudo-marcacoes.js') }}"></script>
     <script src="{{ static_url('laudo-pdf.js') }}" defer></script>
     <style>
         .professional-summary {
@@ -46,6 +47,21 @@
             color: var(--text-muted);
             font-size: 0.94rem;
             margin-top: 0.35rem;
+        }
+
+        .patient-link-row {
+            display: flex;
+            gap: 0.6rem;
+            margin-top: 0.35rem;
+        }
+
+        .patient-link-row select {
+            flex: 1;
+            padding: 0.55rem 0.7rem;
+            border: 1px solid var(--border-input);
+            border-radius: 7px;
+            font-family: inherit;
+            background: var(--surface);
         }
 
         .consensus-card {
@@ -287,6 +303,40 @@
             {% endif %}
         </div>
 
+        {% if can_link_patient %}
+        <div class="card patient-link-card">
+            {% if paciente %}
+            <div class="professional-summary">
+                <div>
+                    <span class="professional-eyebrow">Paciente</span>
+                    <h2 class="professional-name">{{ paciente.nome }}</h2>
+                    <p class="professional-details">CPF {{ paciente.cpf_mascarado }}</p>
+                </div>
+                <div class="professional-status">
+                    <a class="btn-secondary" href="{{ url_for('pacientes.detalhe', paciente_id=paciente.id) }}">Abrir prontuário</a>
+                    <form method="POST" action="{{ url_for('pacientes.vincular_laudo', analise_id=analysis_id) }}">
+                        <input type="hidden" name="paciente_id" value="">
+                        <button type="submit" class="btn-ghost btn-small">Desvincular</button>
+                    </form>
+                </div>
+            </div>
+            {% elif pacientes %}
+            <form method="POST" action="{{ url_for('pacientes.vincular_laudo', analise_id=analysis_id) }}" class="patient-link-form">
+                <label for="paciente_id"><span class="professional-eyebrow">Vincular ao prontuário de um paciente</span></label>
+                <div class="patient-link-row">
+                    <select name="paciente_id" id="paciente_id" required>
+                        <option value="">— Selecione o paciente —</option>
+                        {% for p in pacientes %}<option value="{{ p.id }}">{{ p.nome }} — CPF {{ p.cpf_mascarado }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" class="btn-secondary">Vincular</button>
+                </div>
+            </form>
+            {% else %}
+            <p class="card-description">Este laudo não está ligado a nenhum paciente. <a href="{{ url_for('pacientes.novo') }}">Cadastre um paciente</a> para acompanhar a evolução no prontuário.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <div class="card report-card">
             <div class="report-header">
                 <h2>Laudo salvo</h2>
@@ -298,6 +348,10 @@
             <div class="report-content" id="report-content">
                 {{ analysis }}
             </div>
+            {% if annotations %}
+            {% with show_toggle=false %}{% include "_achados_marcados.html" %}{% endwith %}
+            <p class="findings-note">As imagens do exame não ficam guardadas no histórico: os círculos aparecem na tela do resultado e no PDF gerado na hora da análise.</p>
+            {% endif %}
         </div>
 
         <div class="card feedback-card" id="feedback-card">
@@ -329,10 +383,14 @@
     <script type="application/json" id="data-user-desc">{{ user_description|default('', true)|tojson }}</script>
     <script type="application/json" id="data-analysis-id">{{ analysis_id|tojson }}</script>
     <script type="application/json" id="data-exam-meta">{{ {"exam_type": exam_type, "references_used": laudo.get("referencias_usadas") or 0, "num_images": laudo.get("num_imagens") or 1}|tojson }}</script>
+    <script type="application/json" id="data-annotations">{{ annotations|default([])|tojson }}</script>
     <script>
 
         const reportContent = document.getElementById('report-content');
         renderLaudoInto(reportContent, reportContent.textContent);
+        const findings = JSON.parse(document.getElementById('data-annotations').textContent || '[]');
+        initExamFindings([], findings,
+            JSON.parse(document.getElementById('data-exam-meta').textContent || '{}').num_images || 1);
 
         const responsible = JSON.parse(document.getElementById('data-responsible').textContent || 'null');
         const consensus = JSON.parse(document.getElementById('data-consensus').textContent || 'null');
@@ -354,6 +412,7 @@
                 responsible: responsible || { name: 'Responsável não salvo neste histórico' },
                 meta: laudoPdfMeta(JSON.parse(document.getElementById('data-exam-meta').textContent || '{}'), consensus),
                 clinicalInfo: userDesc,
+                findings,
             });
         }
 

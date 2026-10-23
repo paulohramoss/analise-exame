@@ -29,12 +29,19 @@ def _own_account() -> tuple[str, str] | None:
 @security.premium_required
 def conta():
     """Página "Meus dados": exportação e exclusão da conta."""
+    account = _own_account()
     return render_template(
         "conta.html",
         email=g.get("user_email"),
-        has_account=_own_account() is not None,
+        has_account=account is not None,
         confirmation_word=DELETE_CONFIRMATION,
+        backup=_prontuario_backup(account[0]) if account else None,
     )
+
+
+def _prontuario_backup(cliente_id: str) -> dict:
+    """Situação da cópia dos prontuários. Sem resposta do banco, assume que não há cópia em dia."""
+    return db.resumo_backup_prontuarios(cliente_id) or {"pacientes": None, "exportado_em": None, "copia_em_dia": False}
 
 
 @bp.route("/conta/dados.json")
@@ -53,6 +60,7 @@ def exportar_dados():
         return redirect(url_for("account.conta"))
 
     dados = {"gerado_em": datetime.now(timezone.utc).isoformat(), **dados}
+    db.marcar_exportacao_dados(account[0])
     if posthog.posthog_client is not None:
         posthog.posthog_client.capture("account_data_exported")
     filename = f"three-health-meus-dados-{datetime.now(timezone.utc):%Y%m%d}.json"
@@ -76,6 +84,16 @@ def excluir_conta():
 
     if request.form.get("confirmacao", "").strip().upper() != DELETE_CONFIRMATION:
         flash(f"Para confirmar, digite {DELETE_CONFIRMATION} no campo indicado.", "error")
+        return redirect(url_for("account.conta"))
+
+    # Os prontuários dos pacientes são apagados junto com a conta. Sem uma cópia
+    # baixada que cubra a última alteração, a exclusão exige ciência explícita.
+    if not _prontuario_backup(cliente_id)["copia_em_dia"] and request.form.get("ciente_prontuarios") != "accepted":
+        flash(
+            "Você não baixou a cópia mais recente dos prontuários dos seus pacientes. "
+            "Baixe seus dados ou confirme que entende que os prontuários serão apagados sem cópia.",
+            "error",
+        )
         return redirect(url_for("account.conta"))
 
     senha_hash = db.buscar_senha_hash_cliente(email)

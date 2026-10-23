@@ -647,3 +647,70 @@
         align-items: flex-start;
     }
 }
+
+/* ===== Achados marcados nas imagens (laudo-marcacoes.js) ===== */
+.findings-block {
+    margin-top: 1rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.9rem;
+}
+
+.findings-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.findings-head h3 { margin: 0; font-size: 0.98rem; }
+
+.findings-key {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 0.65rem;
+}
+
+.findings-key span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.findings-key i { width: 12px; height: 12px; border-radius: 50%; border: 3px solid; display: inline-block; }
+
+.findings-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.55rem; }
+
+.finding {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.6rem;
+    align-items: start;
+    font-size: 0.86rem;
+}
+
+.finding-num {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    color: #fff;
+    font-weight: 800;
+    font-size: 0.78rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.finding-moderado .finding-num { color: #1f2937; }
+
+.finding-level {
+    display: inline-block;
+    margin-left: 0.4rem;
+    border: 1.5px solid;
+    border-radius: 999px;
+    padding: 0 0.45rem;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: var(--text-muted);
+}
+
+.finding-local { margin: 0.15rem 0 0; color: var(--text-muted); }
+.findings-empty, .findings-note { font-size: 0.8rem; color: var(--text-muted); margin: 0.4rem 0 0; }

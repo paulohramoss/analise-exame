@@ -1,9 +1,10 @@
 """Formatação para templates, leitura de formulários e mensagens ao usuário."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from flask import request
 
+from core import annotations
 from core.analyzer import pretty_model_name
 from web import config, security
 
@@ -111,6 +112,18 @@ def format_datetime_br(value) -> str:
         return str(value)
 
 
+def format_date_br(value) -> str:
+    """Data (date ou "AAAA-MM-DD…") como DD/MM/AAAA."""
+    if not value:
+        return ""
+    if isinstance(value, str):
+        try:
+            value = date.fromisoformat(value[:10])
+        except ValueError:
+            return value
+    return value.strftime("%d/%m/%Y")
+
+
 # ── Resultado da análise ──────────────────────────────────────────────────────
 
 def build_consensus_info(model_used: str = "", analysis: str = "") -> dict:
@@ -162,6 +175,7 @@ def result_view(result: dict) -> dict:
         "references_used": result["references_used"],
         "model_used": result["model_used"],
         "consensus": build_consensus_info(result["model_used"], result["analysis"]),
+        "annotations": annotations.sanitize_stored(result.get("annotations"), result.get("num_images")),
     }
 
 

@@ -21,6 +21,7 @@ from google import genai
 from google.genai import types
 from PIL import Image, ImageOps
 
+from core import annotations
 from core.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,18 @@ _CLAUDE_SYNTHESIS_MAX_TOKENS = int(os.environ.get("CLAUDE_SYNTHESIS_MAX_TOKENS",
 # Tempo mínimo que precisa restar no orçamento para tentar a síntese de consenso.
 _SYNTHESIS_RESERVE_SECONDS = float(os.environ.get("SYNTHESIS_RESERVE_SECONDS", "12"))
 _SYNTHESIS_INPUT_MAX_CHARS = int(os.environ.get("SYNTHESIS_INPUT_MAX_CHARS", "6000"))
+# Marcação dos achados nas imagens (core/annotations.py): chamada extra depois do
+# laudo, com prazo próprio — fora do ANALYSIS_BUDGET_SECONDS, para não roubar
+# tempo do laudo. Se falhar ou estourar o prazo, o laudo sai sem marcações.
+_ANNOTATIONS_ENABLED = os.environ.get("ANNOTATIONS_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+_ANNOTATION_TIMEOUT_SECONDS = float(os.environ.get("ANNOTATION_TIMEOUT_SECONDS", "25"))
+_ANNOTATION_MAX_TOKENS = int(os.environ.get("ANNOTATION_MAX_TOKENS", "2048"))
+# Modelo da marcação (padrão: o mesmo do laudo). Os modelos "pro" costumam
+# localizar melhor, ao custo de mais tempo e preço.
+_ANNOTATION_MODEL = os.environ.get("ANNOTATION_MODEL", "").strip()
+# Segunda passada: cada achado é recortado, ampliado e localizado de novo.
+_ANNOTATION_REFINE = os.environ.get("ANNOTATION_REFINE", "true").strip().lower() in {"1", "true", "yes", "on"}
+_REFINE_MIN_EDGE_PX = 768
 _INCLUDE_REFERENCE_PDF = os.environ.get("INCLUDE_REFERENCE_PDF", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 # Reserva de tempo exigida antes de gastar uma chamada extra na detecção visual
@@ -284,6 +297,7 @@ def _generate_with_retry(
     ai_session_id: str | None = None,
     ai_trace_id: str | None = None,
     posthog_distinct_id: str | None = None,
+    response_mime_type: str | None = None,
 ) -> object:
     """Chama generate_content com retry exponencial e fallback de modelos.
 
@@ -308,6 +322,7 @@ def _generate_with_retry(
                         max_output_tokens=max_output_tokens,
                         temperature=0.1,
                         thinking_config=types.ThinkingConfig(thinking_budget=_GEMINI_THINKING_BUDGET),
+                        response_mime_type=response_mime_type,
                         http_options=types.HttpOptions(timeout=int(_remaining_seconds(deadline, _GEMINI_HTTP_TIMEOUT_MS / 1000) * 1000)),
                     ),
                     **_posthog_generation_kwargs(ai_session_id, ai_trace_id, posthog_distinct_id),
@@ -1195,6 +1210,158 @@ def _produce_final_analysis(
     return final_analysis, model_used, usage
 
 
+def _exam_images_with_labels(exam_images: list[tuple[bytes, str]]) -> tuple[list, list]:
+    """Imagens do exame numeradas, nos formatos do Gemini e do Claude."""
+    gemini_parts, claude_content = [], []
+    for i, (img_bytes, img_mime) in enumerate(exam_images, 1):
+        label = f"Imagem {i} do exame:"
+        gemini_parts += [types.Part.from_text(text=label), types.Part.from_bytes(data=img_bytes, mime_type=img_mime)]
+        claude_content += [
+            {"type": "text", "text": label},
+            {"type": "image", "source": {
+                "type": "base64", "media_type": img_mime,
+                "data": base64.standard_b64encode(img_bytes).decode("utf-8"),
+            }},
+        ]
+    return gemini_parts, claude_content
+
+
+def _zoomed_crop(image_bytes: bytes, window: list[int]) -> tuple[bytes, str] | None:
+    """Recorte (janela 0-1000) da imagem, ampliado até ~_REFINE_MIN_EDGE_PX no lado maior."""
+    try:
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(image_bytes)))
+        width, height = img.size
+        y0, x0, y1, x1 = window
+        crop = img.crop((x0 * width // 1000, y0 * height // 1000, x1 * width // 1000, y1 * height // 1000))
+        if min(crop.size) < 8:
+            return None
+        scale = min(3.0, _REFINE_MIN_EDGE_PX / max(crop.size))
+        if scale > 1:
+            crop = crop.resize((round(crop.width * scale), round(crop.height * scale)), Image.Resampling.LANCZOS)
+        if crop.mode not in {"L", "RGB"}:
+            crop = crop.convert("RGB")
+        buffer = io.BytesIO()
+        crop.save(buffer, format="PNG")
+        return buffer.getvalue(), "image/png"
+    except Exception:
+        logger.debug("Recorte para refinamento falhou.", exc_info=True)
+        return None
+
+
+def _refine_findings(
+    gemini_client: genai.Client,
+    model_name: str,
+    exam_images: list[tuple[bytes, str]],
+    marcacoes: list[dict],
+    deadline: float,
+    ai_session_id: str | None = None,
+    ai_trace_id: str | None = None,
+    posthog_distinct_id: str | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Refina cada marcação vendo só um recorte ampliado ao redor dela (em paralelo).
+
+    Uma marcação cujo refinamento falha ou não ajuda fica com a estimativa da
+    primeira passada. Retorna (marcações, uso_de_tokens).
+    """
+    def _one(marcacao: dict) -> tuple[list[int], dict | None]:
+        window = annotations.crop_window(marcacao["box_2d"])
+        crop = _zoomed_crop(exam_images[marcacao["imagem"] - 1][0], window)
+        if crop is None:
+            return marcacao["box_2d"], None
+        response = _generate_with_retry(
+            gemini_client, model_name,
+            [types.Part.from_bytes(data=crop[0], mime_type=crop[1]),
+             types.Part.from_text(text=annotations.build_refinement_prompt(marcacao["estrutura"], marcacao["local"]))],
+            max_output_tokens=256, deadline=deadline,
+            ai_session_id=ai_session_id, ai_trace_id=ai_trace_id, posthog_distinct_id=posthog_distinct_id,
+            response_mime_type="application/json",
+        )
+        local_box = annotations.parse_refinement(response.text)
+        return annotations.refined_box(window, local_box, marcacao["box_2d"]), _extract_gemini_usage(model_name, response)
+
+    usage: list[dict] = []
+    refined = [dict(m) for m in marcacoes]
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(marcacoes)) or 1)
+    try:
+        futures = {executor.submit(_one, m): i for i, m in enumerate(marcacoes)}
+        done, _ = concurrent.futures.wait(futures, timeout=_remaining_seconds(deadline, _ANNOTATION_TIMEOUT_SECONDS))
+        for future in done:
+            try:
+                box, item = future.result()
+            except Exception:
+                logger.debug("Refinamento de uma marcação falhou.", exc_info=True)
+                continue
+            refined[futures[future]]["box_2d"] = box
+            if item:
+                usage.append(item)
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+    return refined, usage
+
+
+def _locate_findings(
+    gemini_client: genai.Client | None,
+    model_name: str,
+    anthropic_api_key: str,
+    exam_images: list[tuple[bytes, str]],
+    analysis: str,
+    posthog_client=None,
+    ai_session_id: str | None = None,
+    ai_trace_id: str | None = None,
+    posthog_distinct_id: str | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Marca os achados do laudo nas imagens. Retorna (marcações, lista de uso de tokens).
+
+    Gemini primeiro (é treinado para devolver caixas box_2d); sem ele, Claude.
+    Com Gemini, cada marcação passa ainda por um refinamento num recorte
+    ampliado (_refine_findings). Qualquer falha devolve as marcações que deu
+    para obter (ou []) — o laudo nunca depende delas.
+    """
+    prompt = annotations.build_localization_prompt(analysis, len(exam_images))
+    gemini_parts, claude_content = _exam_images_with_labels(exam_images)
+    deadline = time.monotonic() + _ANNOTATION_TIMEOUT_SECONDS
+
+    if gemini_client is not None:
+        locate_model = _ANNOTATION_MODEL or model_name
+        try:
+            response = _generate_with_retry(
+                gemini_client, locate_model, gemini_parts + [types.Part.from_text(text=prompt)],
+                max_output_tokens=_ANNOTATION_MAX_TOKENS, deadline=deadline,
+                ai_session_id=ai_session_id, ai_trace_id=ai_trace_id, posthog_distinct_id=posthog_distinct_id,
+                response_mime_type="application/json",
+            )
+            marcacoes = annotations.parse_localization(response.text, len(exam_images))
+            usage = [u for u in [_extract_gemini_usage(locate_model, response)] if u]
+            if _ANNOTATION_REFINE and marcacoes and not _deadline_expired(deadline, reserve_seconds=4):
+                marcacoes, refine_usage = _refine_findings(
+                    gemini_client, locate_model, exam_images, marcacoes, deadline,
+                    ai_session_id, ai_trace_id, posthog_distinct_id,
+                )
+                usage += refine_usage
+            return marcacoes, usage
+        except Exception:
+            logger.warning("Marcação dos achados (Gemini) falhou.", exc_info=True)
+            if not anthropic_api_key:
+                return [], []
+
+    if not anthropic_api_key or _deadline_expired(deadline, reserve_seconds=5):
+        return [], []
+    try:
+        client = _make_anthropic_client(anthropic_api_key, _remaining_seconds(deadline, 20), posthog_client)
+        message = client.messages.create(
+            model=_CLAUDE_MODEL,
+            max_tokens=_ANNOTATION_MAX_TOKENS,
+            messages=[{"role": "user", "content": claude_content + [{"type": "text", "text": prompt}]}],
+            timeout=_remaining_seconds(deadline, 20),
+            **_posthog_generation_kwargs(ai_session_id, ai_trace_id, posthog_distinct_id),
+        )
+        usage = _extract_claude_usage(_CLAUDE_MODEL, message)
+        return annotations.parse_localization(message.content[0].text, len(exam_images)), [usage] if usage else []
+    except Exception:
+        logger.warning("Marcação dos achados (Claude) falhou.", exc_info=True)
+        return [], []
+
+
 def analyze_exam_from_bytes(
     exam_images_data: list[tuple[bytes, str]] | tuple[bytes, str],
     exam_filename: str,
@@ -1305,10 +1472,20 @@ def analyze_exam_from_bytes(
         posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
     )
 
+    marcacoes: list[dict] = []
+    if _ANNOTATIONS_ENABLED:
+        _notify(on_progress, "marcando_achados")
+        marcacoes, annotation_usage = _locate_findings(
+            gemini_client, model_name, anthropic_api_key, exam_images, final_analysis,
+            posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
+        )
+        usage.extend(annotation_usage)
+
     result = {
         "success": True,
         "exam_type": exam_type,
         "analysis": final_analysis,
+        "annotations": marcacoes,
         "references_used": refs_used,
         "model_used": model_used,
         "num_images": len(exam_images),

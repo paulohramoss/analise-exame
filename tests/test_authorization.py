@@ -100,6 +100,9 @@ def test_account_export_and_delete_use_own_client_id(client, fake_db, monkeypatc
     monkeypatch.setattr(db, "exportar_dados_cliente", exportar)
     monkeypatch.setattr(db, "excluir_dados_cliente", excluir)
     monkeypatch.setattr(db, "buscar_senha_hash_cliente", lambda email: generate_password_hash("senha-a"))
+    monkeypatch.setattr(db, "marcar_exportacao_dados", MagicMock())
+    resumo = MagicMock(return_value={"pacientes": 0, "exportado_em": None, "copia_em_dia": True})
+    monkeypatch.setattr(db, "resumo_backup_prontuarios", resumo)
     _login_as(client, "a@example.com")
 
     client.get("/conta/dados.json")
@@ -107,6 +110,8 @@ def test_account_export_and_delete_use_own_client_id(client, fake_db, monkeypatc
 
     exportar.assert_called_once_with("cliente-a")
     excluir.assert_called_once_with("cliente-a")
+    db.marcar_exportacao_dados.assert_called_once_with("cliente-a")
+    assert all(call.args == ("cliente-a",) for call in resumo.call_args_list)
 
 
 def test_admin_sees_every_report(client, fake_db):

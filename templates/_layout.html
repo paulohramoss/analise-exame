@@ -34,8 +34,9 @@
 {%- endmacro %}
 
 {# Navegação de quem está logado: mesma ordem e destaque em todas as páginas.
-   current: "analise" | "historico" | "dashboard" | "conta" | "" #}
+   current: "analise" | "pacientes" | "historico" | "dashboard" | "conta" | "" #}
 {% macro app_nav(current="") -%}
+<a href="/pacientes" class="btn-secondary{{ ' is-current' if current == 'pacientes' }}"{% if current == 'pacientes' %} aria-current="page"{% endif %}>Pacientes</a>
 <a href="/laudos" class="btn-secondary{{ ' is-current' if current == 'historico' }}"{% if current == 'historico' %} aria-current="page"{% endif %}>Histórico</a>
 <a href="/clinica/dashboard" class="btn-secondary{{ ' is-current' if current == 'dashboard' }}"{% if current == 'dashboard' %} aria-current="page"{% endif %}>Dashboard</a>
 {% if current != 'analise' %}<a href="/" class="btn-primary">Nova análise</a>{% endif %}
@@ -84,6 +85,8 @@
     "download": '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
     "chevron-down": '<path d="m6 9 6 6 6-6"/>',
     "activity": '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+    "users": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    "plus": '<path d="M5 12h14"/><path d="M12 5v14"/>',
 } %}
 
 {% macro icon(name, size=18, cls="") -%}

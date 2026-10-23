@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="{{ static_url('style.css') }}">
     <script src="{{ static_url('laudo-ui.js') }}"></script>
     <script src="{{ static_url('laudo-pdf.js') }}" defer></script>
+    <script src="{{ static_url('laudo-marcacoes.js') }}"></script>
     <style>
         .exam-images-gallery {
             display: flex;
@@ -275,6 +276,13 @@
         {% endwith %}
 
         <!-- Cabeçalho profissional da análise -->
+        {% if paciente_id and analysis_id %}
+        <div class="alert alert-success">
+            {{ layout.icon('check-circle') }}
+            Laudo salvo no prontuário do paciente. <a href="{{ url_for('pacientes.detalhe', paciente_id=paciente_id) }}">Abrir prontuário</a>
+        </div>
+        {% endif %}
+
         <div class="result-meta card">
             <div class="professional-summary">
                 <div>
@@ -325,6 +333,7 @@
                     </div>
                     {% endfor %}
                 </div>
+                {% include "_achados_marcados.html" %}
             </div>
 
             <!-- Laudo da análise -->
@@ -382,11 +391,16 @@
     <script type="application/json" id="data-responsible">{{ responsible|tojson }}</script>
     <script type="application/json" id="data-consensus">{{ consensus|default({})|tojson }}</script>
     <script type="application/json" id="data-exam-meta">{{ {"exam_type": exam_type, "references_used": references_used, "analysis_id": analysis_id}|tojson }}</script>
+    <script type="application/json" id="data-annotations">{{ annotations|default([])|tojson }}</script>
     <script type="application/json" id="data-analysis-id">{{ (analysis_id or '')|tojson }}</script>
     <script>
 
         const reportContent = document.getElementById('report-content');
         renderLaudoInto(reportContent, reportContent.textContent);
+
+        const examImages = document.querySelectorAll('.exam-images-gallery img');
+        initExamFindings(examImages, JSON.parse(document.getElementById('data-annotations').textContent || '[]'),
+            examImages.length);
 
         const responsible = JSON.parse(document.getElementById('data-responsible').textContent || 'null');
 
@@ -403,6 +417,7 @@
             const consensus = JSON.parse(document.getElementById('data-consensus').textContent || 'null');
             const images = Array.from(document.querySelectorAll('.exam-images-gallery img'))
                 .map((img, i) => ({ src: img.src, label: `Imagem ${i + 1}` }));
+            const findings = JSON.parse(document.getElementById('data-annotations').textContent || '[]');
 
             openLaudoPdf({
                 reportHTML: reportContent.innerHTML,
@@ -412,6 +427,7 @@
                 meta: laudoPdfMeta({ ...examMeta, num_images: images.length }, consensus),
                 clinicalInfo: userDesc,
                 images,
+                findings,
             });
         }
 

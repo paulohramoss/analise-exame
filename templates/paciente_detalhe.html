@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prontuário — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <link rel="stylesheet" href="{{ static_url('prontuario.css') }}">
+</head>
+<body>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("pacientes") }}
+    {% endcall %}
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    {{ layout.icon('x-circle' if category == 'error' else 'check-circle') }}
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">{{ paciente.nome or 'Nome indisponível' }}</h1>
+                <p class="page-subtitle">
+                    CPF {{ paciente.cpf }}
+                    {% if paciente.data_nascimento %} · Nasc. {{ paciente.data_nascimento|date_br }}{% if idade is not none %} ({{ idade }} anos){% endif %}{% endif %}
+                    {% if paciente.sexo %} · {{ paciente.sexo }}{% endif %}
+                </p>
+                {% if paciente.observacoes %}<p class="page-subtitle">{{ paciente.observacoes }}</p>{% endif %}
+            </div>
+            <div class="pt-actions">
+                <a class="btn-primary" href="{{ url_for('analysis.index', paciente=paciente.id) }}">{{ layout.icon("scan", 18, "btn-icon") }} Nova análise</a>
+                <a class="btn-secondary" href="{{ url_for('pacientes.editar', paciente_id=paciente.id) }}">Editar cadastro</a>
+            </div>
+        </div>
+
+        <div class="pt-columns">
+            <div>
+                <section class="card" id="evolucao">
+                    <h2 class="pt-section-title">{{ layout.icon("activity", 20) }} Evolução</h2>
+                    {% if grafico %}
+                    <div class="chart-wrap">
+                        <svg viewBox="0 0 {{ grafico.width }} {{ grafico.height }}" role="img"
+                             aria-label="Gráfico da dor (EVA) e do escore funcional ao longo do tempo">
+                            {% for linha in grafico.grid %}
+                            <line x1="{{ grafico.left }}" x2="{{ grafico.right }}" y1="{{ linha.y }}" y2="{{ linha.y }}" stroke="#e2e8f0" stroke-width="1"/>
+                            <text x="{{ grafico.left - 6 }}" y="{{ linha.y + 4 }}" text-anchor="end" font-size="11" fill="#dc2626">{{ linha.dor }}</text>
+                            <text x="{{ grafico.right + 6 }}" y="{{ linha.y + 4 }}" font-size="11" fill="#2563eb">{{ linha.funcao }}</text>
+                            {% endfor %}
+                            {% for m in grafico.exames %}
+                            <line x1="{{ m.x }}" x2="{{ m.x }}" y1="{{ grafico.top }}" y2="{{ grafico.bottom }}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="2 3"><title>Exame {{ m.label }} — {{ m.data|date_br }}</title></line>
+                            {% endfor %}
+                            {% for m in grafico.tratamentos %}
+                            <line x1="{{ m.x }}" x2="{{ m.x }}" y1="{{ grafico.top }}" y2="{{ grafico.bottom }}" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="5 4"><title>Início: {{ m.label }} — {{ m.data|date_br }}</title></line>
+                            {% endfor %}
+                            {% if grafico.dor|length > 1 %}<polyline points="{{ grafico.dor_path }}" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linejoin="round"/>{% endif %}
+                            {% for p in grafico.dor %}
+                            <circle cx="{{ p.x }}" cy="{{ p.y }}" r="4" fill="#dc2626"><title>{{ p.data|date_br }} — dor {{ p.valor }}/10</title></circle>
+                            {% endfor %}
+                            {% if grafico.funcao|length > 1 %}<polyline points="{{ grafico.funcao_path }}" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round"/>{% endif %}
+                            {% for p in grafico.funcao %}
+                            <rect x="{{ p.x - 4 }}" y="{{ p.y - 4 }}" width="8" height="8" fill="#2563eb"><title>{{ p.data|date_br }} — função {{ p.valor }}/100</title></rect>
+                            {% endfor %}
+                            <text x="{{ grafico.left }}" y="{{ grafico.height - 8 }}" font-size="11" fill="#64748b">{{ grafico.inicio|date_br }}</text>
+                            <text x="{{ grafico.right }}" y="{{ grafico.height - 8 }}" font-size="11" fill="#64748b" text-anchor="end">{{ grafico.fim|date_br }}</text>
+                        </svg>
+                    </div>
+                    <div class="chart-legend">
+                        <span><i class="legend-swatch dor"></i> Dor (EVA 0–10, eixo esquerdo)</span>
+                        <span><i class="legend-swatch funcao"></i> Função (0–100, eixo direito)</span>
+                        <span><i class="legend-swatch tratamento"></i> Início de tratamento</span>
+                        <span><i class="legend-swatch exame"></i> Exame</span>
+                    </div>
+                    {% else %}
+                    <p class="card-description">Registre a dor e o escore funcional nas consultas para acompanhar a resposta aos tratamentos em um gráfico.</p>
+                    {% endif %}
+                </section>
+
+                <section class="card">
+                    <h2 class="pt-section-title">{{ layout.icon("clock", 20) }} Linha do tempo</h2>
+                    {% if linha_do_tempo %}
+                    <ol class="timeline">
+                        {% for ev in linha_do_tempo %}
+                        <li class="ev-{{ ev.tipo }}">
+                            <div class="timeline-date">{{ ev.data|date_br }}</div>
+                            <p class="timeline-title">
+                                {% if ev.analise_id %}<a href="{{ url_for('laudos.laudo_detalhe', analise_id=ev.analise_id) }}">{{ ev.titulo }}</a>{% else %}{{ ev.titulo }}{% endif %}
+                            </p>
+                            {% if ev.detalhe %}<p class="timeline-detail">{{ ev.detalhe }}</p>{% endif %}
+                        </li>
+                        {% endfor %}
+                    </ol>
+                    {% else %}
+                    <p class="card-description">Ainda não há exames, tratamentos ou evoluções. Comece por uma <a href="{{ url_for('analysis.index', paciente=paciente.id) }}">nova análise</a> ou registre um tratamento.</p>
+                    {% endif %}
+                </section>
+            </div>
+
+            <div>
+                <section class="card">
+                    <h2 class="pt-section-title">{{ layout.icon("activity", 20) }} Registrar evolução</h2>
+                    <form class="pt-form" method="POST" action="{{ url_for('pacientes.nova_evolucao', paciente_id=paciente.id) }}">
+                        <div class="pt-grid">
+                            <div>
+                                <label for="ev-data">Data</label>
+                                <input type="date" id="ev-data" name="data" required>
+                            </div>
+                            <div>
+                                <label for="ev-dor">Dor (EVA 0–10)</label>
+                                <input type="number" id="ev-dor" name="dor_eva" min="0" max="10" step="1">
+                            </div>
+                            <div>
+                                <label for="ev-funcao">Função (0–100)</label>
+                                <input type="number" id="ev-funcao" name="funcao" min="0" max="100" step="1">
+                            </div>
+                        </div>
+                        <div class="pt-field">
+                            <label for="ev-nota">Nota da consulta</label>
+                            <textarea id="ev-nota" name="nota" rows="3" maxlength="3000" placeholder="Queixa atual, exame físico, resposta ao tratamento, conduta..."></textarea>
+                            <small>Função: use o escore do seu protocolo (KOOS, Lysholm, Oswestry invertido, DASH invertido…) em escala 0–100, onde 100 é sem limitação.</small>
+                        </div>
+                        <button type="submit" class="btn-primary">Salvar evolução</button>
+                    </form>
+                </section>
+
+                <section class="card" id="tratamentos">
+                    <h2 class="pt-section-title">{{ layout.icon("check-circle", 20) }} Tratamentos</h2>
+                    {% for t in tratamentos|reverse %}
+                    <div class="treatment-item">
+                        <strong>{{ t.tipo }}</strong>{% if not t.data_fim %}<span class="badge-active">Em andamento</span>{% endif %}
+                        <div class="patient-meta">
+                            <span>{{ t.data_inicio|date_br }}{% if t.data_fim %} a {{ t.data_fim|date_br }}{% endif %}</span>
+                            {% if t.regiao %}<span>{{ t.regiao }}</span>{% endif %}
+                        </div>
+                        {% if t.descricao %}<p class="timeline-detail">{{ t.descricao }}</p>{% endif %}
+                        {% if not t.data_fim %}
+                        <form class="pt-form" method="POST" action="{{ url_for('pacientes.encerrar_tratamento', paciente_id=paciente.id, tratamento_id=t.id) }}">
+                            <input type="date" name="data_fim" required aria-label="Data de término">
+                            <button type="submit" class="btn-secondary btn-small">Encerrar</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+
+                    <form class="pt-form" method="POST" action="{{ url_for('pacientes.novo_tratamento', paciente_id=paciente.id) }}">
+                        <div class="pt-grid">
+                            <div>
+                                <label for="tr-tipo">Tipo</label>
+                                <select id="tr-tipo" name="tipo" required>
+                                    <option value="">— Selecione —</option>
+                                    {% for tipo in tipos_tratamento %}<option value="{{ tipo }}">{{ tipo }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="tr-regiao">Região</label>
+                                <input type="text" id="tr-regiao" name="regiao" maxlength="120" placeholder="Ex: joelho direito">
+                            </div>
+                        </div>
+                        <div class="pt-grid">
+                            <div>
+                                <label for="tr-inicio">Início</label>
+                                <input type="date" id="tr-inicio" name="data_inicio" required>
+                            </div>
+                            <div>
+                                <label for="tr-fim">Término <small>(se já terminou)</small></label>
+                                <input type="date" id="tr-fim" name="data_fim">
+                            </div>
+                        </div>
+                        <div class="pt-field">
+                            <label for="tr-descricao">Descrição</label>
+                            <textarea id="tr-descricao" name="descricao" rows="2" maxlength="2000" placeholder="Protocolo, frequência, medicação e dose, técnica cirúrgica..."></textarea>
+                        </div>
+                        <button type="submit" class="btn-secondary">Adicionar tratamento</button>
+                    </form>
+                </section>
+
+                <section class="card danger-zone">
+                    <h2>Excluir paciente</h2>
+                    <p class="card-description">Apaga o cadastro, os tratamentos e as evoluções. Os laudos continuam no histórico, sem o vínculo com o paciente.</p>
+                    <form class="pt-form" method="POST" action="{{ url_for('pacientes.excluir', paciente_id=paciente.id) }}"
+                          onsubmit="return confirm('Excluir este paciente e todo o prontuário? Esta ação não pode ser desfeita.');">
+                        <div class="pt-field">
+                            <label for="confirmacao">Digite EXCLUIR para confirmar</label>
+                            <input type="text" id="confirmacao" name="confirmacao" required autocomplete="off" placeholder="EXCLUIR">
+                        </div>
+                        <button type="submit" class="btn-danger">Excluir paciente</button>
+                    </form>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    {{ layout.site_footer() }}
+</body>
+</html>

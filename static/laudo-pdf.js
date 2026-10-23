@@ -9,7 +9,8 @@
  *     responsible: { name, role, register, organization },  // opcional
  *     meta: [{ label, value }],         // opcional — região, referências, etc.
  *     clinicalInfo: 'Paciente: 38 anos | Lateralidade: Direito',  // opcional
- *     images: [{ src, label }],         // opcional
+ *     images: [{ src, label }],         // opcional (já com os achados marcados)
+ *     findings: [{ numero, imagem, estrutura, local, certeza }],  // opcional
  *   });
  *
  * Todo texto vindo do usuário é escapado; apenas reportHTML entra como HTML.
@@ -59,6 +60,12 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
 .images { display: flex; flex-wrap: wrap; gap: 10px; }
 .images figure { flex: 0 0 auto; }
 .images img { display: block; max-width: 100%; max-height: 240px; object-fit: contain; border-radius: 6px; border: 1px solid var(--border); background: #0a0a0a; }
+.findings { list-style: none; display: grid; gap: 6px; }
+.findings li { display: flex; gap: 8px; align-items: flex-start; }
+.f-num { flex: 0 0 18px; height: 18px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.f-level { border: 1.5px solid; border-radius: 999px; padding: 0 6px; font-size: 9.5px; font-weight: 800; color: var(--muted); }
+.f-local { color: var(--muted); font-size: 11.5px; }
+.f-note { margin-top: 8px; font-size: 10.5px; color: var(--muted); }
 .images figcaption { text-align: center; font-size: 10.5px; color: var(--muted); margin-top: 4px; }
 
 .report { font-size: 12.5px; line-height: 1.7; }
@@ -117,6 +124,12 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
         return `<ul class="clinical-list">${items.join('')}</ul>`;
     }
 
+    const FINDING_LEVELS = {
+        forte: { color: '#16a34a', label: 'Forte grau de certeza' },
+        moderado: { color: '#eab308', label: 'Moderado grau de certeza' },
+        baixo: { color: '#dc2626', label: 'Baixo grau de certeza' },
+    };
+
     function buildLaudoHTML(opts) {
         const responsible = opts.responsible || {};
         const responsibleName = responsible.name || 'Responsável não informado';
@@ -141,6 +154,14 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
             const figures = images.map((img, i) => `<figure><img src="${esc(img.src)}" alt="Imagem ${i + 1} do exame">${
                 images.length > 1 ? `<figcaption>${esc(img.label || `Imagem ${i + 1}`)}</figcaption>` : ''}</figure>`).join('');
             sections.push([images.length === 1 ? 'Imagem do exame' : 'Imagens do exame', `<div class="images">${figures}</div>`]);
+        }
+        const findings = (opts.findings || []).filter(f => f && FINDING_LEVELS[f.certeza]);
+        if (findings.length) {
+            const rows = findings.map(f => `<li><span class="f-num" style="background:${FINDING_LEVELS[f.certeza].color}">${esc(f.numero)}</span>
+                <div><strong>${esc(f.estrutura)}</strong> <span class="f-level" style="border-color:${FINDING_LEVELS[f.certeza].color}">${esc(FINDING_LEVELS[f.certeza].label)}</span>
+                <div class="f-local">${images.length > 1 ? `Imagem ${esc(f.imagem)} · ` : ''}${esc(f.local)}</div></div></li>`).join('');
+            sections.push(['Achados marcados nas imagens', `<ol class="findings">${rows}</ol>
+                <p class="f-note">Verde: forte grau de certeza · Amarelo: moderado · Vermelho: baixo. A posição das marcações é estimada pela IA e aproximada.</p>`]);
         }
         sections.push(['Análise por inteligência artificial', `<div class="report">${opts.reportHTML || ''}</div>`]);
 
