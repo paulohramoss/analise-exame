@@ -38,6 +38,9 @@ os.environ.setdefault("ACCESS_LOG_ASYNC", "0")
 # testes que simulam o modelo não a esperam. Ela tem testes próprios
 # (test_annotations.py), que a ligam explicitamente.
 os.environ.setdefault("ANNOTATIONS_ENABLED", "0")
+# Referências do PubMed: chamada de rede ao NCBI depois do laudo. Desligada por
+# padrão; test_pubmed.py liga e simula as respostas.
+os.environ.setdefault("PUBMED_REFERENCES_ENABLED", "0")
 
 import fakeredis
 import pytest

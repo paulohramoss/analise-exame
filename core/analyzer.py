@@ -21,7 +21,7 @@ from google import genai
 from google.genai import types
 from PIL import Image, ImageOps
 
-from core import annotations
+from core import annotations, pubmed
 from core.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -467,6 +467,13 @@ Você recebeu (nesta ordem):
 2. Imagem(ns) de referência normal — padrão de comparação
 3. Caso clínico validado por especialista (se fornecido) — exemplo de calibração de um laudo já revisado por profissional para o mesmo tipo de exame; NÃO é um achado deste paciente, use apenas como referência de padrão/rigor
 4. Exame do paciente (imagem ou imagens finais) — objeto da análise
+
+**Páginas de documento:** se alguma imagem do exame for uma página de documento (laudo,
+relatório ou pedido em texto, por exemplo vinda de um PDF), não a analise como imagem
+radiológica: use o conteúdo dela como histórico clínico ou laudo prévio, cite-o como tal na
+correlação clínica e baseie os achados nas imagens de exame propriamente ditas. Se só houver
+páginas de documento, deixe isso explícito em "Qualidade técnica" e restrinja a análise ao que
+o documento descreve, sem afirmar achados que não possam ser vistos.
 
 ---
 
@@ -1472,6 +1479,14 @@ def analyze_exam_from_bytes(
         posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
     )
 
+    # Referências do PubMed: só termos do dicionário saem para o NCBI (nada do
+    # paciente). Roda em paralelo com a marcação das imagens.
+    references_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    references_future = references_executor.submit(
+        pubmed.find_references, final_analysis, exam_type, user_description,
+    )
+    references_executor.shutdown(wait=False)
+
     marcacoes: list[dict] = []
     if _ANNOTATIONS_ENABLED:
         _notify(on_progress, "marcando_achados")
@@ -1481,11 +1496,21 @@ def analyze_exam_from_bytes(
         )
         usage.extend(annotation_usage)
 
+    try:
+        references = references_future.result(timeout=pubmed.timeout_seconds() + 2)
+    except Exception:
+        logger.warning("Referências do PubMed indisponíveis.", exc_info=True)
+        references = []
+    references_section = pubmed.format_section(references)
+    if references_section:
+        final_analysis = f"{final_analysis.rstrip()}\n\n{references_section}"
+
     result = {
         "success": True,
         "exam_type": exam_type,
         "analysis": final_analysis,
         "annotations": marcacoes,
+        "references": references,
         "references_used": refs_used,
         "model_used": model_used,
         "num_images": len(exam_images),

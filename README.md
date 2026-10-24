@@ -15,9 +15,11 @@ O **MedAI Analyzer** (plataforma Three Health) analisa imagens de exames ortopé
 ## Funcionalidades
 
 - Upload de PNG, JPG, WEBP, GIF e **DICOM** (`.dcm`, convertido e com metadados anonimizados)
+- Upload de **PDF**: cada página vira imagem para a análise (filmes exportados ou laudos anteriores) e o texto entra como contexto clínico; nome, CPF, prontuário e demais identificadores saem do texto e são tarjados de preto na imagem da página
 - Detecção da região anatômica pela descrição/nome do arquivo e, se preciso, pela própria imagem
 - Comparação com imagens de referência normais (`reference_data/<região>/`)
 - Laudo por consenso dual Gemini + Claude (ou só Gemini, sem chave Anthropic)
+- Referências científicas do PubMed ao final de cada laudo: para cada lesão encontrada, artigos sobre o diagnóstico e o tratamento (revisões sistemáticas, meta-análises e diretrizes), com PMID e DOI
 - Achados circulados dentro das imagens por grau de certeza (verde = forte, amarelo = moderado, vermelho = baixo), com a localização exata de cada estrutura alterada, na tela e no PDF
 - Planos pagos (Asaas: PIX, boleto, cartão na página do Asaas), trial gratuito embutível por iframe
 - Histórico de laudos, dashboard da clínica e validação clínica dos laudos
@@ -40,7 +42,7 @@ analise-exame/
 │   ├── routes/             # Blueprints: analysis, laudos, billing, auth
 │   ├── security.py         # Cookies/tokens assinados, sessão premium, IP do cliente
 │   ├── accounts.py         # Plano ativo e emissão da sessão
-│   ├── uploads.py          # Upload e conversão de DICOM
+│   ├── uploads.py          # Upload e conversão de DICOM e PDF
 │   ├── costs.py            # Orçamento de custo e cota do trial
 │   ├── presentation.py     # Formatação e mensagens ao usuário
 │   ├── hooks.py            # before/after request, CSRF, cabeçalhos de segurança

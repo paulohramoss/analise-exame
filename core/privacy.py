@@ -7,6 +7,7 @@ o paciente — idade, sexo, queixa e evolução bastam. Aqui removemos o que
 identifica a pessoa antes de qualquer envio ou gravação:
 
 - CPF, CNPJ, CNS (cartão SUS), RG
+- números de prontuário, atendimento, protocolo e matrícula
 - e-mail e telefone
 - data de nascimento explícita ("nasc.", "DN", "data de nascimento")
 - nome após rótulos como "paciente:", "nome:", "Sr./Sra."
@@ -34,17 +35,47 @@ _PATTERNS: list[tuple[str, re.Pattern]] = [
             re.IGNORECASE,
         ),
     ),
+    (
+        # Números de cadastro que laudos em PDF trazem no cabeçalho:
+        # "Prontuário: 123456", "Atendimento nº 98.765", "Protocolo 2026/0001".
+        "registro",
+        re.compile(
+            r"\b(?i:prontu[aá]rio|atendimento|protocolo|matr[ií]cula|carteir(?:a|inha)|"
+            r"c[oó]digo\s+do\s+paciente|n[º°o]\.?\s*(?:do\s+)?(?:exame|pedido))"
+            r"\s*(?:n[º°o]\.?)?\s*[:#\-–]?\s*\d[\d./-]{2,}"
+        ),
+    ),
     ("telefone", re.compile(r"(?:\+?55\s?)?\(?\b\d{2}\)?\s?9?\d{4}[\s-]?\d{4}\b")),
     (
         "nome",
         re.compile(
-            # "Paciente: Maria da Silva", "Nome - João Souza", "Sra. Ana Lima".
+            # "Paciente: Maria da Silva", "Nome - João Souza", "Sra. Ana Lima" e, como
+            # vem nos cabeçalhos de laudo em PDF, "PACIENTE: MARIA DA SILVA".
             # Exige palavras iniciadas em maiúscula: "paciente: 45 anos" fica intacto.
-            r"\b(?i:paciente|nome(?:\s+completo)?|sr\.?|sra\.?)\s*[:\-–]?\s*"
-            r"(?P<nome>[A-ZÀ-Ý][a-zà-ÿ]+(?:\s+(?:d[aeo]s?\s+)?[A-ZÀ-Ý][a-zà-ÿ]+)+)",
+            r"\b(?i:paciente|nome(?:\s+completo)?(?:\s+do\s+paciente)?|sr\.?|sra\.?)\s*[:\-–]?\s*"
+            r"(?P<nome>(?:[A-ZÀ-Ý][a-zà-ÿ]+|[A-ZÀ-Ý]{2,})"
+            # Nome não atravessa linha (o cabeçalho do PDF segue na linha de baixo)
+            # e tem no máximo 6 palavras.
+            r"(?:[ \t]+(?:(?:d[aeo]s?|D[AEO]S?)[ \t]+)?(?:[A-ZÀ-Ý][a-zà-ÿ]+|[A-ZÀ-Ý]{2,})){1,5})",
         ),
     ),
 ]
+
+
+def find_identifier_spans(text: str) -> list[tuple[int, int, str]]:
+    """Posições (início, fim, tipo) de cada identificador no texto original.
+
+    Usada para tarjar o identificador na imagem de uma página de PDF (ver
+    web/uploads.py): o texto da página aponta cada caractere para sua posição.
+    """
+    if not text:
+        return []
+    spans = []
+    for kind, pattern in _PATTERNS:
+        for match in pattern.finditer(text):
+            start, end = match.span("nome") if kind == "nome" else match.span()
+            spans.append((start, end, kind))
+    return sorted(spans)
 
 
 def redact_identifiers(text: str) -> tuple[str, list[str]]:

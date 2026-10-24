@@ -73,8 +73,19 @@ class _AnalysisInput:
         }
 
 
-def _save_uploads(files) -> list[dict]:
-    return [item for item in (uploads.save_upload_file(f) for f in files) if item is not None]
+def _save_uploads(files, limit: int | None = None) -> list[dict]:
+    """Salva os uploads (um PDF vira uma imagem por página) e respeita o limite de imagens."""
+    items = [item for f in files for item in uploads.save_upload(f)]
+    if limit is not None and len(items) > limit:
+        kept, dropped = items[:limit], items[limit:]
+        # O PDF original é compartilhado pelas páginas: só sai se nenhuma página dele ficou.
+        kept_originals = {str(item["original_path"]) for item in kept}
+        uploads.cleanup_upload_files([
+            {**item, "original_path": None if str(item["original_path"]) in kept_originals else item["original_path"]}
+            for item in dropped
+        ])
+        items = kept
+    return items
 
 
 def _job_owner(mode: str) -> str | None:
@@ -253,9 +264,9 @@ def analyze():
     files = uploads.files_from_request()[:uploads.max_images_for_request()]
     if not files:
         return _back("Nenhuma imagem enviada.")
-    upload_items = _save_uploads(files)
+    upload_items = _save_uploads(files, uploads.max_images_for_request())
     if not upload_items:
-        return _back(f"Formato de arquivo não suportado. Use: {', '.join(sorted(uploads.ALLOWED_EXTENSIONS))}")
+        return _back(f"Não foi possível ler o arquivo. Use: {', '.join(sorted(uploads.ALLOWED_EXTENSIONS))} (PDF protegido por senha não é aceito).")
 
     try:
         paciente_id = _selected_patient_id()
@@ -387,7 +398,7 @@ def trial_analyze():
     if not uploads.allowed_file(file.filename):
         return jsonify({"error": f"Formato não suportado. Use: {', '.join(sorted(uploads.ALLOWED_EXTENSIONS))}"}), 400
 
-    upload_items = _save_uploads([file])
+    upload_items = _save_uploads([file], limit=1)  # PDF: só a primeira página no teste gratuito
     if not upload_items:
         return jsonify({"error": "Erro ao processar o arquivo enviado."}), 400
 
@@ -489,7 +500,7 @@ def api_analyze():
     files = [f for f in files if uploads.allowed_file(f.filename)][:uploads.max_images_for_request()]
     if not files:
         return jsonify({"error": "Formato de arquivo não suportado"}), 400
-    upload_items = _save_uploads(files)
+    upload_items = _save_uploads(files, uploads.max_images_for_request())
     if not upload_items:
         return jsonify({"error": "Nenhum arquivo válido pôde ser processado"}), 400
 

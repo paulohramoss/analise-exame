@@ -62,6 +62,9 @@ def _mentions(text_norm: str, alternatives: list[str]) -> bool:
 
 
 def score_report(report: str, exam_type: str, case: dict) -> dict:
+    # A seção de referências do PubMed (core/pubmed.py) lista títulos de artigos:
+    # um achado citado ali não pode contar como achado do laudo.
+    report = re.split(r"(?m)^##\s*7\.\s*REFER", report)[0]
     sections = split_sections(report)
     report_norm = normalize(report)
     impression_norm = normalize(sections.get(4, ""))

@@ -1,4 +1,4 @@
-"""Recebimento das imagens de exame (inclui conversão de DICOM para JPEG)."""
+"""Recebimento dos arquivos de exame: imagens, DICOM e PDF (convertidos em JPEG)."""
 
 import base64
 import importlib
@@ -9,16 +9,17 @@ import uuid
 from pathlib import Path
 
 from flask import g, request
-from PIL import Image
+from PIL import Image, ImageDraw, ImageStat
 from werkzeug.utils import secure_filename
 
+from core import privacy
 from web.security import hash_sensitive_value
 
 logger = logging.getLogger(__name__)
 
 UPLOAD_FOLDER = Path(tempfile.gettempdir()) / "analise_exame_uploads"
 UPLOAD_FOLDER.mkdir(exist_ok=True)
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "dcm"}
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "dcm", "pdf"}
 MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20MB
 MAX_IMAGES_PER_ANALYSIS = 5
 # Acesso admin (/admin/entrar) é usado para testes internos com séries DICOM
@@ -168,23 +169,150 @@ def _dicom_context(upload_items: list[dict]) -> str:
     return " | ".join(parts)
 
 
+def _pdf_context(upload_items: list[dict]) -> str:
+    parts = []
+    for item in upload_items:
+        if item.get("pdf_text"):
+            parts.append(
+                f"Texto do PDF enviado ({item.get('pdf_name') or 'documento'}), já sem identificação do paciente: "
+                f"{item['pdf_text']}"
+            )
+    return " | ".join(parts)
+
+
 def description_with_dicom_context(user_description: str, upload_items: list[dict]) -> str:
-    dicom_context = _dicom_context(upload_items)
-    if not dicom_context:
+    """Descrição do usuário + contexto tirado dos arquivos (metadados DICOM, texto de PDF)."""
+    context = " | ".join(p for p in (_dicom_context(upload_items), _pdf_context(upload_items)) if p)
+    if not context:
         return user_description
     if user_description:
-        return f"{user_description} | {dicom_context}"
-    return dicom_context
+        return f"{user_description} | {context}"
+    return context
+
+
+# ── PDF ───────────────────────────────────────────────────────────────────────
+#
+# Um PDF de exame pode ser o filme (imagens de RM/RX/TC exportadas pelo
+# visualizador), o laudo de um exame anterior, ou os dois. Cada página vira uma
+# imagem para os modelos (que leem tanto a imagem quanto o texto impresso nela),
+# e o texto da camada de texto entra como contexto clínico.
+#
+# Identificação do paciente: os mesmos padrões de core/privacy.py (nome após
+# "Paciente:", CPF, prontuário, telefone…) são removidos do texto E tarjados de
+# preto na imagem da página, na posição de cada caractere. PDF escaneado (só
+# imagem, sem camada de texto) não permite localizar o texto: nesse caso a página
+# segue como está, coberta pelo aviso de não enviar dados identificáveis.
+
+PDF_MAX_PAGES = int(os.environ.get("PDF_MAX_PAGES", "20"))
+_PDF_RENDER_EDGE_PX = 1600
+_PDF_TEXT_MAX_CHARS = 4000
+_PDF_BLANK_STDDEV = 4.0
+
+
+def _pdf_redaction_boxes(textpage, text: str, page_height: float, scale: float) -> list[tuple[float, ...]]:
+    """Retângulos (em pixels da página renderizada) de cada caractere identificador."""
+    boxes = []
+    for start, end, _kind in privacy.find_identifier_spans(text):
+        for index in range(start, min(end, len(text))):
+            if text[index].isspace():
+                continue
+            left, bottom, right, top = textpage.get_charbox(index)
+            pad = 2.0 * scale
+            boxes.append((left * scale - pad, (page_height - top) * scale - pad,
+                          right * scale + pad, (page_height - bottom) * scale + pad))
+    return boxes
+
+
+def _convert_pdf(filepath: Path, original_name: str) -> list[dict]:
+    """Páginas do PDF como JPEG (sem identificadores), mais o texto do documento."""
+    try:
+        pdfium = importlib.import_module("pypdfium2")
+        document = pdfium.PdfDocument(str(filepath))
+    except Exception:
+        # Inclui PDF protegido por senha e arquivo corrompido.
+        logger.warning("PDF não pôde ser aberto (%s)", original_name, exc_info=True)
+        return []
+
+    items, texts = [], []
+    try:
+        total = len(document)
+        for number in range(min(total, PDF_MAX_PAGES)):
+            page = document[number]
+            width, height = page.get_size()
+            scale = min(4.0, _PDF_RENDER_EDGE_PX / max(width, height, 1))
+            image = page.render(scale=scale).to_pil().convert("RGB")
+            if ImageStat.Stat(image.convert("L")).stddev[0] < _PDF_BLANK_STDDEV:
+                continue  # página em branco
+
+            textpage = page.get_textpage()
+            text = textpage.get_text_range()
+            boxes = _pdf_redaction_boxes(textpage, text, height, scale) if text.strip() else []
+            if boxes:
+                draw = ImageDraw.Draw(image)
+                for box in boxes:
+                    draw.rectangle(box, fill="black")
+            if text.strip():
+                # Remove por linha (como no PDF) e só depois junta: unidas antes, o nome
+                # de uma linha "engoliria" o rótulo da linha de baixo.
+                texts.append(" ".join(privacy.redact_identifiers(text)[0].split()))
+
+            page_path = UPLOAD_FOLDER / f"{uuid.uuid4().hex}_pdf_p{number + 1}.jpg"
+            image.save(str(page_path), format="JPEG", quality=90, optimize=True)
+            items.append({
+                "filepath": page_path,
+                "display_b64": base64.b64encode(page_path.read_bytes()).decode("utf-8"),
+                "display_mime": "image/jpeg",
+                "storage_mime": "application/pdf",
+                "source": "pdf",
+                "original_name": f"{original_name} (pág. {number + 1})",
+                "original_path": filepath,
+                "dicom_metadata": {},
+                "pdf_page": number + 1,
+                "pdf_pages": total,
+                "pdf_redactions": len(boxes),
+                "pdf_has_text": bool(text.strip()),
+            })
+    except Exception:
+        logger.exception("Falha ao converter o PDF %s", original_name)
+        for item in items:
+            Path(item["filepath"]).unlink(missing_ok=True)
+        return []
+    finally:
+        document.close()
+
+    if items and texts:
+        items[0]["pdf_text"] = " ".join(texts)[:_PDF_TEXT_MAX_CHARS]
+        items[0]["pdf_name"] = original_name
+    return items
 
 
 # ── Upload ────────────────────────────────────────────────────────────────────
 
-def save_upload_file(file) -> dict | None:
-    """
-    Salva um arquivo de upload em disco.
-    Retorna metadados da imagem processada ou None se inválido.
+def save_upload(file) -> list[dict]:
+    """Salva um upload e devolve uma entrada por imagem: um PDF vira uma por página.
+
+    Lista vazia se o arquivo é inválido ou não pôde ser convertido.
     """
     if not file or file.filename == "" or not allowed_file(file.filename):
+        return []
+    if file.filename.lower().endswith(".pdf"):
+        original_name = secure_filename(file.filename)
+        filepath = UPLOAD_FOLDER / f"{uuid.uuid4().hex}_{original_name}"
+        file.save(str(filepath))
+        items = _convert_pdf(filepath, original_name)
+        if not items:
+            filepath.unlink(missing_ok=True)
+        return items
+    item = save_upload_file(file)
+    return [item] if item else []
+
+
+def save_upload_file(file) -> dict | None:
+    """
+    Salva um arquivo de imagem ou DICOM em disco (PDF: ver save_upload).
+    Retorna metadados da imagem processada ou None se inválido.
+    """
+    if not file or file.filename == "" or not allowed_file(file.filename) or file.filename.lower().endswith(".pdf"):
         return None
 
     original_name = secure_filename(file.filename)
