@@ -64,6 +64,14 @@ def checkout_pay():
     plan = config.PLANS[plan_key]
     if billing_type not in {"PIX", "BOLETO", "CREDIT_CARD"}:
         billing_type = "PIX"
+    try:
+        installments = int(request.form.get("installments", "1"))
+    except ValueError:
+        installments = 1
+    # Parcelas só no cartão e dentro do limite do plano; fora disso, à vista.
+    if billing_type != "CREDIT_CARD":
+        installments = 1
+    installments = max(1, min(installments, plan.get("max_installments", 1)))
 
     def _error(message: str, status: int):
         return jsonify({"success": False, "error": message}), status
@@ -97,6 +105,7 @@ def checkout_pay():
             description=plan["name"],
             external_reference=external_reference,
             billing_type=billing_type,
+            installment_count=installments,
         )
     except Exception as e:
         # Detalhes (status, corpo da resposta do Asaas) só no log — nunca ao usuário.
@@ -132,7 +141,7 @@ def checkout_pay():
         posthog.posthog_client.capture(
             "checkout_payment_created",
             distinct_id=str(cliente_id),
-            properties={"plan_key": plan_key, "billing_type": billing_type},
+            properties={"plan_key": plan_key, "billing_type": billing_type, "installments": installments},
         )
 
     # ── Resposta por tipo de pagamento ────────────────────────────────────────

@@ -97,10 +97,13 @@ def create_payment(
     description: str,
     external_reference: str = "",
     billing_type: str = "UNDEFINED",
+    installment_count: int = 1,
 ) -> dict:
     """
     Cria uma cobrança para o cliente.
     billing_type: PIX | BOLETO | CREDIT_CARD | UNDEFINED.
+    installment_count > 1 (só cartão): cria um parcelamento de `value` no total;
+    o Asaas divide o valor e devolve a 1ª parcela (com o campo `installment`).
     Retorna o objeto de pagamento do Asaas (invoiceUrl é a página de pagamento).
     """
     if billing_type not in BILLING_TYPES:
@@ -109,11 +112,17 @@ def create_payment(
     payload: dict = {
         "customer": customer_id,
         "billingType": billing_type,
-        "value": value,
         "dueDate": due_date,
         "description": description,
         "externalReference": external_reference,
     }
+    if billing_type == "CREDIT_CARD" and installment_count > 1:
+        # totalValue (e não installmentValue): o Asaas acerta o arredondamento
+        # na última parcela, e o cliente paga exatamente o preço do plano.
+        payload["installmentCount"] = installment_count
+        payload["totalValue"] = value
+    else:
+        payload["value"] = value
     resp = requests.post(
         f"{_base_url()}/payments",
         json=payload,

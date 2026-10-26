@@ -88,6 +88,40 @@ def test_create_payment_credit_card_never_sends_card_data(monkeypatch):
     assert "creditCardHolderInfo" not in captured["json"]
 
 
+def test_create_payment_credit_card_installments_sends_total_value(monkeypatch):
+    """Parcelado: installmentCount + totalValue (o Asaas divide), sem `value`."""
+    captured = {}
+
+    def fake_post(url, json, headers, timeout):
+        captured["json"] = json
+        return _fake_response(json_data={"id": "pay_789", "installment": "ins_1"})
+
+    monkeypatch.setattr(asaas.requests, "post", fake_post)
+
+    asaas.create_payment(
+        customer_id="cus_1", value=418.0, description="Plano", billing_type="CREDIT_CARD", installment_count=12
+    )
+
+    assert captured["json"]["installmentCount"] == 12
+    assert captured["json"]["totalValue"] == 418.0
+    assert "value" not in captured["json"]
+
+
+def test_create_payment_installments_ignored_outside_credit_card(monkeypatch):
+    captured = {}
+
+    def fake_post(url, json, headers, timeout):
+        captured["json"] = json
+        return _fake_response(json_data={"id": "pay_1"})
+
+    monkeypatch.setattr(asaas.requests, "post", fake_post)
+
+    asaas.create_payment(customer_id="cus_1", value=418.0, description="Plano", billing_type="BOLETO", installment_count=12)
+
+    assert captured["json"]["value"] == 418.0
+    assert "installmentCount" not in captured["json"]
+
+
 def test_is_payment_confirmed_true_for_confirmed_status(monkeypatch):
     monkeypatch.setattr(asaas, "get_payment", lambda payment_id: {"status": "CONFIRMED"})
     assert asaas.is_payment_confirmed("pay_1") is True

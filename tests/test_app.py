@@ -290,6 +290,40 @@ def test_checkout_pay_credit_card_returns_asaas_invoice_without_card_data(client
     assert security.PREMIUM_COOKIE not in resp.headers.get("Set-Cookie", "")
 
 
+def test_checkout_pay_credit_card_passes_chosen_installments(client, monkeypatch):
+    create_payment = MagicMock(return_value={"id": "pay_1", "invoiceUrl": "https://asaas.example/i/pay_1"})
+    _mock_asaas_checkout(monkeypatch, create_payment)
+
+    resp = client.post("/checkout/pay", data=_valid_pix_form(billing_type="CREDIT_CARD", installments="10"))
+
+    assert resp.status_code == 200
+    kwargs = create_payment.call_args.kwargs
+    assert kwargs["installment_count"] == 10
+    assert kwargs["value"] == 418.00
+
+
+@pytest.mark.parametrize(
+    "form, expected",
+    [
+        ({"billing_type": "CREDIT_CARD", "installments": "99"}, 12),  # acima do limite do plano
+        ({"billing_type": "CREDIT_CARD", "installments": "abc"}, 1),
+        ({"billing_type": "CREDIT_CARD", "installments": "6", "plan": "mensal"}, 1),  # plano sem parcelamento
+        ({"billing_type": "PIX", "installments": "12"}, 1),  # PIX/boleto sempre à vista
+        ({"billing_type": "BOLETO", "installments": "12"}, 1),
+    ],
+)
+def test_checkout_pay_clamps_installments(client, monkeypatch, form, expected):
+    create_payment = MagicMock(return_value={"id": "pay_1", "invoiceUrl": "https://asaas.example/i/pay_1"})
+    _mock_asaas_checkout(monkeypatch, create_payment)
+    monkeypatch.setattr(asaas, "get_pix_qr_code", lambda pid: {})
+    monkeypatch.setattr(asaas, "get_boleto_identification", lambda pid: {})
+
+    resp = client.post("/checkout/pay", data=_valid_pix_form(**form))
+
+    assert resp.status_code == 200
+    assert create_payment.call_args.kwargs["installment_count"] == expected
+
+
 def test_checkout_pay_asaas_error_does_not_leak_details(client, monkeypatch):
     def _fail(**kwargs):
         raise RuntimeError("401 Unauthorized — access_token=$aact_SEGREDO")

@@ -46,18 +46,23 @@ PLANS = {
         "price": 60.00,
         "months": 1,
         "cookie_max_age": 30 * 24 * 3600,
+        "max_installments": 1,
     },
     "semestral": {
         "name": "Three Health – Plano Semestral",
         "price": 300.00,
         "months": 6,
         "cookie_max_age": 183 * 24 * 3600,
+        "max_installments": 1,
     },
     "anual": {
         "name": "Three Health – Plano Anual",
         "price": 418.00,
         "months": 12,
         "cookie_max_age": 365 * 24 * 3600,
+        # Parcelamento só no cartão (sem juros para o cliente): o Asaas cobra o
+        # total no cartão e repassa em parcelas. Boleto/PIX são sempre à vista.
+        "max_installments": 12,
     },
 }
 DEFAULT_PLAN = "anual"

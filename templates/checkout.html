@@ -415,6 +415,11 @@
       <!-- Cartão: pagamento na página segura do Asaas (os dados do cartão não passam por aqui) -->
       <div id="card-section">
         <div class="card-section-title">{{ layout.icon("lock", 16) }} Pagamento com cartão</div>
+        <div class="field-group" id="installments-group" style="display:none">
+          <label for="installments">Parcelamento</label>
+          <select id="installments" name="installments"
+                  style="width:100%; padding:.65rem .9rem; font-size:.92rem; border:1.5px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); font-family:inherit;"></select>
+        </div>
         <p class="note-small" style="margin:0;text-align:left">
           Ao continuar, abriremos a página de pagamento segura do Asaas, nosso processador de pagamentos,
           para você informar os dados do cartão. Assim que o pagamento for aprovado, seu acesso é liberado aqui.
@@ -527,6 +532,26 @@ function selectPlan(key) {
   document.querySelectorAll('.plan-card').forEach(c => c.classList.toggle('selected', c.dataset.plan === key));
   document.getElementById('plan-input').value = key;
   selectedPlan = key;
+  renderInstallments();
+}
+
+// ── Parcelamento (só cartão; limite por plano em web/config.py) ─────────────
+const PLANS = {{ plans|tojson }};
+const brl = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+function renderInstallments() {
+  const plan = PLANS[selectedPlan];
+  const max = (plan && plan.max_installments) || 1;
+  const sel = document.getElementById('installments');
+  sel.innerHTML = '';
+  for (let n = 1; n <= max; n++) {
+    const label = n === 1
+      ? 'À vista — ' + brl(plan.price)
+      : n + 'x de ' + brl(Math.floor(plan.price / n * 100) / 100) + ' sem juros';
+    sel.add(new Option(label, String(n)));
+  }
+  sel.value = String(max);
+  document.getElementById('installments-group').style.display = max > 1 ? 'block' : 'none';
 }
 
 function selectBilling(key) {
