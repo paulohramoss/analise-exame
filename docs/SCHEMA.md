@@ -100,7 +100,8 @@ webhooks_asaas ──> eventos brutos do Asaas, correlacionados por asaas_paymen
 ## Prontuário de pacientes
 
 - Cada profissional só enxerga os próprios pacientes: toda consulta filtra por
-  `cliente_id` (`core/db.py`). O acesso admin **não** vê prontuários.
+  `cliente_id` (`core/db.py`). O admin tem conta própria (`accounts.admin_cliente_id`)
+  e vê só os pacientes que ele cadastrou, nunca os dos profissionais.
 - Nome e CPF são cifrados com Fernet em `core/patient_crypto.py`, com a chave
   `PRONTUARIO_ENCRYPTION_KEY` (separada do `FLASK_SECRET_KEY`). Perder ou trocar
   a chave torna esses campos ilegíveis. Como o nome só existe decifrado, a busca
@@ -114,7 +115,7 @@ webhooks_asaas ──> eventos brutos do Asaas, correlacionados por asaas_paymen
   `tratamentos.updated_at`, `evolucoes.created_at`), a exclusão da conta mostra o
   aviso e exige a confirmação `ciente_prontuarios` (`db.resumo_backup_prontuarios`).
 - O prontuário exige conta de profissional com plano ativo: sem plano a rota
-  redireciona para os planos; admin e acesso local não cadastram pacientes.
+  redireciona para os planos; o acesso local (sem conta) não cadastra pacientes.
 
 ## Retenção de dados (LGPD)
 
