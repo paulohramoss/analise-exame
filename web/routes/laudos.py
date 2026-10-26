@@ -59,8 +59,8 @@ def laudo_detalhe(analise_id: str):
 
 
 def _patient_link_context(row: dict) -> dict:
-    """Paciente do laudo e opções para vincular — só para o profissional dono (admin não vê prontuário)."""
-    cliente_id = None if g.get("is_admin") else g.get("cliente_id")
+    """Paciente do laudo e opções para vincular — só para o dono do laudo (admin, só nos próprios)."""
+    cliente_id = g.get("cliente_id")
     if not cliente_id or row.get("cliente_id") != cliente_id:
         return {"paciente": None, "pacientes": [], "can_link_patient": False}
     paciente = db.buscar_paciente(row["paciente_id"], cliente_id) if row.get("paciente_id") else None

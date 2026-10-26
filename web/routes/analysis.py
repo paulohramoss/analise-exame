@@ -195,7 +195,7 @@ def _patient_options(cliente_id: str | None) -> list[dict]:
     Idade e sexo preenchem o contexto clínico (sem nome/CPF, que nunca vão para
     a IA); os tratamentos vêm de /pacientes/<id>/contexto ao escolher o paciente.
     """
-    if not cliente_id or g.get("is_admin"):
+    if not cliente_id:
         return []
     options = []
     for paciente in db.listar_pacientes(cliente_id):
@@ -217,7 +217,7 @@ def _selected_patient_id() -> str | None:
     paciente_id = (request.form.get("paciente_id") or "").strip()
     if not paciente_id:
         return None
-    cliente_id = None if g.get("is_admin") else g.get("cliente_id")
+    cliente_id = g.get("cliente_id")
     if not cliente_id or not db.buscar_paciente(paciente_id, cliente_id):
         raise ValueError(paciente_id)
     return paciente_id
@@ -230,7 +230,7 @@ def index():
         "index.html",
         premium=premium,
         max_images=uploads.max_images_for_request(),
-        prontuario_disponivel=premium and bool(g.get("cliente_id")) and not g.get("is_admin"),
+        prontuario_disponivel=premium and bool(g.get("cliente_id")),
         pacientes=_patient_options(g.get("cliente_id")) if premium else [],
         paciente_selecionado=request.args.get("paciente") or "",
     )

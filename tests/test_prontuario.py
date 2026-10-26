@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from core import analyzer, db, patient_crypto
-from web import config, prontuario, security
+from web import accounts, config, prontuario, security
 
 CPF_A = "529.982.247-25"
 CPF_B = "111.444.777-35"
@@ -246,10 +246,40 @@ def test_prontuario_requer_login(client):
     assert client.get("/pacientes").status_code == 302
 
 
-def test_admin_nao_ve_prontuarios(client, fake_prontuario):
+def _login_admin(client, monkeypatch, cliente_id="cliente-admin"):
+    monkeypatch.setattr(accounts, "admin_cliente_id", lambda: cliente_id)
     client.get(f"/admin/entrar?key={config.get_admin_key()}")
-    assert "contas de profissional" in client.get("/pacientes").get_data(as_text=True)
+
+
+def test_admin_cadastra_e_ve_os_proprios_pacientes(client, fake_prontuario, monkeypatch):
+    _login_admin(client, monkeypatch)
+    resp = client.post("/pacientes/novo", data={"nome": "Ana Lima", "cpf": CPF_B, "consentimento": "accepted"})
+    assert resp.status_code == 302 and resp.headers["Location"].endswith("/pacientes/pac-novo")
+    assert fake_prontuario.pacientes["pac-novo"]["cliente_id"] == "cliente-admin"
+    assert "Ana Lima" in client.get("/pacientes").get_data(as_text=True)
+
+
+def test_admin_nao_ve_pacientes_dos_profissionais(client, fake_prontuario, monkeypatch):
+    _login_admin(client, monkeypatch)
+    html = client.get("/pacientes").get_data(as_text=True)
+    assert "Maria da Silva" not in html and "João Souza" not in html
     assert client.get("/pacientes/pac-a").status_code == 404
+
+
+def test_admin_sem_banco_nao_tem_prontuario(client, fake_prontuario, monkeypatch):
+    _login_admin(client, monkeypatch, cliente_id=None)
+    assert "contas de profissional" in client.get("/pacientes").get_data(as_text=True)
+
+
+def test_conta_do_admin_e_criada_uma_vez(monkeypatch):
+    monkeypatch.setattr(accounts, "_admin_cliente_id", None)
+    monkeypatch.delenv("ADMIN_PRONTUARIO_EMAIL", raising=False)
+    monkeypatch.setattr(db, "buscar_cliente_id_por_email", lambda email: None)
+    upsert = MagicMock(return_value="cliente-admin")
+    monkeypatch.setattr(db, "upsert_cliente", upsert)
+    assert accounts.admin_cliente_id() == "cliente-admin"
+    assert accounts.admin_cliente_id() == "cliente-admin"
+    upsert.assert_called_once_with("Administrador", accounts.ADMIN_EMAIL_PADRAO)
 
 
 @pytest.mark.parametrize("method,path", [
@@ -399,8 +429,8 @@ def test_vincular_laudo_existente(client, fake_prontuario):
     assert len(fake_prontuario.vinculos) == 1  # paciente de outro profissional: nada muda
 
 
-def test_sem_conta_profissional_nao_cadastra_paciente(client, fake_prontuario):
-    client.get(f"/admin/entrar?key={config.get_admin_key()}")
+def test_sem_conta_profissional_nao_cadastra_paciente(client, fake_prontuario, monkeypatch):
+    _login_admin(client, monkeypatch, cliente_id=None)
     resp = client.post("/pacientes/novo", data={"nome": "Ana Lima", "cpf": CPF_B, "consentimento": "accepted"})
     assert resp.status_code == 302 and resp.headers["Location"].endswith("/pacientes")
     assert "pac-novo" not in fake_prontuario.pacientes

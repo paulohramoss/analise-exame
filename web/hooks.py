@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from flask import Flask, flash, g, jsonify, make_response, redirect, request, url_for
 
 from core.logging_config import new_trace_id, posthog_log_capture_enabled
-from web import access_log, presentation, security
+from web import access_log, accounts, presentation, security
 from web.extensions import RateLimitExceeded
 
 logger = logging.getLogger(__name__)
@@ -73,7 +73,9 @@ def register(app: Flask, build_version: str) -> None:
         if request.path.startswith(("/static", "/health")):
             return
         g.is_admin = security.is_admin(request)
-        if not g.is_admin:
+        if g.is_admin:
+            g.cliente_id = accounts.admin_cliente_id()
+        else:
             security.load_premium_session()
 
         # Flask has no PostHog middleware. Keep one fresh SDK context active for

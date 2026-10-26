@@ -1,8 +1,9 @@
 """Prontuário dos pacientes: cadastro, linha do tempo, tratamentos e evolução.
 
 Cada profissional só enxerga os próprios pacientes. Diferente do histórico de
-laudos, não há visão de admin: o prontuário tem nome e CPF, e o acesso
-administrativo não é um profissional de saúde responsável pelo paciente.
+laudos, não há visão de admin sobre os pacientes dos outros: o prontuário tem
+nome e CPF. O admin tem conta própria (accounts.admin_cliente_id) e vê só os
+pacientes que ele mesmo cadastrou.
 """
 
 import logging
@@ -26,9 +27,7 @@ _DUPLICATED = "Já existe um paciente com este CPF no seu cadastro."
 
 
 def _professional_id() -> str | None:
-    """cliente_id de quem está logado como profissional — admin e acesso local não têm pacientes."""
-    if g.get("is_admin"):
-        return None
+    """cliente_id de quem está logado (o admin usa a conta própria) — acesso local não tem pacientes."""
     return g.get("cliente_id")
 
 

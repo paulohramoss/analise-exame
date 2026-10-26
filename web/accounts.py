@@ -20,6 +20,23 @@ class ActivePlan(NamedTuple):
     valid_until: float | None  # epoch; None = data de início desconhecida
 
 
+# O acesso admin não vem de uma compra, mas precisa de um cliente_id para ter
+# prontuário e laudos próprios. Usa uma conta fixa, criada no primeiro acesso.
+# O domínio .interno não passa na validação de e-mail do checkout (sem DNS),
+# então ninguém compra um plano com este e-mail.
+ADMIN_EMAIL_PADRAO = "admin@threehealth.interno"
+_admin_cliente_id: str | None = None
+
+
+def admin_cliente_id() -> str | None:
+    """cliente_id da conta do admin (criada se não existir). None sem banco."""
+    global _admin_cliente_id
+    if _admin_cliente_id is None:
+        email = os.environ.get("ADMIN_PRONTUARIO_EMAIL", "").strip().lower() or ADMIN_EMAIL_PADRAO
+        _admin_cliente_id = db.buscar_cliente_id_por_email(email) or db.upsert_cliente("Administrador", email)
+    return _admin_cliente_id
+
+
 def plan_key_from_reference(ext_ref: str | None) -> str:
     """external_reference é 'email|plano' (atual) ou só 'email' (legado)."""
     plan_key = ext_ref.split("|", 1)[1] if ext_ref and "|" in ext_ref else config.DEFAULT_PLAN
