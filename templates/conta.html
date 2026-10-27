@@ -18,8 +18,6 @@
         .danger-zone { border-color: var(--danger-border); }
         .danger-zone h2 { color: var(--danger-dark); }
         .delete-form { display: grid; gap: .75rem; max-width: 420px; }
-        .delete-form label { font-size: .85rem; font-weight: 700; }
-        .delete-form input { width: 100%; }
         .btn-danger {
             background: var(--danger); color: #fff; border: none; border-radius: 10px;
             padding: .7rem 1.1rem; font-weight: 800; cursor: pointer; justify-self: start;
@@ -34,11 +32,44 @@
         .backup-warning .consent-check { margin: .75rem 0 0; }
         .muted-note { font-size: .82rem; color: var(--text-muted); margin-top: .75rem; }
         .clinic-card { margin-bottom: 1rem; }
-        .clinic-form { display: grid; gap: .85rem; max-width: 520px; }
-        .clinic-form label { font-size: .85rem; font-weight: 700; display: block; margin-bottom: .25rem; }
-        .clinic-form input[type="text"] { width: 100%; }
-        .logo-preview { display: flex; align-items: center; gap: 1rem; margin-bottom: .5rem; }
-        .logo-preview img { max-height: 56px; max-width: 140px; object-fit: contain; border: 1px solid var(--border); border-radius: 8px; padding: 4px; background: #fff; }
+        .clinic-form { display: grid; gap: 1rem; max-width: 560px; margin-top: 1.25rem; }
+        .clinic-form label, .delete-form label {
+            display: block; font-size: .85rem; font-weight: 600; color: var(--text-label); margin-bottom: .35rem;
+        }
+        .field-hint { font-size: .78rem; color: var(--text-muted); margin-top: .3rem; }
+
+        /* Campos no mesmo padrão dos formulários do prontuário (static/prontuario.css). */
+        .clinic-form input[type="text"],
+        .delete-form input[type="text"],
+        .delete-form input[type="password"] {
+            width: 100%; padding: .6rem .75rem; border: 1px solid var(--border-input); border-radius: 8px;
+            font-family: inherit; font-size: .92rem; background: var(--surface); color: var(--text);
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .clinic-form input::placeholder, .delete-form input::placeholder { color: var(--text-subtle); }
+        .clinic-form input:focus, .delete-form input:focus {
+            outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring);
+        }
+
+        /* Envio do logo: área tracejada com o botão de escolher arquivo estilizado. */
+        .logo-field {
+            display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+            border: 1.5px dashed var(--border-input); border-radius: 10px; padding: .85rem 1rem;
+            background: var(--surface-muted);
+        }
+        .logo-preview img {
+            display: block; max-height: 56px; max-width: 140px; object-fit: contain;
+            border: 1px solid var(--border); border-radius: 8px; padding: 4px; background: #fff;
+        }
+        .logo-field input[type="file"] { flex: 1; font-family: inherit; font-size: .85rem; color: var(--text-muted); min-width: 0; max-width: 100%; }
+        .logo-field input[type="file"]::file-selector-button {
+            font-family: inherit; font-size: .85rem; font-weight: 600; color: var(--primary);
+            background: var(--surface); border: 1.5px solid var(--primary-border); border-radius: 8px;
+            padding: .45rem .9rem; margin-right: .75rem; cursor: pointer; transition: background .15s;
+        }
+        .logo-field input[type="file"]::file-selector-button:hover { background: var(--primary-light); }
+        .logo-field .consent-check { margin: 0; font-size: .85rem; }
+        .clinic-form .btn-primary { justify-self: start; }
     </style>
 </head>
 <body>
@@ -80,14 +111,17 @@
                            placeholder="Ex.: (11) 99999-9999 · @clinicamovimento · Rua das Flores, 100">
                 </div>
                 <div>
-                    <label for="clinica_logo">Logo (PNG ou JPG, até 2 MB)</label>
-                    {% if marca.clinica_logo %}
-                    <div class="logo-preview">
-                        <img src="{{ marca.clinica_logo }}" alt="Logo atual">
+                    <label for="clinica_logo">Logo</label>
+                    <div class="logo-field">
+                        {% if marca.clinica_logo %}
+                        <div class="logo-preview"><img src="{{ marca.clinica_logo }}" alt="Logo atual"></div>
+                        {% endif %}
+                        <input type="file" id="clinica_logo" name="clinica_logo" accept="image/png,image/jpeg,image/webp">
+                        {% if marca.clinica_logo %}
                         <label class="consent-check"><input type="checkbox" name="remover_logo" value="1"> <span>Remover logo</span></label>
+                        {% endif %}
                     </div>
-                    {% endif %}
-                    <input type="file" id="clinica_logo" name="clinica_logo" accept="image/png,image/jpeg,image/webp">
+                    <p class="field-hint">PNG ou JPG, até 2 MB. Fundo transparente fica melhor no papel.</p>
                 </div>
                 <button type="submit" class="btn-primary">Salvar dados da clínica</button>
             </form>
