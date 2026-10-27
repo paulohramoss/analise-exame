@@ -275,6 +275,14 @@
             {% endif %}
         {% endwith %}
 
+        {% if save_failed %}
+        <div class="alert alert-error" role="alert">
+            {{ layout.icon('x-circle') }}
+            <span><strong>Este laudo não foi salvo no histórico</strong> por uma falha no servidor.
+            Baixe o PDF agora para não perder o resultado. A equipe já foi avisada.</span>
+        </div>
+        {% endif %}
+
         <!-- Cabeçalho profissional da análise -->
         {% if paciente_id and analysis_id %}
         <div class="alert alert-success">

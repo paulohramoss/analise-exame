@@ -76,6 +76,45 @@ def test_identifiers_never_reach_the_ai_or_the_database(client, monkeypatch):
         assert "dor no joelho" in text
 
 
+# ── Falha ao gravar o laudo ───────────────────────────────────────────────────
+
+def _post_premium_analysis(client, monkeypatch, analise_id):
+    monkeypatch.setattr(analyzer, "analyze_exam_from_bytes", MagicMock(return_value=dict(FAKE_RESULT)))
+    monkeypatch.setattr(db, "salvar_analise_com_imagens", MagicMock(return_value=analise_id))
+    monkeypatch.setattr(db, "is_configured", lambda: True)
+    client.get(f"/admin/entrar?key={config.get_admin_key()}")
+    return client.post(
+        "/analyze",
+        data={"exam_images": (io.BytesIO(b"fake"), "joelho.jpg"), "privacy_consent": "accepted"},
+        content_type="multipart/form-data",
+    )
+
+
+def test_laudo_nao_salvo_avisa_o_profissional_e_registra_evento(client, monkeypatch):
+    from web import posthog as web_posthog
+
+    fake_posthog = MagicMock()
+    monkeypatch.setattr(web_posthog, "init_posthog", lambda: fake_posthog)
+
+    html = _post_premium_analysis(client, monkeypatch, analise_id=None).get_data(as_text=True)
+
+    assert "não foi salvo no histórico" in html
+    events = [c.args[0] for c in fake_posthog.capture.call_args_list]
+    assert "analysis_save_failed" in events
+
+
+def test_laudo_salvo_nao_mostra_aviso(client, monkeypatch):
+    html = _post_premium_analysis(client, monkeypatch, analise_id="analise-1").get_data(as_text=True)
+    assert "não foi salvo no histórico" not in html
+
+
+def test_sem_banco_configurado_nao_e_falha(monkeypatch):
+    from web import posthog as web_posthog
+
+    monkeypatch.setattr(db, "is_configured", lambda: False)
+    assert web_posthog.analysis_not_saved(None, "premium") is False
+
+
 # ── Exportação e exclusão (LGPD art. 18) ──────────────────────────────────────
 
 def _login_client(client, monkeypatch, email="a@example.com", cliente_id="cliente-a"):

@@ -155,6 +155,7 @@ def _run_now(mode: str, prepared: _AnalysisInput, api_key: str, persist: dict) -
         tempo_ms=int((time.time() - t0) * 1000), **persist,
     )
     g.analise_id = result["analise_id"]
+    result["save_failed"] = posthog.analysis_not_saved(result["analise_id"], mode, persist.get("cliente_id"))
     return result
 
 
@@ -308,6 +309,7 @@ def analyze():
         responsible=responsible_info,
         analysis_id=result["analise_id"],
         paciente_id=paciente_id,
+        save_failed=result.get("save_failed", False),
     )
 
 
@@ -354,6 +356,7 @@ def analyze_resultado(job_id: str):
         responsible=result.get("responsible") or {"name": "", "role": ""},
         analysis_id=result.get("analise_id"),
         paciente_id=result.get("paciente_id"),
+        save_failed=result.get("save_failed", False),
     )
 
 

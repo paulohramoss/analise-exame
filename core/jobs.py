@@ -214,7 +214,7 @@ def _run_analysis(
 ) -> dict:
     from core import cost_tracking, db
     from core.analyzer import analyze_exam_from_bytes
-    from web.posthog import init_posthog
+    from web.posthog import analysis_not_saved, init_posthog
 
     logger.info("Job de análise iniciado (mode=%s, imagens=%d)", mode, len(images))
     t0 = time.time()
@@ -249,6 +249,7 @@ def _run_analysis(
         result, mode, images, image_meta, tempo_ms=int((time.time() - t0) * 1000), **persist
     )
     result["analise_id"] = analise_id
+    result["save_failed"] = analysis_not_saved(analise_id, mode, persist.get("cliente_id"))
 
     if display_extra:
         result.update(display_extra)

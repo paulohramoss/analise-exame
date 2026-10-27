@@ -51,3 +51,26 @@ def init_posthog() -> Posthog | None:
     )
     atexit.register(posthog_client.shutdown)
     return posthog_client
+
+
+def analysis_not_saved(analise_id: str | None, mode: str, cliente_id: str | None = None) -> bool:
+    """True se havia banco e o laudo não foi gravado — e avisa no log e no PostHog.
+
+    A falha de gravação não interrompe a análise (o profissional ainda vê o
+    laudo), então sem este aviso ela passa despercebida: em 23/10/2026 uma
+    coluna faltando no banco fez todos os laudos deixarem de ser salvos por dias.
+    O evento `analysis_save_failed` serve para um alerta no PostHog.
+    """
+    from core import db
+
+    if analise_id or not db.is_configured():
+        return False
+    logger.error("Laudo NÃO foi salvo no banco (mode=%s) — ver 'Erro em salvar_analise' acima.", mode)
+    client = init_posthog()
+    if client is not None:
+        client.capture(
+            "analysis_save_failed",
+            distinct_id=str(cliente_id) if cliente_id else None,
+            properties={"mode": mode},
+        )
+    return True
