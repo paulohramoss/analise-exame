@@ -97,6 +97,18 @@ webhooks_asaas ──> eventos brutos do Asaas, correlacionados por asaas_paymen
   final; desenhada no navegador por `static/laudo-marcacoes.js`. Como as imagens não
   ficam no banco, o laudo salvo mostra só a lista com os locais.
 
+## Relatório para o paciente
+
+- `analises.relatorio_paciente` guarda o laudo reescrito em linguagem simples
+  (`core/patient_report.py`, Claude). A IA recebe só o texto do laudo; o nome do
+  paciente entra apenas na página (`/laudos/<id>/paciente`), vindo do prontuário.
+- `clientes.clinica_nome`, `clinica_contato` e `clinica_logo` (PNG em data URL,
+  reprocessado e reduzido para 400 px) formam o cabeçalho do relatório; o
+  profissional edita em `/conta`.
+- Só o dono do laudo gera ou abre o relatório — nem o admin, que sairia com o logo errado.
+- As consultas dessas colunas são separadas de `buscar_analise`: sem a migration
+  `2026-10-27-relatorio-paciente.sql`, só o relatório fica indisponível.
+
 ## Prontuário de pacientes
 
 - Cada profissional só enxerga os próprios pacientes: toda consulta filtra por

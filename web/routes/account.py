@@ -7,8 +7,8 @@ from datetime import datetime, timezone
 from flask import Blueprint, Response, flash, g, make_response, redirect, render_template, request, url_for
 from werkzeug.security import check_password_hash
 
-from core import db
-from web import posthog, security
+from core import db, patient_report
+from web import posthog, presentation, security
 from web.extensions import rate_limit
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,41 @@ def conta():
         has_account=account is not None,
         confirmation_word=DELETE_CONFIRMATION,
         backup=_prontuario_backup(account[0]) if account else None,
+        # A marca vale para quem tem cliente_id — inclusive o admin, na conta própria.
+        pode_personalizar=bool(g.get("cliente_id")),
+        marca=db.buscar_marca_clinica(g.get("cliente_id")) if g.get("cliente_id") else {},
     )
+
+
+@bp.route("/conta/clinica", methods=["POST"])
+@security.premium_required
+@rate_limit("ACCOUNT_BRANDING_RATE_LIMIT", "30 per hour")
+def salvar_clinica():
+    """Nome, contato e logo da clínica, impressos no relatório para o paciente."""
+    cliente_id = g.get("cliente_id")
+    if not cliente_id:
+        flash("Disponível para contas de profissional.", "error")
+        return redirect(url_for("account.conta"))
+
+    campos = {
+        "clinica_nome": presentation.form_text("clinica_nome", 120) or None,
+        "clinica_contato": presentation.form_text("clinica_contato", 160) or None,
+    }
+    logo = request.files.get("clinica_logo")
+    if request.form.get("remover_logo") == "1":
+        campos["clinica_logo"] = None
+    elif logo and logo.filename:
+        data_url = patient_report.processar_logo(logo.read(patient_report.LOGO_MAX_BYTES + 1))
+        if data_url is None:
+            flash("Não foi possível usar o logo. Envie uma imagem PNG ou JPG de até 2 MB.", "error")
+            return redirect(url_for("account.conta") + "#clinica")
+        campos["clinica_logo"] = data_url
+
+    if db.salvar_marca_clinica(cliente_id, campos):
+        flash("Dados da clínica salvos. Eles aparecem no relatório para o paciente.", "success")
+    else:
+        flash("Não foi possível salvar os dados da clínica agora.", "error")
+    return redirect(url_for("account.conta") + "#clinica")
 
 
 def _prontuario_backup(cliente_id: str) -> dict:

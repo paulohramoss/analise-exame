@@ -365,6 +365,7 @@ def analyze_resultado(job_id: str):
 @bp.route("/trial")
 def trial():
     """Página de teste gratuito, embutida via iframe na landing page (WordPress)."""
+    posthog.track("trial_page_viewed", source=posthog.source_param(request.args.get("src")))
     return render_template("trial.html")
 
 

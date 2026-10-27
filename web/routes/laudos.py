@@ -2,8 +2,9 @@
 
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
-from core import annotations, db
-from web import posthog, presentation
+from core import annotations, cost_tracking, db, patient_report
+from web import costs, posthog, presentation
+from web.extensions import rate_limit
 from web.security import premium_required
 
 bp = Blueprint("laudos", __name__)
@@ -54,6 +55,7 @@ def laudo_detalhe(analise_id: str):
         responsible=presentation.responsible_info_from_row(row),
         consensus=presentation.build_consensus_info(row.get("modelo_ia") or "", row.get("analise_completa") or ""),
         annotations=annotations.sanitize_stored(row.get("marcacoes"), row.get("num_imagens")),
+        can_patient_report=bool(g.get("cliente_id")) and row.get("cliente_id") == g.get("cliente_id"),
         **_patient_link_context(row),
     )
 
@@ -69,6 +71,73 @@ def _patient_link_context(row: dict) -> dict:
         "pacientes": [] if paciente else db.listar_pacientes(cliente_id),
         "can_link_patient": True,
     }
+
+
+def _own_report_analysis(analise_id: str) -> tuple[str | None, dict | None]:
+    """(cliente_id, laudo) só se o laudo é da conta logada — o relatório leva a marca dela.
+
+    Nem o admin gera relatório de laudo alheio: sairia com o logo errado.
+    """
+    cliente_id = g.get("cliente_id")
+    row = db.buscar_analise(analise_id, cliente_id=cliente_id) if cliente_id else None
+    return cliente_id, row
+
+
+@bp.route("/laudos/<analise_id>/paciente")
+@premium_required
+def relatorio_paciente(analise_id: str):
+    """Relatório do laudo em linguagem simples, com a marca da clínica, para imprimir."""
+    g.modo = "premium"
+    cliente_id, row = _own_report_analysis(analise_id)
+    if not row:
+        flash("Laudo não encontrado no histórico deste acesso.", "error")
+        return redirect(url_for("laudos.laudos"))
+
+    texto = db.buscar_relatorio_paciente(analise_id, cliente_id)
+    paciente = db.buscar_paciente(row["paciente_id"], cliente_id) if row.get("paciente_id") else None
+    return render_template(
+        "relatorio_paciente.html",
+        analysis_id=analise_id,
+        relatorio=patient_report.to_html(texto) if texto else None,
+        marca=db.buscar_marca_clinica(cliente_id),
+        paciente_nome=(paciente or {}).get("nome") or "",
+        exam_type=presentation.format_exam_label(row.get("tipo_exame")),
+        exam_date=row.get("created_at"),
+        responsible=presentation.responsible_info_from_row(row),
+    )
+
+
+@bp.route("/laudos/<analise_id>/paciente/gerar", methods=["POST"])
+@premium_required
+@rate_limit("PATIENT_REPORT_RATE_LIMIT", "30 per hour")
+def gerar_relatorio_paciente(analise_id: str):
+    """Gera (ou refaz) o texto para o paciente com a IA e grava no laudo."""
+    g.modo = "premium"
+    cliente_id, row = _own_report_analysis(analise_id)
+    if not row:
+        flash("Laudo não encontrado no histórico deste acesso.", "error")
+        return redirect(url_for("laudos.laudos"))
+    voltar = redirect(url_for("laudos.relatorio_paciente", analise_id=analise_id))
+
+    if costs.blocked_by_cost_budget("premium"):
+        flash("Limite de gasto diário atingido. Tente novamente mais tarde.", "error")
+        return voltar
+    gerado = patient_report.gerar_texto(row.get("analise_completa") or "")
+    if gerado is None:
+        flash("Não foi possível gerar o relatório agora. Tente novamente em instantes.", "error")
+        return voltar
+
+    texto, usage = gerado
+    cost_usd = cost_tracking.estimate_cost_usd(usage["model"], usage["input_tokens"], usage["output_tokens"])
+    for scope, _cap in costs.cost_budget_scopes("premium"):
+        cost_tracking.add_spend(scope, cost_usd)
+
+    if not db.salvar_relatorio_paciente(analise_id, cliente_id, texto):
+        flash("O relatório foi gerado, mas não pôde ser salvo. Tente novamente.", "error")
+        return voltar
+    posthog.track("patient_report_generated", exam_type=row.get("tipo_exame") or "")
+    flash("Relatório para o paciente pronto.", "success")
+    return voltar
 
 
 @bp.route("/clinica/dashboard")

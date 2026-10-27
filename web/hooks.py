@@ -11,6 +11,7 @@ from flask import Flask, flash, g, jsonify, make_response, redirect, request, ur
 
 from core.logging_config import new_trace_id, posthog_log_capture_enabled
 from web import access_log, accounts, presentation, security
+from web import posthog as posthog_mod
 from web.extensions import RateLimitExceeded
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,10 @@ def register(app: Flask, build_version: str) -> None:
 
         if request.path.startswith(("/static", "/health")):
             return
+        g.visitor_id = posthog_mod.visitor_id_from_cookie(request.cookies.get(posthog_mod.VISITOR_COOKIE))
+        g.new_visitor = g.visitor_id is None
+        if g.new_visitor:
+            g.visitor_id = posthog_mod.new_visitor_id()
         g.is_admin = security.is_admin(request)
         if g.is_admin:
             g.cliente_id = accounts.admin_cliente_id()
@@ -90,7 +95,9 @@ def register(app: Flask, build_version: str) -> None:
 
             # An authenticated customer id is authoritative. Browser tracing
             # headers are analytics-only fallback context for future clients.
-            distinct_id = str(g.get("cliente_id") or request.headers.get("X-POSTHOG-DISTINCT-ID", "")).strip()
+            distinct_id = str(
+                g.get("cliente_id") or request.headers.get("X-POSTHOG-DISTINCT-ID", "") or g.visitor_id
+            ).strip()
             if distinct_id:
                 posthog_client.identify_context(distinct_id)
 
@@ -121,6 +128,16 @@ def register(app: Flask, build_version: str) -> None:
             return None
         logger.warning("Requisição recusada por origem não confiável (origin=%s, path=%s)", source, request.path)
         return jsonify({"error": "Origem da requisição não permitida."}), 403
+
+    @app.after_request
+    def set_visitor_cookie(response):
+        """Grava o UUID do visitante anônimo (funil de vendas; ver web/posthog.py)."""
+        if g.get("new_visitor") and g.get("visitor_id"):
+            response.set_cookie(
+                posthog_mod.VISITOR_COOKIE, g.visitor_id, max_age=posthog_mod.VISITOR_COOKIE_MAX_AGE,
+                httponly=True, samesite="Lax", secure=security.secure_cookie(),
+            )
+        return response
 
     @app.after_request
     def set_security_headers(response):

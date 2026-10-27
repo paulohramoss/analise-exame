@@ -144,5 +144,5 @@ def test_salvar_analise_com_imagens_persists_each_image(monkeypatch):
 
 def test_all_routes_are_registered_in_blueprints():
     endpoints = {rule.endpoint for rule in flask_app_module.app.url_map.iter_rules()} - {"static"}
-    assert len(endpoints) == 43
+    assert len(endpoints) == 46
     assert all(endpoint.split(".")[0] in {"analysis", "laudos", "pacientes", "billing", "auth", "account"} for endpoint in endpoints)

@@ -455,6 +455,74 @@ def buscar_analise(
         return None
 
 
+# ── Relatório para o paciente e marca da clínica ──────────────────────────────
+# Consultas próprias (e não colunas a mais em buscar_analise): se a migration
+# 2026-10-27-relatorio-paciente.sql ainda não rodou, só o relatório fica
+# indisponível — o laudo e o histórico continuam abrindo.
+
+def buscar_relatorio_paciente(analise_id: str, cliente_id: str) -> str | None:
+    """Texto do relatório já gerado para o laudo do cliente, ou None."""
+    db = _get_client()
+    if not db or not analise_id or not cliente_id:
+        return None
+    try:
+        res = (
+            db.table("analises").select("relatorio_paciente")
+            .eq("id", analise_id).eq("cliente_id", cliente_id).limit(1).execute()
+        )
+        return (res.data[0].get("relatorio_paciente") or None) if res.data else None
+    except Exception:
+        logger.exception("Erro em buscar_relatorio_paciente")
+        return None
+
+
+def salvar_relatorio_paciente(analise_id: str, cliente_id: str, texto: str) -> bool:
+    db = _get_client()
+    if not db or not analise_id or not cliente_id:
+        return False
+    try:
+        res = (
+            db.table("analises")
+            .update({"relatorio_paciente": texto, "relatorio_paciente_em": datetime.now(timezone.utc).isoformat()})
+            .eq("id", analise_id).eq("cliente_id", cliente_id).execute()
+        )
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em salvar_relatorio_paciente")
+        return False
+
+
+def buscar_marca_clinica(cliente_id: str) -> dict:
+    """Nome, contato e logo da clínica do cliente ({} se não houver ou se falhar)."""
+    db = _get_client()
+    if not db or not cliente_id:
+        return {}
+    try:
+        res = (
+            db.table("clientes").select("clinica_nome, clinica_contato, clinica_logo")
+            .eq("id", cliente_id).limit(1).execute()
+        )
+        return {k: v for k, v in (res.data[0] if res.data else {}).items() if v}
+    except Exception:
+        logger.exception("Erro em buscar_marca_clinica")
+        return {}
+
+
+def salvar_marca_clinica(cliente_id: str, campos: dict) -> bool:
+    """Atualiza só os campos informados (clinica_nome, clinica_contato, clinica_logo)."""
+    db = _get_client()
+    permitidos = {"clinica_nome", "clinica_contato", "clinica_logo"}
+    campos = {k: v for k, v in campos.items() if k in permitidos}
+    if not db or not cliente_id or not campos:
+        return False
+    try:
+        res = db.table("clientes").update(campos).eq("id", cliente_id).execute()
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em salvar_marca_clinica")
+        return False
+
+
 def salvar_imagem_exame(
     analise_id: str,
     mime_type: str,
@@ -1086,10 +1154,24 @@ def exportar_dados_cliente(cliente_id: str) -> dict | None:
                 .eq("cliente_id", cliente_id).order("created_at", desc=True).execute().data or []
             ),
             "pacientes": _exportar_prontuarios(db, cliente_id),
+            "clinica": buscar_marca_clinica(cliente_id),
+            "relatorios_paciente": _exportar_relatorios_paciente(db, cliente_id),
         }
     except Exception:
         logger.exception("Erro em exportar_dados_cliente")
         return None
+
+
+def _exportar_relatorios_paciente(db, cliente_id: str) -> list[dict]:
+    """Relatórios para o paciente já gerados (vazio se a migration ainda não rodou)."""
+    try:
+        return (
+            db.table("analises").select("id, relatorio_paciente, relatorio_paciente_em")
+            .eq("cliente_id", cliente_id).not_.is_("relatorio_paciente", "null").execute().data or []
+        )
+    except Exception:
+        logger.exception("Erro em _exportar_relatorios_paciente")
+        return []
 
 
 def _exportar_prontuarios(db, cliente_id: str) -> list[dict]:

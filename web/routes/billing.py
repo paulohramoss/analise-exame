@@ -29,6 +29,7 @@ REVOKING_PAYMENT_EVENTS = {
 @bp.route("/planos")
 def planos():
     """Página pública de comparação de planos — usada na LP e no site."""
+    posthog.track("pricing_page_viewed", source=posthog.source_param(request.args.get("src")))
     return render_template("planos.html", plans=config.PLANS)
 
 
@@ -40,6 +41,7 @@ def checkout():
     plan = request.args.get("plan", config.DEFAULT_PLAN)
     if plan not in config.PLANS:
         plan = config.DEFAULT_PLAN
+    posthog.track("checkout_viewed", plan_key=plan, source=posthog.source_param(request.args.get("src")))
     return render_template("checkout.html", plans=config.PLANS, default_plan=plan)
 
 
@@ -73,26 +75,28 @@ def checkout_pay():
         installments = 1
     installments = max(1, min(installments, plan.get("max_installments", 1)))
 
-    def _error(message: str, status: int):
+    def _error(message: str, status: int, reason: str):
+        # Só o motivo (categoria fixa) vai ao PostHog — nunca o que foi digitado.
+        posthog.track("checkout_failed", reason=reason, plan_key=plan_key, billing_type=billing_type)
         return jsonify({"success": False, "error": message}), status
 
     # ── Validações básicas ────────────────────────────────────────────────────
     if not name:
-        return _error("Preencha o nome.", 400)
+        return _error("Preencha o nome.", 400, "nome")
 
     # Sintaxe + blocklist de descartáveis + DNS do domínio. Também normaliza
     # (minúsculo) — o login e o /acesso já buscam pelo e-mail em minúsculo.
     email, erro_email = validar_email_cadastro(email)
     if erro_email:
-        return _error(erro_email, 400)
+        return _error(erro_email, 400, "email")
     if not cpf_cnpj:
-        return _error("Preencha o CPF ou CNPJ.", 400)
+        return _error("Preencha o CPF ou CNPJ.", 400, "cpf_cnpj")
     if not senha_acesso or len(senha_acesso) < 8:
-        return _error("A senha deve ter pelo menos 8 caracteres.", 400)
+        return _error("A senha deve ter pelo menos 8 caracteres.", 400, "senha_curta")
     if senha_acesso != senha_confirmar:
-        return _error("As senhas não coincidem.", 400)
+        return _error("As senhas não coincidem.", 400, "senha_diferente")
     if not os.environ.get("ASAAS_API_KEY", ""):
-        return _error("Serviço de pagamento indisponível. Tente mais tarde.", 503)
+        return _error("Serviço de pagamento indisponível. Tente mais tarde.", 503, "asaas_sem_chave")
 
     external_reference = f"{email}|{plan_key}"
 
@@ -112,15 +116,15 @@ def checkout_pay():
         logger.exception("Erro ao criar cobrança Asaas (%s)", type(e).__name__)
         err_lower = str(e).lower()
         if "timeout" in err_lower or "connection" in err_lower:
-            return _error("Não foi possível conectar ao serviço de pagamento. Tente novamente.", 502)
+            return _error("Não foi possível conectar ao serviço de pagamento. Tente novamente.", 502, "asaas_conexao")
         if "cpf" in err_lower or "cnpj" in err_lower:
-            return _error("CPF ou CNPJ inválido. Confira o número informado.", 502)
-        return _error("Não foi possível gerar a cobrança agora. Tente novamente em instantes.", 502)
+            return _error("CPF ou CNPJ inválido. Confira o número informado.", 502, "asaas_cpf_cnpj")
+        return _error("Não foi possível gerar a cobrança agora. Tente novamente em instantes.", 502, "asaas_outro")
 
     payment_id = payment.get("id", "")
     invoice_url = payment.get("invoiceUrl") or payment.get("bankSlipUrl") or ""
     if not payment_id:
-        return _error("Erro ao criar cobrança. Tente novamente.", 502)
+        return _error("Erro ao criar cobrança. Tente novamente.", 502, "asaas_sem_id")
 
     # ── Persistência ──────────────────────────────────────────────────────────
     cliente_id = db.upsert_cliente(name, email, cpf_cnpj, customer.get("id", ""))
@@ -137,6 +141,7 @@ def checkout_pay():
         plano=plan_key,
         forma_pagamento=billing_type,
     )
+    posthog.link_visitor(g.get("visitor_id"), cliente_id)
     if posthog.posthog_client is not None:
         posthog.posthog_client.capture(
             "checkout_payment_created",

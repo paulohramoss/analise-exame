@@ -18,6 +18,8 @@ aviso no log) — o app, os testes e o worker funcionam normalmente.
 import atexit
 import logging
 import os
+import re
+import uuid
 
 from posthog import Posthog
 
@@ -74,3 +76,52 @@ def analysis_not_saved(analise_id: str | None, mode: str, cliente_id: str | None
             properties={"mode": mode},
         )
     return True
+
+
+# ── Funil de vendas ───────────────────────────────────────────────────────────
+# Sem posthog-js no navegador (ver docstring), o funil é medido no servidor.
+# Quem ainda não tem conta é identificado por um UUID aleatório num cookie
+# próprio (sem nome, e-mail ou IP); no checkout esse UUID é ligado ao UUID do
+# cliente (alias), e o PostHog junta teste gratuito → checkout → pagamento.
+VISITOR_COOKIE = "th_vid"
+VISITOR_COOKIE_MAX_AGE = 365 * 24 * 3600
+_BOT_MARKERS = ("bot", "crawler", "spider", "slurp", "preview", "monitor", "headless")
+_SOURCE_RE = re.compile(r"[^a-z0-9_]")
+
+
+def visitor_id_from_cookie(value: str | None) -> str | None:
+    """O UUID do cookie, ou None se ausente/adulterado (só aceitamos UUID)."""
+    try:
+        return str(uuid.UUID(value or ""))
+    except ValueError:
+        return None
+
+
+def new_visitor_id() -> str:
+    return str(uuid.uuid4())
+
+
+def source_param(value: str | None) -> str:
+    """?src= dos links internos (de onde a pessoa veio), limpo e curto."""
+    return _SOURCE_RE.sub("", (value or "").lower())[:40] or "direto"
+
+
+def _is_bot(user_agent: str | None) -> bool:
+    ua = (user_agent or "").lower()
+    return not ua or any(marker in ua for marker in _BOT_MARKERS)
+
+
+def track(event: str, **properties) -> None:
+    """Evento do funil na identidade da requisição (cliente ou visitante). Ignora robôs."""
+    from flask import request
+
+    if posthog_client is None or _is_bot(request.headers.get("User-Agent")):
+        return
+    posthog_client.capture(event, properties=properties)
+
+
+def link_visitor(visitor_id: str | None, cliente_id: str | None) -> None:
+    """Liga o histórico anônimo do visitante ao cliente que acabou de se cadastrar."""
+    if posthog_client is None or not visitor_id or not cliente_id or visitor_id == str(cliente_id):
+        return
+    posthog_client.alias(previous_id=visitor_id, distinct_id=str(cliente_id))

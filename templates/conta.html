@@ -33,6 +33,12 @@
         .backup-warning p { margin: .35rem 0 .6rem; }
         .backup-warning .consent-check { margin: .75rem 0 0; }
         .muted-note { font-size: .82rem; color: var(--text-muted); margin-top: .75rem; }
+        .clinic-card { margin-bottom: 1rem; }
+        .clinic-form { display: grid; gap: .85rem; max-width: 520px; }
+        .clinic-form label { font-size: .85rem; font-weight: 700; display: block; margin-bottom: .25rem; }
+        .clinic-form input[type="text"] { width: 100%; }
+        .logo-preview { display: flex; align-items: center; gap: 1rem; margin-bottom: .5rem; }
+        .logo-preview img { max-height: 56px; max-width: 140px; object-fit: contain; border: 1px solid var(--border); border-radius: 8px; padding: 4px; background: #fff; }
     </style>
 </head>
 <body>
@@ -54,6 +60,39 @@
             <h1>Meus dados</h1>
             <p>Seus direitos como titular de dados pessoais (LGPD, art. 18){% if email %} — conta <strong>{{ email }}</strong>{% endif %}.</p>
         </div>
+
+        {% if pode_personalizar %}
+        <section class="card account-card clinic-card" id="clinica">
+            <h2>{{ layout.icon("file-text", 20) }} Sua clínica no relatório do paciente</h2>
+            <p class="card-description">
+                O "Relatório para o paciente" explica o laudo em linguagem simples. Estes dados aparecem no topo dele,
+                para o paciente levar para casa com a sua marca.
+            </p>
+            <form class="clinic-form" method="POST" action="{{ url_for('account.salvar_clinica') }}" enctype="multipart/form-data">
+                <div>
+                    <label for="clinica_nome">Nome da clínica ou do profissional</label>
+                    <input type="text" id="clinica_nome" name="clinica_nome" maxlength="120" value="{{ marca.clinica_nome or '' }}"
+                           placeholder="Ex.: Clínica Movimento — Fisioterapia">
+                </div>
+                <div>
+                    <label for="clinica_contato">Contato (aparece embaixo do nome)</label>
+                    <input type="text" id="clinica_contato" name="clinica_contato" maxlength="160" value="{{ marca.clinica_contato or '' }}"
+                           placeholder="Ex.: (11) 99999-9999 · @clinicamovimento · Rua das Flores, 100">
+                </div>
+                <div>
+                    <label for="clinica_logo">Logo (PNG ou JPG, até 2 MB)</label>
+                    {% if marca.clinica_logo %}
+                    <div class="logo-preview">
+                        <img src="{{ marca.clinica_logo }}" alt="Logo atual">
+                        <label class="consent-check"><input type="checkbox" name="remover_logo" value="1"> <span>Remover logo</span></label>
+                    </div>
+                    {% endif %}
+                    <input type="file" id="clinica_logo" name="clinica_logo" accept="image/png,image/jpeg,image/webp">
+                </div>
+                <button type="submit" class="btn-primary">Salvar dados da clínica</button>
+            </form>
+        </section>
+        {% endif %}
 
         {% if not has_account %}
             <div class="card">
