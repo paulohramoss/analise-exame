@@ -58,3 +58,24 @@ def test_caso_validado_so_usa_casos_aprovados(monkeypatch):
     db.buscar_caso_validado_referencia("joelho")
 
     assert ("eq", ("aprovado_para_referencia", True), {}) in fake.calls
+
+
+def test_admin_lista_laudos_de_todos_mesmo_com_conta_propria(monkeypatch):
+    """O admin tem cliente_id (prontuário próprio), mas o histórico mostra todos os laudos."""
+    fake = _use_fake_client(monkeypatch)
+
+    db.listar_analises(cliente_id="cliente-admin", include_all=True)
+    db.buscar_analise("laudo-1", cliente_id="cliente-admin", include_all=True)
+
+    assert not any(name == "eq" and args[0] == "cliente_id" for name, args, _ in fake.calls)
+
+
+def test_profissional_lista_so_os_proprios_laudos(monkeypatch):
+    fake = _use_fake_client(monkeypatch)
+
+    db.listar_analises(cliente_id="cliente-a")
+    db.buscar_analise("laudo-1", cliente_id="cliente-a")
+
+    assert [args for name, args, _ in fake.calls if name == "eq" and args[0] == "cliente_id"] == [
+        ("cliente_id", "cliente-a"), ("cliente_id", "cliente-a"),
+    ]

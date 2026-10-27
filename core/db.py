@@ -417,7 +417,8 @@ def listar_analises(
     )
     try:
         query = db.table("analises").select(columns)
-        if cliente_id:
+        # Admin (include_all) também tem cliente_id próprio, mas vê os laudos de todos.
+        if cliente_id and not include_all:
             query = query.eq("cliente_id", cliente_id)
         res = query.order("created_at", desc=True).limit(limit).execute()
         return res.data or []
@@ -445,7 +446,7 @@ def buscar_analise(
     )
     try:
         query = db.table("analises").select(columns).eq("id", analise_id)
-        if cliente_id:
+        if cliente_id and not include_all:
             query = query.eq("cliente_id", cliente_id)
         res = query.limit(1).execute()
         return res.data[0] if res.data else None
