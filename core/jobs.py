@@ -236,7 +236,7 @@ def _run_analysis(
     cost_tracking.log_analysis_cost(result.get("exam_type", ""), result.get("model_used", ""), usage)
     own_usage = [item for item in usage if not (exclude_gemini_cost and item["model"].startswith("gemini"))]
     own_cost_usd = sum(
-        cost_tracking.estimate_cost_usd(item["model"], item["input_tokens"], item["output_tokens"])
+        cost_tracking.estimate_usage_cost(item)
         for item in own_usage
     )
     if own_cost_usd > 0:

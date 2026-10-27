@@ -66,3 +66,13 @@ def test_add_spend_ignores_non_positive_amounts():
     cost_tracking.add_spend(scope, 5.0)
     cost_tracking.add_spend(scope, -100.0)
     assert cost_tracking.get_spend(scope) == 5.0
+
+
+def test_estimate_usage_cost_prices_prompt_cache_tokens():
+    input_price, _ = dict(cost_tracking._PRICING_PER_1M_TOKENS)["claude-sonnet"]
+    item = {
+        "model": "claude-sonnet-4-6", "input_tokens": 0, "output_tokens": 0,
+        "cache_creation_input_tokens": 1_000_000, "cache_read_input_tokens": 1_000_000,
+    }
+    assert abs(cost_tracking.estimate_usage_cost(item) - input_price * (1.25 + 0.10)) < 1e-9
+    assert cost_tracking.estimate_usage_cost({"model": "claude-sonnet-4-6", "input_tokens": 1_000_000, "output_tokens": 0}) == input_price

@@ -98,10 +98,38 @@ def _pricing_for(model: str) -> tuple[float, float]:
     return pricing
 
 
-def estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
+# Prompt caching da Anthropic (TTL de 5 min): gravar custa 1,25x o preço de
+# entrada; ler do cache, 0,1x.
+_CACHE_WRITE_MULTIPLIER = 1.25
+_CACHE_READ_MULTIPLIER = 0.10
+
+
+def estimate_cost_usd(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_write_tokens: int = 0,
+    cache_read_tokens: int = 0,
+) -> float:
     """Custo estimado em USD para uma chamada com as contagens de tokens dadas."""
     input_price, output_price = _pricing_for(model)
-    return (input_tokens / 1_000_000) * input_price + (output_tokens / 1_000_000) * output_price
+    effective_input = (
+        input_tokens
+        + cache_write_tokens * _CACHE_WRITE_MULTIPLIER
+        + cache_read_tokens * _CACHE_READ_MULTIPLIER
+    )
+    return (effective_input / 1_000_000) * input_price + (output_tokens / 1_000_000) * output_price
+
+
+def estimate_usage_cost(item: dict) -> float:
+    """Custo de um item de result["usage"], incluindo tokens do prompt cache."""
+    return estimate_cost_usd(
+        item["model"],
+        item["input_tokens"],
+        item["output_tokens"],
+        item.get("cache_creation_input_tokens", 0),
+        item.get("cache_read_input_tokens", 0),
+    )
 
 
 def log_analysis_cost(exam_type: str, model_used: str, usage: list[dict]) -> float:
@@ -116,7 +144,7 @@ def log_analysis_cost(exam_type: str, model_used: str, usage: list[dict]) -> flo
     breakdown = []
     total = 0.0
     for item in usage:
-        cost = estimate_cost_usd(item["model"], item["input_tokens"], item["output_tokens"])
+        cost = estimate_usage_cost(item)
         total += cost
         breakdown.append({**item, "cost_usd": round(cost, 6)})
 
@@ -268,7 +296,7 @@ def late_usage_recorder(scopes: list[tuple[str, float]]):
     outra thread, sem contexto de request: os escopos vêm prontos.
     """
     def _record(item: dict) -> None:
-        cost = estimate_cost_usd(item["model"], item["input_tokens"], item["output_tokens"])
+        cost = estimate_usage_cost(item)
         log_analysis_cost("chamada_descartada", item["model"], [item])
         if cost > 0:
             for scope, _cap in scopes:

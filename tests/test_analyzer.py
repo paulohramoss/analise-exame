@@ -6,6 +6,7 @@ Testes de regressão para a lógica de análise (core/analyzer.py):
 - truncamento de texto para a síntese de consenso
 """
 
+import base64
 from unittest.mock import MagicMock
 
 import pytest
@@ -412,3 +413,28 @@ def test_claude_text_cut_by_max_tokens_ends_on_complete_paragraph():
 def test_claude_text_complete_is_untouched():
     message = MagicMock(stop_reason="end_turn", content=[MagicMock(text="laudo completo")])
     assert analyzer._close_truncated_text(message) == "laudo completo"
+
+
+def test_extract_claude_usage_includes_prompt_cache_tokens():
+    message = MagicMock()
+    message.usage = MagicMock(
+        input_tokens=50, output_tokens=80, cache_creation_input_tokens=0, cache_read_input_tokens=3000
+    )
+    usage = analyzer._extract_claude_usage("claude-sonnet-4-6", message)
+    assert usage == {
+        "model": "claude-sonnet-4-6", "input_tokens": 50, "output_tokens": 80, "cache_read_input_tokens": 3000,
+    }
+
+
+def test_build_claude_content_caches_reference_prefix_only():
+    refs = [(b"ref1", "image/png"), (b"ref2", "image/png")]
+    content = analyzer._build_claude_content([(b"exam", "image/png")], "joelho", "dor", refs)
+    marked = [i for i, block in enumerate(content) if "cache_control" in block]
+    assert len(marked) == 1
+    assert content[marked[0]]["type"] == "image"
+    assert content[marked[0]]["source"]["data"] == base64.standard_b64encode(b"ref2").decode()
+
+
+def test_build_claude_content_without_references_has_no_cache_marker():
+    content = analyzer._build_claude_content([(b"exam", "image/png")], "joelho", "", [])
+    assert not any("cache_control" in block for block in content)

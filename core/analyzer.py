@@ -138,11 +138,18 @@ def _extract_claude_usage(model: str, message: object) -> dict | None:
     usage = getattr(message, "usage", None)
     if not usage:
         return None
-    return {
+    result = {
         "model": model,
         "input_tokens": usage.input_tokens or 0,
         "output_tokens": usage.output_tokens or 0,
     }
+    # input_tokens não inclui o que foi gravado/lido do prompt cache; sem estes
+    # campos o custo estimado ficaria abaixo do real.
+    for key in ("cache_creation_input_tokens", "cache_read_input_tokens"):
+        value = getattr(usage, key, None)
+        if isinstance(value, int) and value > 0:
+            result[key] = value
+    return result
 
 
 def _analysis_cache_key(images_bytes: list[bytes], user_description: str, model_name: str, dual_ai: bool) -> str:
@@ -775,6 +782,10 @@ def _build_claude_content(
                     "data": base64.standard_b64encode(ref_bytes).decode("utf-8"),
                 },
             })
+        # Prompt caching: as referências são as mesmas para toda análise da região,
+        # então o prefixo até aqui vira cache (leitura a 10% do preço de entrada).
+        # Tudo depois (caso validado, exame, histórico) varia e fica fora.
+        content[-1]["cache_control"] = {"type": "ephemeral"}
 
     if validated_case_text:
         content.append({"type": "text", "text": f"\n{validated_case_text}"})

@@ -64,7 +64,7 @@ def record_analysis_cost(mode: str, result: dict) -> None:
     cost_tracking.log_analysis_cost(result.get("exam_type", ""), result.get("model_used", ""), usage)
 
     cost_usd = sum(
-        cost_tracking.estimate_cost_usd(item["model"], item["input_tokens"], item["output_tokens"])
+        cost_tracking.estimate_usage_cost(item)
         for item in usage
     )
     if cost_usd > 0:
