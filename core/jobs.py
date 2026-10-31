@@ -137,7 +137,7 @@ def get_job_status(job_id: str) -> dict:
     if status == "finished":
         payload["result"] = job.return_value()
     elif status == "failed":
-        payload["error"] = "Não foi possível processar a análise. Tente novamente."
+        payload["error"] = meta.get("user_error") or "Não foi possível processar a análise. Tente novamente."
     return payload
 
 
@@ -199,16 +199,20 @@ def run_analysis_job(
         unbind_trace_id(token)
 
 
-def _set_stage(stage: str) -> None:
-    """Publica a etapa atual em job.meta (lida pela página de espera via get_job_status)."""
+def _set_meta(key: str, value) -> None:
     try:
         import rq
         job = rq.get_current_job()
         if job is not None:
-            job.meta["stage"] = stage
+            job.meta[key] = value
             job.save_meta()
     except Exception:
-        logger.debug("Não foi possível atualizar a etapa do job", exc_info=True)
+        logger.debug("Não foi possível atualizar job.meta[%s]", key, exc_info=True)
+
+
+def _set_stage(stage: str) -> None:
+    """Publica a etapa atual em job.meta (lida pela página de espera via get_job_status)."""
+    _set_meta("stage", stage)
 
 
 def _run_analysis(
@@ -216,13 +220,33 @@ def _run_analysis(
     api_key, anthropic_api_key, exclude_gemini_cost, cost_scopes, persist, display_extra,
     exam_category="imagem",
 ) -> dict:
-    from core import cost_tracking, db
-    from core.analyzer import analyze_exam_from_bytes
-    from web.posthog import analysis_not_saved, init_posthog
-
     logger.info("Job de análise iniciado (mode=%s, imagens=%d)", mode, len(images))
     t0 = time.time()
-    result = analyze_exam_from_bytes(
+    try:
+        result = _analyze(
+            images=images, exam_filename=exam_filename, api_key=api_key, user_description=user_description,
+            model_name=model_name, anthropic_api_key=anthropic_api_key, persist=persist,
+            cost_scopes=cost_scopes, exam_category=exam_category,
+        )
+    except Exception as exc:
+        from core.analyzer import ExamReadError
+
+        if isinstance(exc, ExamReadError):
+            _set_meta("user_error", str(exc))  # mensagem para o usuário (ver get_job_status)
+        raise
+    return _finish_analysis(
+        result, mode=mode, images=images, image_meta=image_meta, persist=persist, cost_scopes=cost_scopes,
+        exclude_gemini_cost=exclude_gemini_cost, display_extra=display_extra, t0=t0,
+    )
+
+
+def _analyze(*, images, exam_filename, api_key, user_description, model_name, anthropic_api_key, persist,
+             cost_scopes, exam_category):
+    from core import cost_tracking
+    from core.analyzer import analyze_exam_from_bytes
+    from web.posthog import init_posthog
+
+    return analyze_exam_from_bytes(
         exam_images_data=images,
         exam_filename=exam_filename,
         api_key=api_key or _env_first("GEMINI_API_KEY", "GOOGLE_API_KEY"),
@@ -236,6 +260,13 @@ def _run_analysis(
         on_progress=_set_stage,
         exam_category=exam_category,
     )
+
+
+def _finish_analysis(result, *, mode, images, image_meta, persist, cost_scopes, exclude_gemini_cost,
+                     display_extra, t0) -> dict:
+    """Custo, gravação e dados de exibição de uma análise concluída pelo worker."""
+    from core import cost_tracking, db
+    from web.posthog import analysis_not_saved
 
     usage = result.get("usage", [])
     cost_tracking.log_analysis_cost(result.get("exam_type", ""), result.get("model_used", ""), usage)

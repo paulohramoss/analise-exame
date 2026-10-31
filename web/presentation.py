@@ -203,6 +203,10 @@ def ai_error_response(exc: Exception) -> tuple[str, int]:
     Antes cada rota tinha a própria cadeia de ifs (com textos diferentes para o
     mesmo erro). Detalhes de configuração só aparecem em ambiente local.
     """
+    from core.analyzer import ExamReadError
+
+    if isinstance(exc, ExamReadError):
+        return str(exc), 422
     error_lower = str(exc).lower()
     code = getattr(exc, "code", None)
     if "api key not valid" in error_lower or "invalid api key" in error_lower or "api_key_invalid" in error_lower:

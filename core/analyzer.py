@@ -1391,6 +1391,14 @@ def _locate_findings(
 #   3. interpretação: a IA (Claude; Gemini como reserva) escreve as seções 3–6 a
 #      partir dos valores já calculados. Se falhar, o laudo sai com as tabelas.
 
+class ExamReadError(RuntimeError):
+    """O arquivo não tem o que o tipo de exame pede (ex.: pedido de exames sem resultados).
+
+    A mensagem é escrita para o usuário e chega à tela (presentation.ai_error_response
+    e o status do job), diferente das falhas internas, que viram mensagem genérica.
+    """
+
+
 EXAM_CATEGORIES = ("imagem", "dinamometria", "laboratorial")
 _STRUCTURED_MODULES = {"dinamometria": dynamometry, "laboratorial": lab_tests}
 _STRUCTURED_MAX_TOKENS = int(os.environ.get("STRUCTURED_EXAM_MAX_TOKENS", "4096"))
@@ -1512,8 +1520,17 @@ def _analyze_structured_exam(
     try:
         data = module.compute(module.parse_extraction(text))
     except ValueError as exc:
+        # Engano comum: enviar o PEDIDO de exames (lista do que colher) em vez do resultado.
+        if re.search(r"solicita[çc][ãa]o de exame|solicito (o |os )?exame|pedido de exame|requisi[çc][ãa]o", user_description, re.I):
+            raise ExamReadError(
+                "O arquivo parece ser um pedido de exames, não o resultado: não há valores para analisar. "
+                "Envie o laudo emitido pelo laboratório, com os resultados e as faixas de referência."
+            ) from exc
         label = "de dinamometria" if category == "dinamometria" else "laboratoriais"
-        raise RuntimeError(f"Não foi possível ler os valores do exame: os arquivos não parecem resultados {label}.") from exc
+        raise ExamReadError(
+            f"Não foi possível ler os valores do exame: os arquivos não parecem resultados {label}. "
+            "Confira o tipo de exame escolhido ou envie o relatório com os valores."
+        ) from exc
 
     _notify(on_progress, "interpretando")
     interpretation, interpretation_model = None, None

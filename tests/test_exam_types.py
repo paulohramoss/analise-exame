@@ -253,6 +253,39 @@ def test_arquivo_que_nao_e_do_tipo_escolhido(monkeypatch):
         analyzer._analyze_structured_exam("dinamometria", None, "m", "chave", [(b"p", "image/jpeg")], "", 1e18)
 
 
+def test_pedido_de_exames_em_vez_do_resultado(monkeypatch):
+    """Caso real de teste: o PDF enviado era a solicitação da nutricionista, sem valores."""
+    gen, _ = _fake_generate([json.dumps({"resultados": [{"exame": "Ferritina", "valor": None}]})])
+    monkeypatch.setattr(analyzer, "_generate_structured_text", gen)
+    texto_do_pdf = "Texto do PDF enviado: SOLICITAÇÃO DE EXAME LABORATORIAL Solicito exame de sangue: -Hemograma -Ferritina"
+    with pytest.raises(RuntimeError, match="pedido de exames, não o resultado"):
+        analyzer._analyze_structured_exam("laboratorial", None, "m", "chave", [(b"p", "image/jpeg")], texto_do_pdf, 1e18)
+
+
+def test_mensagem_de_leitura_chega_a_tela(client, monkeypatch):
+    import io
+
+    monkeypatch.setattr(analyzer, "analyze_exam_from_bytes", MagicMock(
+        side_effect=analyzer.ExamReadError("O arquivo parece ser um pedido de exames, não o resultado.")))
+    resp = client.post("/trial/analyze", data={"exam_image": (io.BytesIO(b"img"), "pedido.jpg"),
+                                               "privacy_consent": "accepted"}, content_type="multipart/form-data")
+    assert resp.status_code == 422 and "pedido de exames" in resp.get_json()["error"]
+
+
+def test_mensagem_de_leitura_chega_pela_fila(client, monkeypatch, fake_redis_conn, run_pending_jobs):
+    import io
+
+    monkeypatch.setattr(analyzer, "analyze_exam_from_bytes", MagicMock(
+        side_effect=analyzer.ExamReadError("O arquivo parece ser um pedido de exames, não o resultado.")))
+    resp = client.post("/trial/analyze", data={"exam_image": (io.BytesIO(b"img"), "pedido.jpg"),
+                                               "privacy_consent": "accepted"}, content_type="multipart/form-data")
+    job_id = resp.get_json()["job_id"]
+    run_pending_jobs(fake_redis_conn)
+    from core import jobs
+
+    assert "pedido de exames" in jobs.get_job_status(job_id)["error"]
+
+
 def test_analise_estruturada_nao_passa_pelo_laudo_de_imagem(monkeypatch):
     monkeypatch.setattr(analyzer, "_make_gemini_client", lambda *a, **k: object())
     structured = MagicMock(return_value={"exam_type": "laboratorial", "analysis": "x", "usage": []})
