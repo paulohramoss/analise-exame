@@ -1401,7 +1401,8 @@ class ExamReadError(RuntimeError):
 
 EXAM_CATEGORIES = ("imagem", "dinamometria", "laboratorial")
 _STRUCTURED_MODULES = {"dinamometria": dynamometry, "laboratorial": lab_tests}
-_STRUCTURED_MAX_TOKENS = int(os.environ.get("STRUCTURED_EXAM_MAX_TOKENS", "4096"))
+# Um laudo laboratorial completo tem 60+ resultados: o JSON da leitura não cabe em 4 mil tokens.
+_STRUCTURED_MAX_TOKENS = int(os.environ.get("STRUCTURED_EXAM_MAX_TOKENS", "16000"))
 
 _CATEGORY_KEYWORDS = {
     "dinamometria": [
@@ -1487,6 +1488,12 @@ def _generate_structured_text(
     raise last_exc or RuntimeError("Nenhum provedor de IA disponível.")
 
 
+def _clinical_history(description: str) -> str:
+    """Só o que o profissional escreveu: o texto do PDF já virou números na extração."""
+    texto = (description or "").split("Texto do PDF enviado (", 1)[0].rstrip(" |")
+    return texto[:3000]
+
+
 def _analyze_structured_exam(
     category: str,
     gemini_client: genai.Client | None,
@@ -1510,7 +1517,7 @@ def _analyze_structured_exam(
     extraction_prompt = module.build_extraction_prompt()
     if user_description:
         # Inclui o texto da camada de texto do PDF (já sem identificação): números exatos.
-        extraction_prompt += f"\n\nTEXTO DO DOCUMENTO E CONTEXTO CLÍNICO (já sem identificação):\n{user_description[:15000]}"
+        extraction_prompt += f"\n\nTEXTO DO DOCUMENTO E CONTEXTO CLÍNICO (já sem identificação):\n{user_description[:45000]}"
     text, item, extraction_model = _generate_structured_text(
         gemini_client, model_name, anthropic_api_key, exam_images, extraction_prompt, deadline,
         prefer_claude=False, json_mode=True, **common,
@@ -1537,7 +1544,7 @@ def _analyze_structured_exam(
     try:
         interpretation, item, interpretation_model = _generate_structured_text(
             gemini_client, model_name, anthropic_api_key, [],
-            module.build_interpretation_prompt(data, user_description[:3000]), deadline,
+            module.build_interpretation_prompt(data, _clinical_history(user_description)), deadline,
             prefer_claude=True, json_mode=False, **common,
         )
         if item:

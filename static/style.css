@@ -780,3 +780,5 @@
     .lab-row { grid-template-columns: 1fr auto; }
     .lab-row-bar { grid-column: 1 / -1; order: 3; }
 }
+.lab-prev { font-size: 0.7rem; color: var(--primary-dark) !important; font-weight: 700; }
+.lab-old { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: #fff7e6; color: #8a5300; font-size: 0.85rem; font-weight: 600; }

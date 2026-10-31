@@ -15,6 +15,9 @@
         </div>
     </div>
 
+    {% if d.meses_desde_coleta and d.meses_desde_coleta >= 6 %}
+    <p class="lab-old" role="note">⏱ Coleta há {{ d.meses_desde_coleta // 12 ~ (' ano' if d.meses_desde_coleta // 12 == 1 else ' anos') if d.meses_desde_coleta >= 12 else d.meses_desde_coleta ~ ' meses' }}{% if d.meses_desde_coleta >= 12 and d.meses_desde_coleta % 12 %} e {{ d.meses_desde_coleta % 12 }} {{ 'mês' if d.meses_desde_coleta % 12 == 1 else 'meses' }}{% endif %}: os valores podem não refletir o estado atual. Considere repetir antes de decidir a conduta.</p>
+    {% endif %}
     <div class="lab-chips" aria-label="Situação por painel">
         {% for p in d.paineis %}
         <a class="lab-chip {{ 'is-alert' if p.alterados else 'is-ok' }}" href="#painel-{{ loop.index }}">
@@ -70,7 +73,8 @@
                 <span class="lab-noref">sem faixa numérica no laudo</span>
                 {% endif %}
             </div>
-            <div class="lab-row-value"><strong>{{ it.valor }}</strong><span>{{ it.referencia }}</span></div>
+            <div class="lab-row-value"><strong>{{ it.valor }}</strong><span>{{ it.referencia }}</span>
+                {% if it.anterior %}<span class="lab-prev">{{ it.anterior.direcao }} antes: {{ it.anterior.texto|replace(' em ', ' em ') }}</span>{% endif %}</div>
             <div class="lab-row-status">{{ it.rotulo }}{% if it.vezes_o_limite and it.vezes_o_limite >= 1.5 %} · {{ it.vezes_o_limite }}×{% endif %}</div>
         </div>
         {% endfor %}

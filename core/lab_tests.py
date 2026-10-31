@@ -13,8 +13,8 @@ O laudo final junta:
          inflamação, lesão muscular, metabolismo ósseo, ferro, hormônios etc.)
 """
 
-import json
 import re
+from datetime import date
 
 from core.dynamometry import _fmt, _number, _text  # mesmos leitores tolerantes de número/texto
 
@@ -22,14 +22,16 @@ SITUACOES = {"abaixo": "↓ Abaixo", "acima": "↑ Acima", "normal": "Dentro", "
 
 # Grupos para organizar a tabela (o que não casar vai para "Outros").
 PAINEIS = [
-    ("Hemograma", r"hem[aá]c|eritr|hemoglob(?!ina glicada)|hemat[oó]c|vcm|hcm|chcm|rdw|leuc|neutr|linf|mon[oó]c|eosin|bas[oó]f|plaquet|segment|bast"),
+    ("Hemograma", r"hem[aá]c|eritr|hemoglob(?!ina glicada)|hemat[oó]c|vcm|hcm|chcm|rdw|\bvpm\b|volume plaquet|leuc|neutr|linf|mon[oó]c|eosin|bas[oó]f|plaquet|segment|bast"),
     ("Inflamação", r"\bpcr\b|prote[ií]na c|vhs|hemossedimen|fibrinog|interleuc|il-6"),
-    ("Músculo e fígado", r"\bck\b|\bcpk\b|creatin(o)?quinase|creatina quinase|\bldh\b|desidrogenase l[aá]tica|aldolase|mioglobina|\btgo\b|\bast\b|\btgp\b|\balt\b"),
+    ("Músculo e fígado", r"bilirrubina|prote[ií]nas totais|albumina|globulina(?! l)|\bggt\b|gama.?gt|\bck\b|\bcpk\b|creatin(o)?quinase|creatina quinase|\bldh\b|desidrogenase l[aá]tica|aldolase|mioglobina|\btgo\b|\bast\b|\btgp\b|\balt\b"),
     ("Metabolismo ósseo", r"vitamina d|25.?oh|c[aá]lcio|f[oó]sforo|pth|paratorm|fosfatase alcalina|magn[eé]sio"),
     ("Ferro", r"\bferro\b|ferritina|transferrina|satura[cç][aã]o|tibc"),
     ("Rim e eletrólitos", r"creatinina|ur[eé]ia|\bsódio\b|\bsodio\b|pot[aá]ssio|cloro|taxa de filtra|tfg"),
     ("Metabolismo", r"glicose|glicemia|hemoglobina glicada|hba1c|insulina|colesterol|\bhdl\b|\bldl\b|triglic|[aá]cido [uú]rico"),
-    ("Hormônios", r"\btsh\b|\bt4\b|\bt3\b|testosterona|estradiol|cortisol|prolactina|\bigf\b|\bshbg\b"),
+    ("Hormônios", r"\btsh\b|\bt4\b|\bt3\b|testosterona|estradiol|cortisol|prolactina|\bigf\b|\bshbg\b|\bacth\b|"
+                  r"adrenocortic|\bdht\b|di-?hidrotestosterona|\bdhea|dehidroepiandrosterona|\bfsh\b|\blh\b|"
+                  r"progesterona|globulina l"),
     ("Vitaminas", r"vitamina b12|cobalamina|[aá]cido f[oó]lico|folato"),
 ]
 
@@ -52,9 +54,11 @@ Formato (responda APENAS com o JSON):
       "unidade": "ex.: U/L, mg/dL, ng/mL",
       "referencia_min": número ou null,
       "referencia_max": número ou null,
-      "referencia_texto": "a faixa de referência como escrita no laudo"
+      "referencia_texto": "a faixa de referência como escrita no laudo",
+      "anteriores": [{"data": "AAAA-MM-DD", "valor": número}]
     }
-  ]
+  ],
+  "paciente": {"idade_anos": número ou null, "sexo": "M" | "F" | null}
 }
 
 Regras:
@@ -62,6 +66,9 @@ Regras:
   referencia_max = 5.0; se for "maior que 30", referencia_min = 30.
 - Se houver faixas por sexo ou idade, use a que o laudo aplica ao paciente; se não der para saber,
   deixe min/max null e copie o texto em referencia_texto.
+- Se o laudo trouxer resultados anteriores do mesmo exame (ex.: "Resultados anteriores: 31/01/2024 = 8,4"),
+  registre em "anteriores"; senão, lista vazia.
+- Inclua TODOS os resultados do laudo, inclusive os das últimas páginas.
 - Ignore nome, documento, médico solicitante e qualquer dado que identifique o paciente."""
 
 
@@ -81,7 +88,12 @@ def parse_extraction(text: str) -> dict:
         valor_texto = _text(item.get("valor_texto"), 60)
         if not exame or (valor is None and not valor_texto):
             continue
+        anteriores = []
+        for ant in item.get("anteriores") or []:
+            if isinstance(ant, dict) and _number(ant.get("valor")) is not None:
+                anteriores.append({"data": _text(ant.get("data"), 10) or None, "valor": _number(ant.get("valor"))})
         resultados.append({
+            "anteriores": anteriores[:5],
             "exame": exame,
             "valor": valor,
             "valor_texto": valor_texto,
@@ -92,10 +104,15 @@ def parse_extraction(text: str) -> dict:
         })
     if not resultados:
         raise ValueError("Nenhum resultado laboratorial encontrado no laudo.")
+    paciente = data.get("paciente") if isinstance(data.get("paciente"), dict) else {}
+    idade = _number(paciente.get("idade_anos"))
+    sexo = _text(paciente.get("sexo"), 1).upper()
     return {
         "laboratorio": _text(data.get("laboratorio"), 80),
         "data_coleta": _text(data.get("data_coleta"), 10) or None,
         "resultados": resultados[:120],
+        "paciente": {"idade_anos": int(idade) if idade and 0 < idade < 120 else None,
+                     "sexo": sexo if sexo in {"M", "F"} else None},
     }
 
 
@@ -168,7 +185,7 @@ def derive_indices(resultados: list[dict]) -> list[dict]:
     transferrina = _find(resultados, r"transferrina", r"satura")
     ja_tem_saturacao = _find(resultados, r"satura[cç][aã]o")
     if ferro and transferrina and not ja_tem_saturacao and "mg/dl" in _unit(transferrina) and transferrina["valor"] > 0:
-        sat = ferro["valor"] / (transferrina["valor"] * 1.25) * 100  # CTLF ≈ transferrina (mg/dL) × 1,25
+        sat = round(ferro["valor"] / (transferrina["valor"] * 1.25) * 100, 1)  # CTLF ≈ transferrina × 1,25
         indices.append(_indice("Saturação de transferrina (estimada)", sat, "%", "20 a 45%", sat < 20 or sat > 45,
                                "ferro (µg/dL) ÷ (transferrina (mg/dL) × 1,25) × 100", [ferro["exame"], transferrina["exame"]]))
     return indices
@@ -194,6 +211,10 @@ def derive_patterns(resultados: list[dict], indices: list[dict]) -> list[dict]:
         "vitd": _find(resultados, r"vitamina d|25.?oh"),
         "b12": _find(resultados, r"b12|cobalamina"),
         "testo": _find(resultados, r"testosterona", r"livre"),
+        "ferro": _find(resultados, r"\bferro\b", r"capacidade|satura"),
+        "ldl": _find(resultados, r"\bldl\b"),
+        "ct": _find(resultados, r"colesterol total"),
+        "bd": _find(resultados, r"bilirrubina direta"),
         "cortisol": _find(resultados, r"cortisol"),
     }
     nomes = lambda *keys: [R[k]["exame"] for k in keys if R.get(k)]  # noqa: E731
@@ -211,12 +232,29 @@ def derive_patterns(resultados: list[dict], indices: list[dict]) -> list[dict]:
         padroes.append(_padrao("Hemoglobina baixa sem depleção de ferro evidente", "atencao", nomes("hb", "ferritina"),
                                "Anemia com ferritina normal sugere outra causa (inflamação, B12/folato, perdas recentes).",
                                "Correlacionar com B12, folato, reticulócitos e contexto clínico."))
+    saturacao = next((i for i in indices if i["nome"].startswith("Saturação")), None)
+    if _is(R["ferro"], "abaixo") and R["ferritina"] and not _is(R["ferritina"], "abaixo"):
+        padroes.append(_padrao(
+            "Ferro circulante baixo com estoque preservado" + (" (ferritina alta)" if _is(R["ferritina"], "acima") else ""),
+            "atencao", nomes("ferro", "ferritina", "pcr") + ([saturacao["nome"]] if saturacao else []),
+            "Ferro sérico abaixo da faixa sem falta de estoque"
+            + (f"; saturação de transferrina estimada em {_num(saturacao['valor'])}%" if saturacao else "")
+            + ". Padrão de ferro \"sequestrado\": inflamação e exercício intenso elevam a hepcidina e retiram o "
+            "ferro da circulação, e a ferritina sobe como proteína de fase aguda.",
+            "Repetir ferro, ferritina e saturação em repouso (48–72 h sem treino intenso), com PCR ultrassensível; "
+            "investigar inflamação se persistir."))
     if _is(R["ferritina"], "acima") and _is(R["pcr"], "acima"):
         padroes.append(_padrao("Ferritina elevada com inflamação", "info", nomes("ferritina", "pcr"),
                                "A ferritina sobe na inflamação (proteína de fase aguda); não indica excesso de ferro por si só.",
                                "Reavaliar após a resolução do quadro inflamatório."))
 
-    if _is(R["ck"], "acima"):
+    if _is(R["ck"], "acima") and (R["ck"].get("vezes_o_limite") or 99) < 2 \
+            and not (_is(R["tgo"], "acima") or _is(R["tgp"], "acima")):
+        padroes.append(_padrao("CK discretamente elevada", "info", nomes("ck", "tgo", "tgp"),
+                               f"CK {_num(R['ck'].get('vezes_o_limite'))}× o limite, com TGO/TGP normais: "
+                               "elevação leve, comum em quem treina.",
+                               "Se houver dor ou fraqueza muscular, repetir após 48–72 h sem treino intenso."))
+    elif _is(R["ck"], "acima"):
         com_transaminases = _is(R["tgo"], "acima") or _is(R["tgp"], "acima")
         padroes.append(_padrao(
             "Compatível com lesão ou sobrecarga muscular" + (" (CK com transaminases)" if com_transaminases else ""),
@@ -252,6 +290,19 @@ def derive_patterns(resultados: list[dict], indices: list[dict]) -> list[dict]:
                                f"Triglicerídeos/HDL de {_num(razao['valor'])} (alvo < 3,5).",
                                "Associado a resistência à insulina e risco cardiovascular."))
 
+    if _is(R["ldl"], "acima") or (not R["ldl"] and _is(R["ct"], "acima")):
+        ldl = R["ldl"] or R["ct"]
+        padroes.append(_padrao(
+            ("Colesterol LDL elevado" if R["ldl"] else "Colesterol total elevado"), "atencao", nomes("ct", "ldl"),
+            f"{ldl['exame']} em {_num(ldl['valor'])} {ldl['unidade']} (alvo do laudo: {_reference(ldl)})."
+            + (" Acima de 190 mg/dL pode indicar hipercolesterolemia familiar." if R["ldl"] and R["ldl"]["valor"] >= 190 else ""),
+            "A meta depende do risco cardiovascular global (idade, pressão, tabagismo, histórico familiar); "
+            "ajustar dieta e reavaliar o perfil lipídico."))
+    if _is(R["bd"], "acima"):
+        padroes.append(_padrao("Bilirrubina direta discretamente elevada", "info", nomes("bd", "tgo", "tgp"),
+                               f"{_num(R['bd']['valor'])} {R['bd']['unidade']} (referência: {_reference(R['bd'])})"
+                               + (", com transaminases normais." if R["tgo"] and not _is(R["tgo"], "acima") else "."),
+                               "Isolada e discreta costuma ter pouco significado; repetir e avaliar se houver outros sinais hepáticos."))
     if _is(R["vitd"], "abaixo"):
         grave = R["vitd"]["valor"] < 20
         padroes.append(_padrao("Vitamina D " + ("deficiente" if grave else "insuficiente"), "atencao", nomes("vitd"),
@@ -301,7 +352,12 @@ def format_identification(calc: dict) -> str:
     if calc.get("laboratorio"):
         linhas.append(f"- Laboratório: {_cell(calc['laboratorio'])}")
     if calc.get("data_coleta"):
-        linhas.append(f"- Data da coleta: {calc['data_coleta']}")
+        linhas.append(f"- Data da coleta: {_date_br(calc['data_coleta'])}")
+    paciente = calc.get("paciente") or {}
+    if paciente.get("idade_anos") or paciente.get("sexo"):
+        sexo = {"M": "masculino", "F": "feminino"}.get(paciente.get("sexo"), "não informado")
+        idade = f"{paciente['idade_anos']} anos" if paciente.get("idade_anos") else "idade não informada"
+        linhas.append(f"- Paciente: {idade}, sexo {sexo} (faixas de referência por idade/sexo)")
     linhas.append(f"- Resultados lidos: {calc['total']} ({calc['alterados']} fora da faixa de referência do laudo)")
     return "\n".join(linhas)
 
@@ -334,6 +390,9 @@ def format_results(calc: dict) -> str:
     for r in calc["resultados"]:
         un = f" {r['unidade']}" if r.get("unidade") else ""
         valor = f"{_num(r['valor'])}{un}" if r["valor"] is not None else r["valor_texto"]
+        anterior = _previous(r, un)
+        if anterior:
+            valor += f" (antes: {anterior['texto']})"
         ref = _reference(r)
         sit = SITUACOES[r["situacao"]]
         if r.get("vezes_o_limite") and r["vezes_o_limite"] >= 1.5:
@@ -356,14 +415,17 @@ def format_results(calc: dict) -> str:
 
 
 def build_interpretation_prompt(calc: dict, description: str) -> str:
-    resumo = json.dumps(calc, ensure_ascii=False, default=str)[:12000]
+    # A tabela já traz situação, índices e padrões e cabe inteira mesmo em laudos
+    # grandes; o JSON completo passava de 12 mil caracteres e cortava o final.
+    resumo = f"{format_identification(calc)}\n\n{format_results(calc)}"[:30000]
     return f"""Você é médico com experiência em medicina esportiva e do aparelho locomotor, da plataforma Three Health.
-Abaixo estão resultados laboratoriais. A coluna "situacao" (abaixo/acima/normal/sem_referencia) JÁ FOI
-definida pelo sistema com a faixa de referência do próprio laudo: não a altere nem invente faixas.
+Abaixo estão resultados laboratoriais. A coluna "Situação" e os índices e padrões JÁ FORAM
+definidos pelo sistema com a faixa de referência do próprio laudo: não a altere nem invente faixas.
 
 HISTÓRICO CLÍNICO (pode estar vazio): {description or "Não informado"}
 
-RESULTADOS (JSON): {resumo}
+RESULTADOS:
+{resumo}
 
 Escreva SOMENTE as seções abaixo, com estes títulos exatos, em português, sem introdução:
 
@@ -433,7 +495,37 @@ def _bar(r: dict) -> dict | None:
     }
 
 
-def dashboard(calc: dict | None) -> dict | None:
+def _months_since(data_coleta: str | None, hoje: date | None = None) -> int | None:
+    """Meses entre a coleta e hoje: exame antigo não deve guiar conduta atual."""
+    try:
+        coleta = date.fromisoformat(data_coleta or "")
+    except ValueError:
+        return None
+    hoje = hoje or date.today()
+    meses = (hoje.year - coleta.year) * 12 + hoje.month - coleta.month - (hoje.day < coleta.day)
+    return meses if meses >= 0 else None
+
+
+def _date_br(data: str) -> str:
+    """2024-01-31 → 31/01/2024; outro formato fica como veio."""
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", data or "")
+    return f"{m[3]}/{m[2]}/{m[1]}" if m else data
+
+
+def _previous(r: dict, unidade: str) -> dict | None:
+    """Resultado anterior mais recente impresso no laudo, com a direção da mudança."""
+    anteriores = [a for a in r.get("anteriores") or [] if a.get("valor") is not None]
+    if not anteriores or r.get("valor") is None:
+        return None
+    ultimo = sorted(anteriores, key=lambda a: a.get("data") or "")[-1]
+    variacao = r["valor"] - ultimo["valor"]
+    return {
+        "texto": f"{_num(ultimo['valor'])}{unidade}" + (f" em {_date_br(ultimo['data'])}" if ultimo.get("data") else ""),
+        "direcao": "↑" if variacao > 0 else "↓" if variacao < 0 else "=",
+    }
+
+
+def dashboard(calc: dict | None, hoje: date | None = None) -> dict | None:
     """Resumo visual dos exames laboratoriais: painéis, réguas, índices e padrões."""
     if not calc or not calc.get("resultados"):
         return None
@@ -449,6 +541,7 @@ def dashboard(calc: dict | None) -> dict | None:
             "rotulo": SITUACOES[r["situacao"]],
             "vezes_o_limite": r.get("vezes_o_limite"),
             "barra": _bar(r),
+            "anterior": _previous(r, un),
         })
         if r["situacao"] in {"abaixo", "acima"}:
             painel_["alterados"] += 1
@@ -461,4 +554,5 @@ def dashboard(calc: dict | None) -> dict | None:
         "padroes": calc.get("padroes") or [],
         "data_coleta": calc.get("data_coleta"),
         "laboratorio": calc.get("laboratorio"),
+        "meses_desde_coleta": _months_since(calc.get("data_coleta"), hoje),
     }

@@ -396,7 +396,7 @@ def format_results(calc: dict) -> str:
 
 
 def build_interpretation_prompt(calc: dict, description: str) -> str:
-    resumo = json.dumps(calc, ensure_ascii=False, default=str)[:12000]
+    resumo = json.dumps(calc, ensure_ascii=False, default=str)[:30000]
     return f"""Você é especialista em avaliação funcional e reabilitação musculoesquelética da plataforma Three Health.
 Abaixo estão os resultados de um exame de dinamometria. Os valores derivados (índice de simetria, déficit,
 classificação, valores por peso, relações agonista/antagonista e assimetrias) JÁ FORAM CALCULADOS pelo

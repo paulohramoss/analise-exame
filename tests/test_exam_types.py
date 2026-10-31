@@ -225,8 +225,8 @@ def test_padroes_que_correlacionam_exames():
     titulos = [p["titulo"] for p in _calc(PAINEL_COMPLETO)["padroes"]]
     assert titulos == [
         "Compatível com anemia por deficiência de ferro", "Compatível com hipotireoidismo subclínico",
-        "Sinais de resistência à insulina", "Perfil lipídico aterogênico", "Vitamina D deficiente",
-        "Testosterona baixa com cortisol alto",
+        "Sinais de resistência à insulina", "Perfil lipídico aterogênico", "Colesterol total elevado",
+        "Vitamina D deficiente", "Testosterona baixa com cortisol alto",
     ]
 
 
@@ -237,6 +237,9 @@ def test_padroes_que_correlacionam_exames():
     ([_r("CK", 120, "U/L", None, 190), _r("TGP", 90, "U/L", None, 41)], "Transaminases elevadas"),
     ([_r("TSH", 0.1, "µUI/mL", 0.4, 4.3), _r("T4 livre", 2.4, "ng/dL", 0.9, 1.8)], "Compatível com hipertireoidismo"),
     ([_r("Proteína C reativa", 3.0, "mg/dL", None, 0.5)], "Inflamação ativa"),
+    ([_r("CPK", 229, "U/L", None, 195), _r("TGO", 28, "U/L", None, 40)], "CK discretamente elevada"),
+    ([_r("Colesterol LDL", 159, "mg/dL", None, 130)], "Colesterol LDL elevado"),
+    ([_r("Bilirrubina direta", 0.51, "mg/dL", None, 0.4)], "Bilirrubina direta discretamente elevada"),
 ])
 def test_padroes_isolados(resultados, titulo):
     assert [p["titulo"] for p in _calc(resultados)["padroes"]] == [titulo]
@@ -262,7 +265,7 @@ def test_painel_visual():
     assert d["total"] == 14 and d["alterados"] == len([p for p in d["paineis"] for i in p["itens"] if i["situacao"] in {"abaixo", "acima"}])
     ferro = next(p for p in d["paineis"] if p["nome"] == "Ferro")
     assert ferro["alterados"] == 2 and ferro["itens"][0]["barra"] is not None
-    assert d["indices"][0]["valor_fmt"] == "3,39" and len(d["padroes"]) == 6
+    assert d["indices"][0]["valor_fmt"] == "3,39" and len(d["padroes"]) == 7
     assert lab_tests.dashboard(None) is None
 
 
@@ -571,3 +574,66 @@ def test_linha_do_tempo_mostra_o_parecer():
         [{"id": "c", "created_at": "2026-10-21T10:00:00+00:00", "tipo_exame": "correlacao"},
          {"id": "d", "created_at": "2026-10-20T10:00:00+00:00", "tipo_exame": "dinamometria"}], [], [])
     assert [e["titulo"] for e in eventos] == ["Parecer: correlação dos exames", "Exame: Dinamometria"]
+
+
+def test_ferro_baixo_com_ferritina_alta_atleta():
+    calc = _calc([_r("Ferro sérico", 25, "µg/dL", 65, 170), _r("Ferritina", 395.5, "ng/mL", 23.9, 336.2),
+                  _r("Transferrina", 218, "mg/dL", 203, 362), _r("Hemoglobina", 15.4, "g/dL", 13.5, 17.5)])
+    padrao = calc["padroes"][0]
+    assert padrao["titulo"] == "Ferro circulante baixo com estoque preservado (ferritina alta)"
+    assert padrao["nivel"] == "atencao" and "9,2%" in padrao["explicacao"]
+    assert not any("anemia" in p["titulo"].lower() for p in calc["padroes"])
+
+
+def test_resultados_anteriores_no_painel():
+    raw = {"resultados": [{"exame": "T4 livre", "valor": 11.0, "unidade": "ng/dL", "referencia_min": 0.9,
+                           "referencia_max": 1.8, "anteriores": [{"data": "2024-01-31", "valor": 8.4},
+                                                                  {"valor": "x"}]}],
+           "paciente": {"idade_anos": 26, "sexo": "m"}}
+    dados = lab_tests.parse_extraction(json.dumps(raw))
+    assert dados["resultados"][0]["anteriores"] == [{"data": "2024-01-31", "valor": 8.4}]
+    assert dados["paciente"] == {"idade_anos": 26, "sexo": "M"}
+    item = lab_tests.dashboard(lab_tests.compute(dados))["paineis"][0]["itens"][0]
+    assert item["anterior"]["direcao"] == "↑" and "31/01/2024" in item["anterior"]["texto"]
+
+
+def test_pdf_cabecalho_repetido_aparece_uma_vez():
+    from web import uploads
+    paginas = [f"LABORATÓRIO X\nRua Tal, 100\nExame {i}: {i * 10}" for i in range(6)]
+    limpo = uploads._without_repeated_lines(paginas)
+    assert limpo.count("LABORATÓRIO X") == 1 and limpo.count("Rua Tal") == 1
+    assert all(f"Exame {i}: {i * 10}" in limpo for i in range(6))
+
+
+def test_interpretacao_recebe_todos_os_resultados_e_padroes_de_laudo_grande():
+    resultados = [_r(f"Exame {i}", 10 + i, "mg/dL", 5, 200) for i in range(70)]
+    resultados += [_r("Ferro sérico", 25, "µg/dL", 65, 170), _r("Ferritina", 395.5, "ng/mL", 23.9, 336.2)]
+    prompt = lab_tests.build_interpretation_prompt(_calc(resultados), "Atleta de futsal, sem queixas.")
+    assert "Exame 69" in prompt and "Ferro circulante baixo com estoque preservado" in prompt
+    assert "Atleta de futsal" in prompt
+
+
+def test_historico_clinico_sem_o_texto_do_pdf():
+    from core import analyzer
+    descricao = "Atleta, dor na coxa | Texto do PDF enviado (laudo.pdf), já sem identificação do paciente:\nHEMOGRAMA ..."
+    assert analyzer._clinical_history(descricao) == "Atleta, dor na coxa"
+    assert analyzer._clinical_history("Texto do PDF enviado (x.pdf): ...") == ""
+
+
+@pytest.mark.parametrize("exame,painel", [
+    ("VPM", "Hemograma"), ("Bilirrubina direta", "Músculo e fígado"), ("Albumina", "Músculo e fígado"),
+    ("ACTH", "Hormônios"), ("DHT - Di-hidrotestosterona", "Hormônios"), ("LH", "Hormônios"),
+    ("Globulina ligadora de hormônios sexuais", "Hormônios"), ("Hemoglobina glicada", "Metabolismo"),
+])
+def test_paineis_de_um_laudo_real(exame, painel):
+    assert lab_tests.painel(exame) == painel
+
+
+def test_aviso_de_exame_antigo():
+    from datetime import date
+    calc = _calc([_r("Hemoglobina", 15, "g/dL", 13.5, 17.5)])
+    calc["data_coleta"] = "2024-07-30"
+    assert lab_tests.dashboard(calc, hoje=date(2026, 10, 31))["meses_desde_coleta"] == 27
+    assert lab_tests.dashboard(calc, hoje=date(2024, 7, 29))["meses_desde_coleta"] is None
+    calc["data_coleta"] = None
+    assert lab_tests.dashboard(calc)["meses_desde_coleta"] is None

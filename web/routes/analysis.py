@@ -68,6 +68,11 @@ class _AnalysisInput:
             requested if requested in analyzer.EXAM_CATEGORIES
             else analyzer.detect_exam_category(prepared.exam_filename, prepared.analysis_description)
         )
+        if prepared.exam_category != "imagem":
+            # Relatório com números: a leitura dos valores recebe o texto inteiro do PDF.
+            prepared.analysis_description = uploads.description_with_dicom_context(
+                user_description, upload_items, full_text=True
+            )
         return prepared
 
     def persist_fields(self, **extra) -> dict:
