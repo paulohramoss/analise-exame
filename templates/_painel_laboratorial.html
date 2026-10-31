@@ -70,7 +70,7 @@
                     <div class="lab-marker" style="left: {{ it.barra.valor }}%"></div>
                 </div>
                 {% else %}
-                <span class="lab-noref">sem faixa numérica no laudo</span>
+                <span class="lab-noref">{{ "resultado escrito, dentro da referência" if it.situacao == "normal" else "sem faixa numérica no laudo" }}</span>
                 {% endif %}
             </div>
             <div class="lab-row-value"><strong>{{ it.valor }}</strong><span>{{ it.referencia }}</span>

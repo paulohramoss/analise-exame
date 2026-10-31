@@ -637,3 +637,53 @@ def test_aviso_de_exame_antigo():
     assert lab_tests.dashboard(calc, hoje=date(2024, 7, 29))["meses_desde_coleta"] is None
     calc["data_coleta"] = None
     assert lab_tests.dashboard(calc)["meses_desde_coleta"] is None
+
+
+def test_resultado_escrito_abaixo_do_limite_fica_normal():
+    pcr = {"exame": "PCR", "valor": None, "valor_texto": "Inf. à 6", "unidade": "mg/L",
+           "referencia_min": None, "referencia_max": 6, "referencia_texto": "Inf. à 6"}
+    assert lab_tests.situacao(pcr) == "normal"
+    assert lab_tests.situacao({**pcr, "valor_texto": "< 10"}) == "sem_referencia"
+    assert lab_tests.situacao({**pcr, "valor_texto": "Reagente"}) == "sem_referencia"
+
+
+@pytest.mark.parametrize("exame,painel", [
+    ("TTPa (tempo de tromboplastina)", "Coagulação"), ("D-dímero", "Coagulação"), ("Fibrinogênio", "Coagulação"),
+    ("Lipase", "Pâncreas"), ("Cistatina C", "Rim e eletrólitos"), ("Apolipoproteína B", "Metabolismo"),
+    ("Homocisteína", "Metabolismo"), ("Androstenediona", "Hormônios"), ("PSA total", "Marcadores tumorais"),
+    ("CA 19-9", "Marcadores tumorais"), ("CA125", "Marcadores tumorais"), ("Cálcio", "Metabolismo ósseo"),
+])
+def test_novos_paineis(exame, painel):
+    assert lab_tests.painel(exame) == painel
+
+
+def _titulos(resultados):
+    return [p["titulo"] for p in _calc(resultados)["padroes"]]
+
+
+def test_coagulacao_e_d_dimero_com_ck_alta():
+    calc = _calc([_r("TTPa", 43.5, "segundos", None, 40), _r("TTPa relação", 1.45, "", None, 1.3),
+                  _r("D-dímero", 714, "µg/L FEU", None, 500), _r("Creatina quinase (CK)", 724, "U/L", 35, 232),
+                  _r("TGO (AST)", 38, "U/L", None, 35), _r("TGP (ALT)", 20, "U/L", None, 45)])
+    padroes = {p["titulo"]: p for p in calc["padroes"]}
+    assert "TTPa prolongado" in padroes and "43,5 segundos" in padroes["TTPa prolongado"]["explicacao"]
+    assert "CK alta" in padroes["D-dímero elevado"]["explicacao"]
+    ck = padroes["Compatível com lesão ou sobrecarga muscular (CK com transaminases)"]["explicacao"]
+    assert "3,1× o limite" in ck and "acompanhada de TGO," in ck and "origem muscular" in ck
+
+
+def test_ldl_com_apob_e_tendencia():
+    ldl = {**_r("Colesterol LDL", 153, "mg/dL", None, 115), "anteriores": [{"data": "2024-01-31", "valor": 121}]}
+    padrao = _calc([ldl, _r("Apolipoproteína B", 121, "mg/dL", None, 100)])["padroes"][0]
+    assert padrao["titulo"] == "Colesterol LDL elevado (com ApoB alta)"
+    assert "subiu: era 121 mg/dL em 31/01/2024" in padrao["explicacao"] and "ApoB de 121" in padrao["explicacao"]
+    assert _titulos([_r("Apolipoproteína B", 121, "mg/dL", None, 100)]) == ["Apolipoproteína B elevada"]
+
+
+def test_androgenio_ferritina_isolada_e_vitamina_d_de_atleta():
+    assert _titulos([_r("Androstenediona", 5.2, "ng/mL", 0.6, 3.1), _r("Testosterona total", 711, "ng/dL", 175, 781)]) \
+        == ["Androstenediona elevada"]
+    assert _titulos([_r("Ferritina", 346.5, "ng/mL", 23.9, 336.2), _r("Ferro sérico", 141, "µg/dL", 65, 175)]) \
+        == ["Ferritina elevada"]
+    assert _titulos([_r("Vitamina D (25-OH)", 22.3, "ng/mL", 20, 60)]) == ["Vitamina D abaixo do ideal para atleta"]
+    assert _titulos([_r("Vitamina D (25-OH)", 35, "ng/mL", 20, 60)]) == []

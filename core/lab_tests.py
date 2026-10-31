@@ -23,16 +23,20 @@ SITUACOES = {"abaixo": "↓ Abaixo", "acima": "↑ Acima", "normal": "Dentro", "
 # Grupos para organizar a tabela (o que não casar vai para "Outros").
 PAINEIS = [
     ("Hemograma", r"hem[aá]c|eritr|hemoglob(?!ina glicada)|hemat[oó]c|vcm|hcm|chcm|rdw|\bvpm\b|volume plaquet|leuc|neutr|linf|mon[oó]c|eosin|bas[oó]f|plaquet|segment|bast"),
-    ("Inflamação", r"\bpcr\b|prote[ií]na c|vhs|hemossedimen|fibrinog|interleuc|il-6"),
+    ("Inflamação", r"\bpcr\b|prote[ií]na c|vhs|hemossedimen|interleuc|il-6"),
+    ("Coagulação", r"ttpa|tromboplastina|protrombina|\btp\b|\binr\b|d[ií]mero|fibrinog"),
     ("Músculo e fígado", r"bilirrubina|prote[ií]nas totais|albumina|globulina(?! l)|\bggt\b|gama.?gt|\bck\b|\bcpk\b|creatin(o)?quinase|creatina quinase|\bldh\b|desidrogenase l[aá]tica|aldolase|mioglobina|\btgo\b|\bast\b|\btgp\b|\balt\b"),
     ("Metabolismo ósseo", r"vitamina d|25.?oh|c[aá]lcio|f[oó]sforo|pth|paratorm|fosfatase alcalina|magn[eé]sio"),
     ("Ferro", r"\bferro\b|ferritina|transferrina|satura[cç][aã]o|tibc"),
-    ("Rim e eletrólitos", r"creatinina|ur[eé]ia|\bsódio\b|\bsodio\b|pot[aá]ssio|cloro|taxa de filtra|tfg"),
-    ("Metabolismo", r"glicose|glicemia|hemoglobina glicada|hba1c|insulina|colesterol|\bhdl\b|\bldl\b|triglic|[aá]cido [uú]rico"),
+    ("Pâncreas", r"lipase|amilase"),
+    ("Rim e eletrólitos", r"cistatina|creatinina|ur[eé]ia|\bsódio\b|\bsodio\b|pot[aá]ssio|cloro|taxa de filtra|tfg"),
+    ("Metabolismo", r"glicose|glicemia|hemoglobina glicada|hba1c|insulina|colesterol|\bhdl\b|\bldl\b|triglic|[aá]cido [uú]rico|"
+                     r"apolipoprote|\bapo ?[ab]|lipoprote[ií]na ?\(?a|\blp\(a\)|homociste"),
     ("Hormônios", r"\btsh\b|\bt4\b|\bt3\b|testosterona|estradiol|cortisol|prolactina|\bigf\b|\bshbg\b|\bacth\b|"
                   r"adrenocortic|\bdht\b|di-?hidrotestosterona|\bdhea|dehidroepiandrosterona|\bfsh\b|\blh\b|"
-                  r"progesterona|globulina l"),
+                  r"progesterona|globulina l|androstenediona|17.?oh"),
     ("Vitaminas", r"vitamina b12|cobalamina|[aá]cido f[oó]lico|folato"),
+    ("Marcadores tumorais", r"\bpsa\b|ant[ií]geno prost|\bca ?\d|\bcea\b|carcinoembri|alfa.?feto"),
 ]
 
 
@@ -66,6 +70,11 @@ Regras:
   referencia_max = 5.0; se for "maior que 30", referencia_min = 30.
 - Se houver faixas por sexo ou idade, use a que o laudo aplica ao paciente; se não der para saber,
   deixe min/max null e copie o texto em referencia_texto.
+- Metas por categoria de risco (LDL, não-HDL, ApoB): use a de BAIXO risco (ex.: "inferior a 115")
+  como referencia_max e copie todas as categorias em referencia_texto.
+- Faixas com "geral" e "ideal" (ex.: vitamina D): use a da população geral e copie as duas no texto.
+- Resultado escrito, sem número (ex.: "Inf. à 6", "Não reagente"): valor = null e copie em valor_texto.
+- Exame com dois números (ex.: TTPa em segundos e relação paciente/normal): um resultado para cada.
 - Se o laudo trouxer resultados anteriores do mesmo exame (ex.: "Resultados anteriores: 31/01/2024 = 8,4"),
   registre em "anteriores"; senão, lista vazia.
 - Inclua TODOS os resultados do laudo, inclusive os das últimas páginas.
@@ -119,6 +128,12 @@ def parse_extraction(text: str) -> dict:
 def situacao(resultado: dict) -> str:
     """abaixo / acima / normal / sem_referencia, pela faixa impressa no laudo."""
     valor, minimo, maximo = resultado["valor"], resultado["referencia_min"], resultado["referencia_max"]
+    if valor is None and maximo is not None:
+        # "Inf. à 6", "< 0,5", "menor que 3": o valor está abaixo do limite de detecção.
+        teto = re.search(r"(?:inf\.?|inferior|menor|<)\s*(?:a|à|que)?\s*(\d+(?:[.,]\d+)?)",
+                         resultado.get("valor_texto") or "", re.I)
+        if teto and _number(teto[1]) is not None and _number(teto[1]) <= maximo:
+            return "normal"
     if valor is None or (minimo is None and maximo is None):
         return "sem_referencia"
     if minimo is not None and valor < minimo:
@@ -216,6 +231,11 @@ def derive_patterns(resultados: list[dict], indices: list[dict]) -> list[dict]:
         "ct": _find(resultados, r"colesterol total"),
         "bd": _find(resultados, r"bilirrubina direta"),
         "cortisol": _find(resultados, r"cortisol"),
+        "apob": _find(resultados, r"apolipoprote[ií]na b|\bapo ?b\b"),
+        "ttpa": _find(resultados, r"ttpa|tromboplastina", r"rela[cç][aã]o|\bd/n\b|ratio"),
+        "ddimero": _find(resultados, r"d[ií]mero"),
+        "andro": _find(resultados, r"androstenediona"),
+        "dhea": _find(resultados, r"\bdhea|dehidroepiandrosterona|desidroepiandrosterona"),
     }
     nomes = lambda *keys: [R[k]["exame"] for k in keys if R.get(k)]  # noqa: E731
     padroes = []
@@ -259,7 +279,10 @@ def derive_patterns(resultados: list[dict], indices: list[dict]) -> list[dict]:
         padroes.append(_padrao(
             "Compatível com lesão ou sobrecarga muscular" + (" (CK com transaminases)" if com_transaminases else ""),
             "atencao", nomes("ck", "tgo", "tgp", "pcr"),
-            "CK acima da faixa" + (", acompanhada de TGO/TGP, que também saem do músculo" if com_transaminases else "")
+            f"CK {_num(R['ck'].get('vezes_o_limite'))}× o limite"
+            + (f", acompanhada de {'/'.join(n for n, k in (('TGO', 'tgo'), ('TGP', 'tgp')) if _is(R[k], 'acima'))}, "
+               "que também sai do músculo" if com_transaminases else "")
+            + ("; TGO alta com TGP normal reforça a origem muscular" if _is(R["tgo"], "acima") and _is(R["tgp"], "normal") else "")
             + (". PCR normal: sem inflamação sistêmica." if _is(R["pcr"], "normal") else "."),
             "Exercício intenso nas últimas 48–72 h eleva CK, TGO e LDH: repetir em repouso antes de concluir."))
     elif _is(R["tgp"], "acima") or _is(R["tgo"], "acima"):
@@ -290,11 +313,21 @@ def derive_patterns(resultados: list[dict], indices: list[dict]) -> list[dict]:
                                f"Triglicerídeos/HDL de {_num(razao['valor'])} (alvo < 3,5).",
                                "Associado a resistência à insulina e risco cardiovascular."))
 
-    if _is(R["ldl"], "acima") or (not R["ldl"] and _is(R["ct"], "acima")):
-        ldl = R["ldl"] or R["ct"]
+    if _is(R["ldl"], "acima") or (not R["ldl"] and _is(R["ct"], "acima")) or _is(R["apob"], "acima"):
+        ldl = R["ldl"] if _is(R["ldl"], "acima") else (R["ct"] if _is(R["ct"], "acima") else R["apob"])
+        titulo = {id(R["ldl"]): "Colesterol LDL elevado", id(R["ct"]): "Colesterol total elevado"}.get(
+            id(ldl), "Apolipoproteína B elevada")
+        if ldl is not R["apob"] and _is(R["apob"], "acima"):
+            titulo += " (com ApoB alta)"
+        tendencia = _previous(ldl, f" {ldl['unidade']}" if ldl.get("unidade") else "")
         padroes.append(_padrao(
-            ("Colesterol LDL elevado" if R["ldl"] else "Colesterol total elevado"), "atencao", nomes("ct", "ldl"),
-            f"{ldl['exame']} em {_num(ldl['valor'])} {ldl['unidade']} (alvo do laudo: {_reference(ldl)})."
+            titulo, "atencao", nomes("ct", "ldl", "apob"),
+            f"{ldl['exame']} em {_num(ldl['valor'])} {ldl['unidade']} (alvo do laudo: {_reference(ldl)})"
+            + (f" ({'subiu' if tendencia['direcao'] == '↑' else 'igual'}: era {tendencia['texto']})"
+               if tendencia and tendencia["direcao"] != "↓" else "")
+            + "."
+            + (f" ApoB de {_num(R['apob']['valor'])} {R['apob']['unidade']} confirma excesso de partículas aterogênicas."
+               if ldl is not R["apob"] and _is(R["apob"], "acima") else "")
             + (" Acima de 190 mg/dL pode indicar hipercolesterolemia familiar." if R["ldl"] and R["ldl"]["valor"] >= 190 else ""),
             "A meta depende do risco cardiovascular global (idade, pressão, tabagismo, histórico familiar); "
             "ajustar dieta e reavaliar o perfil lipídico."))
@@ -303,6 +336,45 @@ def derive_patterns(resultados: list[dict], indices: list[dict]) -> list[dict]:
                                f"{_num(R['bd']['valor'])} {R['bd']['unidade']} (referência: {_reference(R['bd'])})"
                                + (", com transaminases normais." if R["tgo"] and not _is(R["tgo"], "acima") else "."),
                                "Isolada e discreta costuma ter pouco significado; repetir e avaliar se houver outros sinais hepáticos."))
+    if _is(R["ttpa"], "acima"):
+        padroes.append(_padrao(
+            "TTPa prolongado", "atencao", nomes("ttpa"),
+            f"{_num(R['ttpa']['valor'])} {R['ttpa']['unidade']} (referência: {_reference(R['ttpa'])}): a via intrínseca da "
+            "coagulação está mais lenta. Causas: heparina, anticoagulante lúpico, falta de fatores (VIII, IX, XI, XII) "
+            "ou problema na coleta.",
+            "Repetir com TP/INR; se continuar alto, teste de mistura e dosagem de fatores. Importante antes de cirurgia "
+            "ou infiltração."))
+    if _is(R["ddimero"], "acima"):
+        padroes.append(_padrao(
+            "D-dímero elevado", "atencao", nomes("ddimero", "ck"),
+            f"{_num(R['ddimero']['valor'])} {R['ddimero']['unidade']} (referência: {_reference(R['ddimero'])}). Sobe com "
+            "exercício intenso, lesão muscular, trauma e inflamação, mas também com trombose"
+            + ("; a CK alta indica esforço ou lesão muscular recente, que explica parte da elevação." if _is(R["ck"], "acima") else "."),
+            "Se houver dor ou inchaço na panturrilha, falta de ar ou dor no peito, avaliar trombose com urgência; "
+            "sem sintomas, repetir em repouso."))
+    if _is(R["andro"], "acima") or _is(R["dhea"], "acima"):
+        andro = R["andro"] if _is(R["andro"], "acima") else R["dhea"]
+        padroes.append(_padrao(
+            f"{andro['exame']} elevada", "atencao", nomes("andro", "dhea", "testo"),
+            f"{_num(andro['valor'])} {andro['unidade']} (referência: {_reference(andro)})"
+            + (", com testosterona total normal." if _is(R["testo"], "normal") else ".")
+            + " Androgênio adrenal: sobe com suplementos (DHEA, pró-hormônios) e na hiperplasia adrenal não clássica.",
+            "Revisar suplementos; repetir pela manhã com 17-OH-progesterona e SDHEA."))
+    if _is(R["ferritina"], "acima") and not _is(R["ferro"], "abaixo") and not _is(R["pcr"], "acima"):
+        padroes.append(_padrao(
+            "Ferritina elevada", "info", nomes("ferritina", "ferro", "pcr"),
+            f"{_num(R['ferritina']['valor'])} {R['ferritina']['unidade']} ("
+            + ("pouco acima do limite" if (R["ferritina"].get("vezes_o_limite") or 0) < 1.5
+               else f"{_num(R['ferritina']['vezes_o_limite'])}× o limite")
+            + "), sem ferro baixo nem PCR alta. Pode refletir treino intenso, inflamação leve, gordura no fígado, "
+            "álcool ou excesso de ferro.",
+            "Repetir com saturação de transferrina e enzimas hepáticas; acima de 45% de saturação, investigar sobrecarga de ferro."))
+    if _is(R["vitd"], "normal") and R["vitd"]["valor"] < 30 and "ng" in _unit(R["vitd"]):
+        padroes.append(_padrao(
+            "Vitamina D abaixo do ideal para atleta", "info", nomes("vitd"),
+            f"{_num(R['vitd']['valor'])} {R['vitd']['unidade']}: dentro da faixa geral do laudo, mas abaixo de 30 ng/mL, "
+            "o alvo para quem tem lesões, fraturas ou carga alta de treino.",
+            "Considerar exposição solar ou reposição orientada e reavaliar em 3 meses."))
     if _is(R["vitd"], "abaixo"):
         grave = R["vitd"]["valor"] < 20
         padroes.append(_padrao("Vitamina D " + ("deficiente" if grave else "insuficiente"), "atencao", nomes("vitd"),
