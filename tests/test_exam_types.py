@@ -174,7 +174,7 @@ def test_paineis():
     assert lab_tests.painel("Hemoglobina glicada (HbA1c)") == "Metabolismo"
     assert lab_tests.painel("Hemoglobina") == "Hemograma"
     assert lab_tests.painel("Ferritina") == "Ferro"
-    assert lab_tests.painel("Creatinoquinase (CK)") == "Músculo"
+    assert lab_tests.painel("Creatinoquinase (CK)") == "Músculo e fígado"
     assert lab_tests.painel("Creatinina") == "Rim e eletrólitos"
 
 
@@ -182,9 +182,113 @@ def test_tabela_do_laudo_laboratorial():
     calc = _lab()
     texto = lab_tests.format_identification(calc) + "\n" + lab_tests.format_results(calc)
     assert "6 (4 fora da faixa de referência do laudo)" in texto
-    assert "| Músculo | Creatinoquinase (CK) | 1250 U/L | até 190 U/L | **↑ Acima (6,6× o limite)** |" in texto
+    assert "| Músculo e fígado | Creatinoquinase (CK) | 1.250 U/L | até 190 U/L | **↑ Acima (6,6× o limite)** |" in texto
     assert "| Hemograma | Hemoglobina | 13,1 g/dL | 13,5 a 17,5 | **↓ Abaixo** |" in texto
     assert "| Outros | HIV | Não reagente | — | Sem referência |" in texto
+
+
+def _r(exame, valor, unidade, minimo=None, maximo=None):
+    return {"exame": exame, "valor": valor, "unidade": unidade, "referencia_min": minimo, "referencia_max": maximo}
+
+
+PAINEL_COMPLETO = [
+    _r("Hemoglobina", 13.1, "g/dL", 13.5, 17.5), _r("Ferritina", 22, "ng/mL", 30, 400),
+    _r("Ferro sérico", 60, "µg/dL", 65, 175), _r("Transferrina", 300, "mg/dL", 200, 360),
+    _r("Glicose", 98, "mg/dL", 70, 99), _r("Insulina", 14, "µUI/mL", 2.6, 24.9),
+    _r("Triglicerídeos", 180, "mg/dL", None, 150), _r("Colesterol HDL", 38, "mg/dL", 40, None),
+    _r("Colesterol total", 210, "mg/dL", None, 190), _r("TSH", 5.8, "µUI/mL", 0.4, 4.3),
+    _r("T4 livre", 1.1, "ng/dL", 0.9, 1.8), _r("Vitamina D (25-OH)", 18.4, "ng/mL", 30, None),
+    _r("Testosterona total", 280, "ng/dL", 300, 1000), _r("Cortisol", 24, "µg/dL", 6.2, 19.4),
+]
+
+
+def _calc(resultados):
+    return lab_tests.compute(lab_tests.parse_extraction(json.dumps({"resultados": resultados})))
+
+
+def test_indices_calculados():
+    indices = {i["nome"]: i for i in _calc(PAINEL_COMPLETO)["indices"]}
+    assert indices["HOMA-IR (resistência à insulina)"]["valor"] == 3.39  # 98 × 14 ÷ 405
+    assert indices["Triglicerídeos / HDL"]["valor"] == 4.74                # 180 ÷ 38
+    assert indices["Colesterol não-HDL"]["valor"] == 172                   # 210 − 38
+    assert indices["Saturação de transferrina (estimada)"]["valor"] == 16  # 60 ÷ (300 × 1,25) × 100
+    assert all(i["alterado"] for i in indices.values())
+
+
+def test_homa_em_mmol_e_unidade_desconhecida():
+    em_mmol = _calc([_r("Glicose", 5.0, "mmol/L", 3.9, 5.5), _r("Insulina", 10, "µUI/mL", 2, 25)])["indices"]
+    assert em_mmol[0]["valor"] == 2.22  # 5,0 × 18 × 10 ÷ 405
+    assert _calc([_r("Glicose", 90, "mg/dL", 70, 99), _r("Insulina", 60, "pmol", 10, 100)])["indices"] == []
+
+
+def test_padroes_que_correlacionam_exames():
+    titulos = [p["titulo"] for p in _calc(PAINEL_COMPLETO)["padroes"]]
+    assert titulos == [
+        "Compatível com anemia por deficiência de ferro", "Compatível com hipotireoidismo subclínico",
+        "Sinais de resistência à insulina", "Perfil lipídico aterogênico", "Vitamina D deficiente",
+        "Testosterona baixa com cortisol alto",
+    ]
+
+
+@pytest.mark.parametrize("resultados,titulo", [
+    ([_r("Ferritina", 20, "ng/mL", 30, 400), _r("Hemoglobina", 15, "g/dL", 13.5, 17.5)], "Estoque de ferro baixo, ainda sem anemia"),
+    ([_r("CK", 900, "U/L", None, 190), _r("TGO", 80, "U/L", None, 40), _r("PCR", 0.2, "mg/dL", None, 0.5)],
+     "Compatível com lesão ou sobrecarga muscular (CK com transaminases)"),
+    ([_r("CK", 120, "U/L", None, 190), _r("TGP", 90, "U/L", None, 41)], "Transaminases elevadas"),
+    ([_r("TSH", 0.1, "µUI/mL", 0.4, 4.3), _r("T4 livre", 2.4, "ng/dL", 0.9, 1.8)], "Compatível com hipertireoidismo"),
+    ([_r("Proteína C reativa", 3.0, "mg/dL", None, 0.5)], "Inflamação ativa"),
+])
+def test_padroes_isolados(resultados, titulo):
+    assert [p["titulo"] for p in _calc(resultados)["padroes"]] == [titulo]
+
+
+def test_exames_normais_nao_geram_padrao():
+    calc = _calc([_r("Hemoglobina", 15, "g/dL", 13.5, 17.5), _r("Ferritina", 90, "ng/mL", 30, 400)])
+    assert calc["padroes"] == [] and calc["alterados"] == 0
+
+
+def test_regua_da_faixa():
+    dentro = lab_tests._bar(_r("Glicose", 85, "mg/dL", 70, 100))
+    assert dentro["faixa_inicio"] < dentro["valor"] < dentro["faixa_fim"]
+    acima = lab_tests._bar(_r("CK", 1250, "U/L", None, 190))
+    assert acima["faixa_inicio"] == 0 and acima["valor"] > acima["faixa_fim"] and acima["valor"] <= 100
+    abaixo = lab_tests._bar(_r("Vitamina D", 18.4, "ng/mL", 30, None))
+    assert abaixo["valor"] < abaixo["faixa_inicio"] and abaixo["faixa_fim"] == 100
+    assert lab_tests._bar({"exame": "HIV", "valor": None, "valor_texto": "Não reagente"}) is None
+
+
+def test_painel_visual():
+    d = lab_tests.dashboard(_calc(PAINEL_COMPLETO))
+    assert d["total"] == 14 and d["alterados"] == len([p for p in d["paineis"] for i in p["itens"] if i["situacao"] in {"abaixo", "acima"}])
+    ferro = next(p for p in d["paineis"] if p["nome"] == "Ferro")
+    assert ferro["alterados"] == 2 and ferro["itens"][0]["barra"] is not None
+    assert d["indices"][0]["valor_fmt"] == "3,39" and len(d["padroes"]) == 6
+    assert lab_tests.dashboard(None) is None
+
+
+def test_painel_aparece_no_resultado_e_no_laudo_salvo(client, monkeypatch):
+    import io
+
+    calc = _calc(PAINEL_COMPLETO)
+    monkeypatch.setattr(analyzer, "analyze_exam_from_bytes", MagicMock(return_value={
+        "success": True, "exam_type": "laboratorial", "analysis": "## 1. x", "references_used": 0,
+        "model_used": "m", "num_images": 1, "usage": [], "structured": calc}))
+    _login_as_admin(client)
+    html = client.post("/analyze", data={"exam_image": (io.BytesIO(b"img"), "exames.jpg"), "privacy_consent": "accepted"},
+                       content_type="multipart/form-data").get_data(as_text=True)
+    assert "Painel dos exames" in html and "Compatível com anemia por deficiência de ferro" in html and "lab-marker" in html
+
+    monkeypatch.setattr(db, "buscar_analise", lambda **kw: {"id": "l1", "tipo_exame": "laboratorial", "analise_completa": "x"})
+    monkeypatch.setattr(db, "buscar_dados_estruturados", lambda analise_id, **kw: calc)
+    assert "Painel dos exames" in client.get("/laudos/l1").get_data(as_text=True)
+
+
+def test_laudo_salvo_sem_dados_estruturados_abre_sem_painel(client, monkeypatch):
+    _login_as_admin(client)
+    monkeypatch.setattr(db, "buscar_analise", lambda **kw: {"id": "l1", "tipo_exame": "laboratorial", "analise_completa": "x"})
+    monkeypatch.setattr(db, "buscar_dados_estruturados", lambda analise_id, **kw: None)
+    resp = client.get("/laudos/l1")
+    assert resp.status_code == 200 and "Painel dos exames" not in resp.get_data(as_text=True)
 
 
 def test_laudo_laboratorial_sem_resultados_e_recusado():

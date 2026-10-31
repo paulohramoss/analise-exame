@@ -1,0 +1,79 @@
+{#- Painel visual dos exames laboratoriais. Recebe `lab_dashboard` (core/lab_tests.dashboard). -#}
+{% set d = lab_dashboard %}
+<section class="card lab-dash" aria-label="Painel dos exames laboratoriais">
+    <div class="lab-dash-head">
+        <div>
+            <h2>Painel dos exames</h2>
+            <p class="card-description">
+                {% if d.laboratorio %}{{ d.laboratorio }}{% endif %}{% if d.laboratorio and d.data_coleta %} · {% endif %}{% if d.data_coleta %}coleta em {{ d.data_coleta|date_br }}{% endif %}
+            </p>
+        </div>
+        <div class="lab-dash-stats">
+            <div class="lab-stat"><strong>{{ d.total }}</strong><span>exames lidos</span></div>
+            <div class="lab-stat {{ 'is-alert' if d.alterados else 'is-ok' }}"><strong>{{ d.alterados }}</strong><span>fora da faixa</span></div>
+            <div class="lab-stat {{ 'is-alert' if d.padroes else 'is-ok' }}"><strong>{{ d.padroes|length }}</strong><span>{{ 'padrão' if d.padroes|length == 1 else 'padrões' }} a investigar</span></div>
+        </div>
+    </div>
+
+    <div class="lab-chips" aria-label="Situação por painel">
+        {% for p in d.paineis %}
+        <a class="lab-chip {{ 'is-alert' if p.alterados else 'is-ok' }}" href="#painel-{{ loop.index }}">
+            {{ p.nome }} <span>{{ p.alterados ~ ' alterado' ~ ('s' if p.alterados > 1 else '') if p.alterados else 'ok' }}</span>
+        </a>
+        {% endfor %}
+    </div>
+
+    {% if d.padroes %}
+    <h3 class="lab-dash-title">Correlações entre os exames</h3>
+    <div class="lab-patterns">
+        {% for p in d.padroes %}
+        <article class="lab-pattern lab-pattern-{{ p.nivel }}">
+            <h4>{{ p.titulo }}</h4>
+            <p>{{ p.explicacao }}</p>
+            <p class="lab-pattern-tip">{{ p.sugestao }}</p>
+            <div class="lab-tags">{% for e in p.exames %}<span>{{ e }}</span>{% endfor %}</div>
+        </article>
+        {% endfor %}
+    </div>
+    <p class="findings-note">Padrões por regras fixas sobre os valores do laudo: indicam o que investigar, não são diagnóstico.</p>
+    {% endif %}
+
+    {% if d.indices %}
+    <h3 class="lab-dash-title">Índices calculados</h3>
+    <div class="lab-indices">
+        {% for i in d.indices %}
+        <div class="lab-index {{ 'is-alert' if i.alterado else 'is-ok' }}">
+            <span class="lab-index-name">{{ i.nome }}</span>
+            <strong>{{ i.valor_fmt }}</strong>
+            <span class="lab-index-ref">Referência: {{ i.referencia }}</span>
+            <span class="lab-index-formula">{{ i.formula }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <h3 class="lab-dash-title">Resultados por painel</h3>
+    <div class="lab-legend"><span><i class="sw-ok"></i> dentro da faixa</span><span><i class="sw-low"></i> abaixo</span><span><i class="sw-high"></i> acima</span><span><i class="sw-band"></i> faixa de referência do laudo</span></div>
+    {% for p in d.paineis %}
+    <div class="lab-panel" id="painel-{{ loop.index }}">
+        <h4>{{ p.nome }}</h4>
+        {% for it in p.itens %}
+        <div class="lab-row lab-{{ it.situacao }}">
+            <div class="lab-row-name">{{ it.exame }}</div>
+            <div class="lab-row-bar">
+                {% if it.barra %}
+                <div class="lab-track" role="img" aria-label="{{ it.exame }}: {{ it.valor }}, {{ it.rotulo|lower }} da faixa {{ it.referencia }}">
+                    <div class="lab-band" style="left: {{ it.barra.faixa_inicio }}%; width: {{ (it.barra.faixa_fim - it.barra.faixa_inicio)|round(1) }}%"></div>
+                    <div class="lab-marker" style="left: {{ it.barra.valor }}%"></div>
+                </div>
+                {% else %}
+                <span class="lab-noref">sem faixa numérica no laudo</span>
+                {% endif %}
+            </div>
+            <div class="lab-row-value"><strong>{{ it.valor }}</strong><span>{{ it.referencia }}</span></div>
+            <div class="lab-row-status">{{ it.rotulo }}{% if it.vezes_o_limite and it.vezes_o_limite >= 1.5 %} · {{ it.vezes_o_limite }}×{% endif %}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</section>

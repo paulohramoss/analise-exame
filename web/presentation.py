@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from flask import request
 
-from core import annotations
+from core import annotations, lab_tests
 from core.analyzer import pretty_model_name
 from web import config, security
 
@@ -183,6 +183,7 @@ def result_view(result: dict) -> dict:
         "annotations": annotations.sanitize_stored(result.get("annotations"), result.get("num_images")),
         # Marcação de achados só existe no laudo de imagem (não em dinamometria/laboratoriais).
         "show_findings": result["exam_type"] not in STRUCTURED_EXAM_TYPES,
+        "lab_dashboard": lab_tests.dashboard(result.get("structured")) if result["exam_type"] == "laboratorial" else None,
     }
 
 
