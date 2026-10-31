@@ -341,7 +341,7 @@
                     </div>
                     {% endfor %}
                 </div>
-                {% include "_achados_marcados.html" %}
+                {% if show_findings|default(true) %}{% include "_achados_marcados.html" %}{% endif %}
             </div>
 
             <!-- Laudo da análise -->

@@ -356,6 +356,7 @@ def salvar_analise(
     responsavel: dict | None = None,
     paciente_id: str | None = None,
     marcacoes: list[dict] | None = None,
+    dados_estruturados: dict | None = None,
 ) -> str | None:
     """Persiste resultado de análise da IA. Retorna UUID da análise ou None.
 
@@ -384,6 +385,8 @@ def salvar_analise(
             data["paciente_id"] = paciente_id
         if marcacoes:
             data["marcacoes"] = marcacoes
+        if dados_estruturados:
+            data["dados_estruturados"] = dados_estruturados
         if responsavel:
             data.update({
                 "responsavel_nome": responsavel.get("name") or None,
@@ -576,6 +579,7 @@ def salvar_analise_com_imagens(
         modo=modo,
         tempo_ms=tempo_ms,
         marcacoes=result.get("annotations") or None,
+        dados_estruturados=result.get("structured") or None,
         **persist,
     )
     if not analise_id:
@@ -962,6 +966,24 @@ def listar_analises_paciente(paciente_id: str, cliente_id: str) -> list[dict]:
         return res.data or []
     except Exception:
         logger.exception("Erro em listar_analises_paciente")
+        return []
+
+
+def listar_laudos_para_correlacao(paciente_id: str, cliente_id: str, limit: int = 10) -> list[dict]:
+    """Texto completo dos laudos do paciente (mais recentes primeiro), sem pareceres de correlação."""
+    db = _get_client()
+    if not db or not paciente_id or not cliente_id:
+        return []
+    try:
+        res = (
+            db.table("analises")
+            .select("id, created_at, tipo_exame, modalidade, analise_completa")
+            .eq("paciente_id", paciente_id).eq("cliente_id", cliente_id).neq("tipo_exame", "correlacao")
+            .order("created_at", desc=True).limit(limit).execute()
+        )
+        return res.data or []
+    except Exception:
+        logger.exception("Erro em listar_laudos_para_correlacao")
         return []
 
 

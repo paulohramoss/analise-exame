@@ -5,7 +5,7 @@
  *
  * O texto do laudo vem da IA (e pode ser influenciado por prompt injection):
  * ele é ESCAPADO antes de qualquer conversão, e só as tags geradas aqui
- * (h2–h4, p, ul/ol/li, blockquote, strong, em) entram como HTML.
+ * (h2–h4, p, ul/ol/li, blockquote, table, strong, em) entram como HTML.
  * Uma implementação só, para a tela e o PDF ficarem iguais nas três páginas.
  */
 (function () {
@@ -32,6 +32,7 @@
         let paragraph = [];
         let list = null;        // { tag: 'ul' | 'ol', items: [] }
         let quote = [];
+        let table = [];         // linhas "| a | b |" de uma tabela markdown
 
         function flushParagraph() {
             if (paragraph.length) out.push('<p>' + paragraph.map(inline).join('<br>') + '</p>');
@@ -45,11 +46,31 @@
             if (quote.length) out.push('<blockquote>' + quote.map(inline).join('<br>') + '</blockquote>');
             quote = [];
         }
-        function flushAll() { flushParagraph(); flushList(); flushQuote(); }
+        function splitRow(line) {
+            return line.replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+        }
+        function flushTable() {
+            if (!table.length) return;
+            const rows = table.filter(line => !/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/.test(line));
+            const [head, ...body] = rows.map(splitRow);
+            out.push('<div class="laudo-table-wrap"><table class="laudo-table"><thead><tr>'
+                + head.map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>'
+                + body.map(r => '<tr>' + r.map(c => '<td>' + inline(c) + '</td>').join('') + '</tr>').join('')
+                + '</tbody></table></div>');
+            table = [];
+        }
+        function flushAll() { flushParagraph(); flushList(); flushQuote(); flushTable(); }
 
         for (const raw of lines) {
             const line = escapeHtml(raw.trim());
             if (!line) { flushAll(); continue; }
+
+            if (line.startsWith('|')) {
+                flushParagraph(); flushList(); flushQuote();
+                table.push(line);
+                continue;
+            }
+            flushTable();
 
             const heading = /^(#{1,4})\s+(.+)$/.exec(line);
             if (heading) {
@@ -89,6 +110,8 @@
         analisando: 'Analisando as imagens com os modelos de IA',
         consenso: 'Gerando o laudo de consenso entre os modelos',
         marcando_achados: 'Marcando os achados nas imagens',
+        lendo_valores: 'Lendo os valores do relatório',
+        interpretando: 'Interpretando os resultados',
         salvando: 'Salvando o laudo',
     };
 

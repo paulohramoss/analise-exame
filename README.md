@@ -15,6 +15,8 @@ O **MedAI Analyzer** (plataforma Three Health) analisa imagens de exames ortopé
 ## Funcionalidades
 
 - Upload de PNG, JPG, WEBP, GIF e **DICOM** (`.dcm`, convertido e com metadados anonimizados)
+- **Dinamometria** (isocinética, isométrica portátil e plataforma de força) e **exames laboratoriais** (sangue e bioquímica): a IA lê os valores do relatório e o sistema calcula déficits, índices de simetria, relações agonista/antagonista e resultados fora da faixa do próprio laudo
+- **Correlação no prontuário**: parecer que cruza imagem, dinamometria, exames de sangue, tratamentos e evolução de um paciente
 - Upload de **PDF**: cada página vira imagem para a análise (filmes exportados ou laudos anteriores) e o texto entra como contexto clínico; nome, CPF, prontuário e demais identificadores saem do texto e são tarjados de preto na imagem da página
 - Detecção da região anatômica pela descrição/nome do arquivo e, se preciso, pela própria imagem
 - Comparação com imagens de referência normais (`reference_data/<região>/`)

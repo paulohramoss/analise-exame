@@ -8,6 +8,8 @@ from core import annotations
 from core.analyzer import pretty_model_name
 from web import config, security
 
+STRUCTURED_EXAM_TYPES = {"dinamometria", "laboratorial", "correlacao"}
+
 _EXAM_LABELS = {
     "joelho": "Joelho",
     "coluna": "Coluna Vertebral",
@@ -17,6 +19,9 @@ _EXAM_LABELS = {
     "mao_punho": "Mão e Punho",
     "cotovelo": "Cotovelo",
     "geral": "Região Ortopédica",
+    "dinamometria": "Dinamometria",
+    "laboratorial": "Exames Laboratoriais",
+    "correlacao": "Correlação de Exames",
 }
 
 
@@ -176,6 +181,8 @@ def result_view(result: dict) -> dict:
         "model_used": result["model_used"],
         "consensus": build_consensus_info(result["model_used"], result["analysis"]),
         "annotations": annotations.sanitize_stored(result.get("annotations"), result.get("num_images")),
+        # Marcação de achados só existe no laudo de imagem (não em dinamometria/laboratoriais).
+        "show_findings": result["exam_type"] not in STRUCTURED_EXAM_TYPES,
     }
 
 

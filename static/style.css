@@ -714,3 +714,10 @@
 
 .finding-local { margin: 0.15rem 0 0; color: var(--text-muted); }
 .findings-empty, .findings-note { font-size: 0.8rem; color: var(--text-muted); margin: 0.4rem 0 0; }
+
+/* ===== Tabelas do laudo (dinamometria, exames laboratoriais) ===== */
+.laudo-table-wrap { overflow-x: auto; margin: 0.6rem 0 1rem; }
+.laudo-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+.laudo-table th, .laudo-table td { border: 1px solid var(--border); padding: 0.4rem 0.55rem; text-align: left; vertical-align: top; }
+.laudo-table th { background: var(--primary-light); color: var(--primary-dark); font-weight: 800; white-space: nowrap; }
+.laudo-table tbody tr:nth-child(even) td { background: #f8fafc; }

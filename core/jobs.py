@@ -164,6 +164,7 @@ def run_analysis_job(
     persist: dict,
     display_extra: dict | None = None,
     trace_id: str | None = None,
+    exam_category: str = "imagem",
 ) -> dict:
     """
     Executado pelo worker RQ (processo separado, sem contexto Flask).
@@ -180,6 +181,8 @@ def run_analysis_job(
     cost_scopes: [(scope, cap_usd), ...] pré-calculados no processo web.
     persist: kwargs extras para db.salvar_analise (ip_address, user_agent,
         cliente_id, responsavel, descricao_usuario, modalidade, sessao_id).
+    exam_category: "imagem", "dinamometria" ou "laboratorial" (padrão para jobs
+        enfileirados antes de existir o campo).
     display_extra: dados só de exibição (ex.: miniaturas em base64, nome do
         responsável) que a rota "resultado" precisa mas que o job não usa —
         são apenas devolvidos junto do resultado, sem processamento.
@@ -190,7 +193,7 @@ def run_analysis_job(
             mode=mode, images=images, image_meta=image_meta, exam_filename=exam_filename,
             user_description=user_description, model_name=model_name, api_key=api_key,
             anthropic_api_key=anthropic_api_key, exclude_gemini_cost=exclude_gemini_cost,
-            cost_scopes=cost_scopes, persist=persist, display_extra=display_extra,
+            cost_scopes=cost_scopes, persist=persist, display_extra=display_extra, exam_category=exam_category,
         )
     finally:
         unbind_trace_id(token)
@@ -211,6 +214,7 @@ def _set_stage(stage: str) -> None:
 def _run_analysis(
     *, mode, images, image_meta, exam_filename, user_description, model_name,
     api_key, anthropic_api_key, exclude_gemini_cost, cost_scopes, persist, display_extra,
+    exam_category="imagem",
 ) -> dict:
     from core import cost_tracking, db
     from core.analyzer import analyze_exam_from_bytes
@@ -230,6 +234,7 @@ def _run_analysis(
         ai_trace_id=current_trace_id(),
         on_late_usage=cost_tracking.late_usage_recorder(cost_scopes),
         on_progress=_set_stage,
+        exam_category=exam_category,
     )
 
     usage = result.get("usage", [])
