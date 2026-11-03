@@ -195,7 +195,7 @@ requests==2.34.2
     #   opentelemetry-exporter-http-transport
     #   opentelemetry-exporter-otlp-proto-http
     #   posthog
-rq==2.10.0
+rq==3.0.0
     # via -r requirements.in
 sentry-sdk==2.66.1
     # via -r requirements.in

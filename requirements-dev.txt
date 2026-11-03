@@ -367,7 +367,7 @@ requests==2.34.2
     #   posthog
 rich==15.0.0
     # via pip-audit
-rq==2.10.0
+rq==3.0.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
