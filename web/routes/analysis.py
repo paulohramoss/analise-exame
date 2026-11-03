@@ -39,6 +39,7 @@ class _AnalysisInput:
     user_description: str
     analysis_description: str  # descrição + contexto extraído do DICOM
     display_images: list[dict] = field(default_factory=list)
+    exam_category: str = "imagem"  # imagem | dinamometria | laboratorial
 
     @classmethod
     def from_uploads(cls, upload_items: list[dict], user_description: str) -> "_AnalysisInput":
@@ -60,17 +61,33 @@ class _AnalysisInput:
             ],
         )
         uploads.cleanup_upload_files(upload_items)  # os bytes já estão em memória
+        # Tipo do exame: o escolhido no formulário/API, ou detectado pelo nome do
+        # arquivo, pela descrição e pelo texto do PDF ("auto", o padrão).
+        requested = (request.form.get("exam_category") or "auto").strip().lower()
+        prepared.exam_category = (
+            requested if requested in analyzer.EXAM_CATEGORIES
+            else analyzer.detect_exam_category(prepared.exam_filename, prepared.analysis_description)
+        )
+        if prepared.exam_category != "imagem":
+            # Relatório com números: a leitura dos valores recebe o texto inteiro do PDF.
+            prepared.analysis_description = uploads.description_with_dicom_context(
+                user_description, upload_items, full_text=True
+            )
         return prepared
 
     def persist_fields(self, **extra) -> dict:
         """Campos de db.salvar_analise comuns às três rotas."""
         return {
             "descricao_usuario": self.user_description,
-            "modalidade": presentation.detect_modalidade(self.analysis_description),
+            "modalidade": _CATEGORY_MODALITY.get(self.exam_category)
+            or presentation.detect_modalidade(self.analysis_description),
             "ip_address": security.get_ip(),
             "user_agent": request.headers.get("User-Agent"),
             **extra,
         }
+
+
+_CATEGORY_MODALITY = {"dinamometria": "Dinamometria", "laboratorial": "Laboratorial"}
 
 
 def _save_uploads(files, limit: int | None = None) -> list[dict]:
@@ -131,6 +148,7 @@ def _enqueue(mode: str, prepared: _AnalysisInput, persist: dict, display_extra: 
         cost_scopes=costs.cost_budget_scopes(mode),
         persist=persist,
         display_extra=display_extra,
+        exam_category=prepared.exam_category,
     )
 
 
@@ -148,6 +166,7 @@ def _run_now(mode: str, prepared: _AnalysisInput, api_key: str, persist: dict) -
         posthog_distinct_id=str(g.cliente_id) if g.get("cliente_id") else None,
         ai_trace_id=g.get("trace_id"),
         on_late_usage=cost_tracking.late_usage_recorder(costs.cost_budget_scopes(mode)),
+        exam_category=prepared.exam_category,
     )
     costs.record_analysis_cost(mode, result)
     result["analise_id"] = db.salvar_analise_com_imagens(

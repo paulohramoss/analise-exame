@@ -200,6 +200,9 @@
             gap: 0.75rem;
         }
 
+        .exam-category-group { margin-top: 1rem; }
+        .exam-category-group small { display: block; margin-top: 0.3rem; }
+
         .form-group-half {
             flex: 1;
             min-width: 0;
@@ -338,7 +341,8 @@
         <div class="card upload-card">
             <h2>Enviar exame para análise</h2>
             <p class="card-description">
-                Envie imagens de RM, raio-X ou TC. A IA compara o exame com referências anatômicas normais
+                Envie exames de imagem (RM, raio-X, TC), relatórios de dinamometria ou exames de sangue.
+                Nos exames de imagem, a IA compara o exame com referências anatômicas normais
                 e gera um laudo musculoesquelético estruturado.
             </p>
 
@@ -376,7 +380,7 @@
                     <div class="form-step-head">
                         <span class="form-step-num">1</span>
                         <div class="form-step-title">
-                            <h3 class="form-step-heading">Imagens do exame</h3>
+                            <h3 class="form-step-heading">Arquivos do exame</h3>
                             <span class="form-step-hint">Até {{ max_images|default(5) }} imagens por análise: planos, incidências ou sequências do mesmo exame.</span>
                         </div>
                     </div>
@@ -405,6 +409,16 @@
                             </div>
                         </div>
                         <p class="field-error" id="images-error" hidden>{{ layout.icon("alert-triangle", 16) }} <span>Selecione pelo menos uma imagem do exame.</span></p>
+                        <div class="form-group exam-category-group">
+                            <label for="exam_category">Tipo de exame</label>
+                            <select name="exam_category" id="exam_category">
+                                <option value="auto" selected>Detectar automaticamente</option>
+                                <option value="imagem">Exame de imagem (RM, raio-X, TC, ultrassom)</option>
+                                <option value="dinamometria">Dinamometria (isocinética, isométrica ou plataforma de força)</option>
+                                <option value="laboratorial">Exames de sangue e bioquímicos</option>
+                            </select>
+                            <small>Dinamometria e exames laboratoriais: envie o relatório em PDF ou uma foto legível. Os valores são lidos do relatório e os cálculos (déficits, relações, faixas de referência) são feitos pelo sistema.</small>
+                        </div>
                     </div>
                 </section>
 

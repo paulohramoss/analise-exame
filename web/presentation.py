@@ -4,9 +4,11 @@ from datetime import date, datetime
 
 from flask import request
 
-from core import annotations
+from core import annotations, lab_tests
 from core.analyzer import pretty_model_name
 from web import config, security
+
+STRUCTURED_EXAM_TYPES = {"dinamometria", "laboratorial", "correlacao"}
 
 _EXAM_LABELS = {
     "joelho": "Joelho",
@@ -17,6 +19,9 @@ _EXAM_LABELS = {
     "mao_punho": "Mão e Punho",
     "cotovelo": "Cotovelo",
     "geral": "Região Ortopédica",
+    "dinamometria": "Dinamometria",
+    "laboratorial": "Exames Laboratoriais",
+    "correlacao": "Correlação de Exames",
 }
 
 
@@ -176,6 +181,9 @@ def result_view(result: dict) -> dict:
         "model_used": result["model_used"],
         "consensus": build_consensus_info(result["model_used"], result["analysis"]),
         "annotations": annotations.sanitize_stored(result.get("annotations"), result.get("num_images")),
+        # Marcação de achados só existe no laudo de imagem (não em dinamometria/laboratoriais).
+        "show_findings": result["exam_type"] not in STRUCTURED_EXAM_TYPES,
+        "lab_dashboard": lab_tests.dashboard(result.get("structured")) if result["exam_type"] == "laboratorial" else None,
     }
 
 
@@ -196,6 +204,10 @@ def ai_error_response(exc: Exception) -> tuple[str, int]:
     Antes cada rota tinha a própria cadeia de ifs (com textos diferentes para o
     mesmo erro). Detalhes de configuração só aparecem em ambiente local.
     """
+    from core.analyzer import ExamReadError
+
+    if isinstance(exc, ExamReadError):
+        return str(exc), 422
     error_lower = str(exc).lower()
     code = getattr(exc, "code", None)
     if "api key not valid" in error_lower or "invalid api key" in error_lower or "api_key_invalid" in error_lower:

@@ -149,7 +149,8 @@ def linha_do_tempo(analises: list[dict], tratamentos: list[dict], evolucoes: lis
         eventos.append({
             "tipo": "laudo",
             "data": _event_date(a.get("created_at")),
-            "titulo": f"Exame: {presentation.format_exam_label(a.get('tipo_exame'))}",
+            "titulo": ("Parecer: correlação dos exames" if a.get("tipo_exame") == "correlacao"
+                       else f"Exame: {presentation.format_exam_label(a.get('tipo_exame'))}"),
             "detalhe": a.get("modalidade") or "",
             "analise_id": a.get("id"),
         })
@@ -204,7 +205,8 @@ def grafico_evolucao(evolucoes: list[dict], tratamentos: list[dict], analises: l
 
     marcos = [(parse_date(t.get("data_inicio")), t.get("tipo") or "") for t in tratamentos]
     marcos = [(d, label) for d, label in marcos if d]
-    exames = [(_event_date(a.get("created_at")), presentation.format_exam_label(a.get("tipo_exame"))) for a in analises]
+    exames = [(_event_date(a.get("created_at")), presentation.format_exam_label(a.get("tipo_exame")))
+              for a in analises if a.get("tipo_exame") != "correlacao"]
     exames = [(d, label) for d, label in exames if d]
 
     datas = [parse_date(e["data"]) for e in medidas] + [d for d, _ in marcos] + [d for d, _ in exames]
