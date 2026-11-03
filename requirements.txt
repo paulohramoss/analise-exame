@@ -6,13 +6,14 @@
 #
 annotated-types==0.8.0
     # via pydantic
-anthropic==0.120.0
+anthropic==2.3.0
     # via -r requirements.in
 anyio==4.14.2
     # via
     #   anthropic
     #   google-genai
     #   httpx
+    #   httpx2
 backoff==2.2.1
     # via posthog
 blinker==1.9.0
@@ -47,7 +48,6 @@ deprecation==2.1.0
     #   storage3
 distro==1.9.0
     # via
-    #   anthropic
     #   google-genai
     #   posthog
 dnspython==2.9.1
@@ -68,29 +68,35 @@ google-genai==2.34.0
 googleapis-common-protos==1.75.5
     # via opentelemetry-exporter-otlp-proto-http
 h11==0.16.0
-    # via httpcore
+    # via
+    #   httpcore
+    #   httpcore2
 h2==4.4.1
     # via httpx
 hpack==4.2.0
     # via h2
 httpcore==1.0.9
     # via httpx
+httpcore2==2.16.0
+    # via httpx2
 httpx==0.28.1
     # via
     #   -r requirements.in
-    #   anthropic
     #   google-genai
     #   postgrest
     #   storage3
     #   supabase
     #   supabase-auth
     #   supabase-functions
+httpx2==2.16.0
+    # via anthropic
 hyperframe==6.1.0
     # via h2
 idna==3.18
     # via
     #   anyio
     #   httpx
+    #   httpx2
     #   requests
     #   yarl
 itsdangerous==2.2.0
@@ -114,6 +120,7 @@ numpy==2.5.4
 opentelemetry-api==1.45.2
     # via
     #   -r requirements.in
+    #   anthropic
     #   opentelemetry-exporter-http-transport
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-sdk
@@ -217,6 +224,10 @@ supabase-functions==2.33.0
     # via supabase
 tenacity==9.1.4
     # via google-genai
+truststore==0.10.5
+    # via
+    #   httpcore2
+    #   httpx2
 typing-extensions==4.16.0
     # via
     #   anthropic
