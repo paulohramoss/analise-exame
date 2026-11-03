@@ -1,0 +1,39 @@
+# Atualizações automáticas de dependências (Dependabot).
+#
+# pip: o Dependabot reconhece os locks gerados por pip-compile
+# (requirements.txt <- requirements.in, requirements-dev.txt <- requirements-dev.in)
+# e regenera o .txt a partir do .in em cada PR. O CI roda pip-audit no PR,
+# então uma atualização que ainda tenha CVE não passa.
+#
+# PRs de segurança (CVE) saem assim que o alerta aparece, independente do
+# agendamento abaixo — exigem "Dependabot security updates" ligado em
+# Settings > Code security.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # Minor/patch juntos num único PR semanal; major vem separado para revisão.
+      pip-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(ci)"
