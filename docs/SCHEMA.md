@@ -109,6 +109,21 @@ webhooks_asaas ──> eventos brutos do Asaas, correlacionados por asaas_paymen
 - As consultas dessas colunas são separadas de `buscar_analise`: sem a migration
   `2026-10-27-relatorio-paciente.sql`, só o relatório fica indisponível.
 
+## Tipos de exame: imagem, dinamometria, laboratoriais e correlação
+
+- `analises.tipo_exame` guarda a região nos laudos de imagem (`joelho`, `ombro`…) e
+  `dinamometria`, `laboratorial` ou `correlacao` nos demais.
+- Dinamometria e laboratoriais (`core/dynamometry.py`, `core/lab_tests.py`): a IA só
+  transcreve os valores do relatório em JSON; déficits, índices de simetria, torque por
+  peso, relações agonista/antagonista e a situação de cada exame de sangue (pela faixa
+  do próprio laudo) são calculados em código e gravados em `analises.dados_estruturados`
+  (migration `2026-10-31-tipos-de-exame.sql`). O tipo vem do formulário ou é detectado
+  pelo nome do arquivo, pela descrição e pelo texto do PDF (`analyzer.detect_exam_category`).
+- Correlação (`/pacientes/<id>/correlacionar`): parecer sobre os laudos do paciente,
+  tratamentos e evolução, salvo como uma análise `tipo_exame = 'correlacao'` vinculada ao
+  paciente. Nome e CPF não entram no pedido à IA; notas de evolução passam por
+  `core/privacy.py`.
+
 ## Prontuário de pacientes
 
 - Cada profissional só enxerga os próprios pacientes: toda consulta filtra por

@@ -97,6 +97,11 @@ create table if not exists public.analises (
 create index if not exists analises_cliente_created_idx
     on public.analises (cliente_id, created_at desc);
 
+-- Valores lidos e calculados de dinamometria e exames laboratoriais
+-- (2026-10-31-tipos-de-exame.sql).
+alter table public.analises
+    add column if not exists dados_estruturados jsonb;
+
 -- Achados localizados nas imagens (2026-10-23-marcacoes-laudo.sql).
 alter table public.analises
     add column if not exists marcacoes jsonb;

@@ -2,7 +2,7 @@
 
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
-from core import annotations, cost_tracking, db, patient_report
+from core import annotations, cost_tracking, db, lab_tests, patient_report
 from web import costs, posthog, presentation
 from web.extensions import rate_limit
 from web.security import premium_required
@@ -55,9 +55,19 @@ def laudo_detalhe(analise_id: str):
         responsible=presentation.responsible_info_from_row(row),
         consensus=presentation.build_consensus_info(row.get("modelo_ia") or "", row.get("analise_completa") or ""),
         annotations=annotations.sanitize_stored(row.get("marcacoes"), row.get("num_imagens")),
+        lab_dashboard=_lab_dashboard(row),
         can_patient_report=bool(g.get("cliente_id")) and row.get("cliente_id") == g.get("cliente_id"),
         **_patient_link_context(row),
     )
+
+
+def _lab_dashboard(row: dict) -> dict | None:
+    """Painel visual de um laudo laboratorial salvo (só com os dados estruturados gravados)."""
+    if row.get("tipo_exame") != "laboratorial":
+        return None
+    # O acesso ao laudo já foi conferido em _find_own_analysis: aqui basta o id.
+    dados = db.buscar_dados_estruturados(row["id"], include_all=True)
+    return lab_tests.dashboard(dados)
 
 
 def _patient_link_context(row: dict) -> dict:

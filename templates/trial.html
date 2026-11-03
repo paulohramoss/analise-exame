@@ -1203,6 +1203,8 @@
                     : 'Análise sem referência';
             const resultImage = document.getElementById('r-image');
             resultImage.src = `data:${data.image_mime};base64,${data.image_b64}`;
+            const findingsBlock = document.getElementById('findings-block');
+            if (findingsBlock) findingsBlock.hidden = data.show_findings === false;
             initExamFindings([resultImage], data.annotations || [], 1);
 
             const reportEl = document.getElementById('report-content');
