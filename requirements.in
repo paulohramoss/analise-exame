@@ -30,7 +30,7 @@ numpy>=2.5.4
 # rejeitava as chaves novas do Supabase (sb_secret_… / sb_publishable_…).
 supabase>=2.33.0,<3
 httpx>=0.28.1
-dnspython>=2.9.1
-redis>=8.1.0
-rq>=1.16.0
-sentry-sdk[flask]>=2.73.0
+dnspython>=2.6.1
+redis>=5.0.0
+rq>=3.0.0
+sentry-sdk[flask]>=2.0.0
