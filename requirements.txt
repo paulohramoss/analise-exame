@@ -50,7 +50,7 @@ distro==1.9.0
     #   anthropic
     #   google-genai
     #   posthog
-dnspython==2.8.0
+dnspython==2.9.0
     # via -r requirements.in
 docstring-parser==0.18.0
     # via anthropic
@@ -155,7 +155,7 @@ protobuf==7.36.2
     # via
     #   googleapis-common-protos
     #   opentelemetry-proto
-pyasn1==0.6.4
+pyasn1==0.6.5
     # via pyasn1-modules
 pyasn1-modules==0.4.2
     # via google-auth
