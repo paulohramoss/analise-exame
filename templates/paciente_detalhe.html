@@ -103,6 +103,22 @@
             </div>
 
             <div>
+                <section class="card correlation-card" id="correlacao">
+                    <h2 class="pt-section-title">{{ layout.icon("zap", 20) }} Correlacionar exames</h2>
+                    <p class="card-description">Gera um parecer que cruza os exames deste paciente — imagem, dinamometria e
+                        exames laboratoriais — com os tratamentos e a evolução registrados. O parecer fica salvo na linha do tempo.</p>
+                    {% if exames_correlacionaveis >= 2 %}
+                    <form method="POST" action="{{ url_for('pacientes.correlacionar', paciente_id=paciente.id) }}"
+                          onsubmit="const b = this.querySelector('button'); b.disabled = true; b.textContent = 'Gerando a correlação…';">
+                        <button type="submit" class="btn-primary">Correlacionar {{ exames_correlacionaveis }} exames</button>
+                    </form>
+                    <p class="findings-note">Leva cerca de 30 segundos. Nome e CPF não são enviados à IA.</p>
+                    {% else %}
+                    <p class="findings-note">Disponível quando o paciente tiver pelo menos dois exames vinculados
+                        ({{ exames_correlacionaveis }} até agora).</p>
+                    {% endif %}
+                </section>
+
                 <section class="card">
                     <h2 class="pt-section-title">{{ layout.icon("activity", 20) }} Registrar evolução</h2>
                     <form class="pt-form" method="POST" action="{{ url_for('pacientes.nova_evolucao', paciente_id=paciente.id) }}">

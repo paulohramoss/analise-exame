@@ -169,20 +169,25 @@ def _dicom_context(upload_items: list[dict]) -> str:
     return " | ".join(parts)
 
 
-def _pdf_context(upload_items: list[dict]) -> str:
+def _pdf_context(upload_items: list[dict], full_text: bool = False) -> str:
     parts = []
     for item in upload_items:
-        if item.get("pdf_text"):
+        texto = item.get("pdf_text_full") if full_text and item.get("pdf_text_full") else item.get("pdf_text")
+        if texto:
             parts.append(
-                f"Texto do PDF enviado ({item.get('pdf_name') or 'documento'}), já sem identificação do paciente: "
-                f"{item['pdf_text']}"
+                f"Texto do PDF enviado ({item.get('pdf_name') or 'documento'}), já sem identificação do paciente:"
+                f"{chr(10) if full_text else ' '}{texto}"
             )
     return " | ".join(parts)
 
 
-def description_with_dicom_context(user_description: str, upload_items: list[dict]) -> str:
-    """Descrição do usuário + contexto tirado dos arquivos (metadados DICOM, texto de PDF)."""
-    context = " | ".join(p for p in (_dicom_context(upload_items), _pdf_context(upload_items)) if p)
+def description_with_dicom_context(user_description: str, upload_items: list[dict], full_text: bool = False) -> str:
+    """Descrição do usuário + contexto tirado dos arquivos (metadados DICOM, texto de PDF).
+
+    full_text: o texto inteiro do PDF (dinamometria/laboratoriais), não só o trecho
+    curto usado como contexto de um laudo de imagem.
+    """
+    context = " | ".join(p for p in (_dicom_context(upload_items), _pdf_context(upload_items, full_text)) if p)
     if not context:
         return user_description
     if user_description:
@@ -205,7 +210,10 @@ def description_with_dicom_context(user_description: str, upload_items: list[dic
 
 PDF_MAX_PAGES = int(os.environ.get("PDF_MAX_PAGES", "20"))
 _PDF_RENDER_EDGE_PX = 1600
-_PDF_TEXT_MAX_CHARS = 4000
+_PDF_TEXT_MAX_CHARS = 4000  # contexto de um laudo de imagem
+# Dinamometria e laboratoriais: os valores estão no texto, que segue inteiro para a leitura.
+_PDF_TEXT_FULL_MAX_CHARS = int(os.environ.get("PDF_TEXT_FULL_MAX_CHARS", "40000"))
+PDF_TEXT_MAX_PAGES = int(os.environ.get("PDF_TEXT_MAX_PAGES", "60"))
 _PDF_BLANK_STDDEV = 4.0
 
 
@@ -233,11 +241,18 @@ def _convert_pdf(filepath: Path, original_name: str) -> list[dict]:
         logger.warning("PDF não pôde ser aberto (%s)", original_name, exc_info=True)
         return []
 
-    items, texts = [], []
+    items, page_texts = [], []
     try:
         total = len(document)
-        for number in range(min(total, PDF_MAX_PAGES)):
+        # O texto vem de todas as páginas (barato e é onde estão os valores de um
+        # laudo laboratorial); a imagem, só das primeiras PDF_MAX_PAGES.
+        for number in range(min(total, PDF_TEXT_MAX_PAGES)):
             page = document[number]
+            if number >= PDF_MAX_PAGES:
+                text = page.get_textpage().get_text_range()
+                if text.strip():
+                    page_texts.append(privacy.redact_identifiers(text)[0])
+                continue
             width, height = page.get_size()
             scale = min(4.0, _PDF_RENDER_EDGE_PX / max(width, height, 1))
             image = page.render(scale=scale).to_pil().convert("RGB")
@@ -254,7 +269,7 @@ def _convert_pdf(filepath: Path, original_name: str) -> list[dict]:
             if text.strip():
                 # Remove por linha (como no PDF) e só depois junta: unidas antes, o nome
                 # de uma linha "engoliria" o rótulo da linha de baixo.
-                texts.append(" ".join(privacy.redact_identifiers(text)[0].split()))
+                page_texts.append(privacy.redact_identifiers(text)[0])
 
             page_path = UPLOAD_FOLDER / f"{uuid.uuid4().hex}_pdf_p{number + 1}.jpg"
             image.save(str(page_path), format="JPEG", quality=90, optimize=True)
@@ -280,10 +295,36 @@ def _convert_pdf(filepath: Path, original_name: str) -> list[dict]:
     finally:
         document.close()
 
-    if items and texts:
-        items[0]["pdf_text"] = " ".join(texts)[:_PDF_TEXT_MAX_CHARS]
+    if items and page_texts:
+        texto = _without_repeated_lines(page_texts)
+        items[0]["pdf_text"] = " ".join(texto.split())[:_PDF_TEXT_MAX_CHARS]
+        items[0]["pdf_text_full"] = texto[:_PDF_TEXT_FULL_MAX_CHARS]
         items[0]["pdf_name"] = original_name
     return items
+
+
+def _without_repeated_lines(page_texts: list[str]) -> str:
+    """Texto do documento sem o cabeçalho/rodapé que se repete em toda página.
+
+    Uma linha presente em pelo menos metade das páginas (com 3 ou mais) fica só
+    na primeira vez: num laudo de laboratório de 25 páginas, o cabeçalho repetido
+    ocupava a maior parte do texto e empurrava os resultados para fora do limite.
+    """
+    paginas = [[linha.strip() for linha in texto.splitlines() if linha.strip()] for texto in page_texts]
+    contagem: dict[str, int] = {}
+    for linhas in paginas:
+        for linha in set(linhas):
+            contagem[linha] = contagem.get(linha, 0) + 1
+    limite = max(3, len(paginas) / 2)
+    vistas, saida = set(), []
+    for linhas in paginas:
+        for linha in linhas:
+            if contagem[linha] >= limite:
+                if linha in vistas:
+                    continue
+                vistas.add(linha)
+            saida.append(linha)
+    return "\n".join(saida)
 
 
 # ── Upload ────────────────────────────────────────────────────────────────────

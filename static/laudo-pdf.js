@@ -60,6 +60,10 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
 .images { display: flex; flex-wrap: wrap; gap: 10px; }
 .images figure { flex: 0 0 auto; }
 .images img { display: block; max-width: 100%; max-height: 240px; object-fit: contain; border-radius: 6px; border: 1px solid var(--border); background: #0a0a0a; }
+.laudo-table-wrap { margin: 6px 0 10px; }
+.laudo-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.laudo-table th, .laudo-table td { border: 1px solid var(--border); padding: 3px 5px; text-align: left; vertical-align: top; }
+.laudo-table th { background: var(--soft); font-weight: 800; }
 .findings { list-style: none; display: grid; gap: 6px; }
 .findings li { display: flex; gap: 8px; align-items: flex-start; }
 .f-num { flex: 0 0 18px; height: 18px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }

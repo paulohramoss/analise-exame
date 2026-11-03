@@ -321,6 +321,8 @@
             {% endif %}
         </div>
 
+        {% if lab_dashboard %}{% include "_painel_laboratorial.html" %}{% endif %}
+
         <!-- Layout lado a lado: imagens + laudo -->
         <div class="result-layout">
 
@@ -341,7 +343,7 @@
                     </div>
                     {% endfor %}
                 </div>
-                {% include "_achados_marcados.html" %}
+                {% if show_findings|default(true) %}{% include "_achados_marcados.html" %}{% endif %}
             </div>
 
             <!-- Laudo da análise -->

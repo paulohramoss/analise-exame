@@ -356,6 +356,7 @@ def salvar_analise(
     responsavel: dict | None = None,
     paciente_id: str | None = None,
     marcacoes: list[dict] | None = None,
+    dados_estruturados: dict | None = None,
 ) -> str | None:
     """Persiste resultado de análise da IA. Retorna UUID da análise ou None.
 
@@ -384,6 +385,8 @@ def salvar_analise(
             data["paciente_id"] = paciente_id
         if marcacoes:
             data["marcacoes"] = marcacoes
+        if dados_estruturados:
+            data["dados_estruturados"] = dados_estruturados
         if responsavel:
             data.update({
                 "responsavel_nome": responsavel.get("name") or None,
@@ -523,6 +526,26 @@ def salvar_marca_clinica(cliente_id: str, campos: dict) -> bool:
         return False
 
 
+def buscar_dados_estruturados(analise_id: str, cliente_id: str | None = None, include_all: bool = False) -> dict | None:
+    """Valores lidos/calculados de um exame estruturado (dinamometria, laboratoriais).
+
+    Consulta separada de buscar_analise: sem a migration 2026-10-31-tipos-de-exame.sql
+    só o painel visual fica indisponível, o laudo continua abrindo.
+    """
+    db = _get_client()
+    if not db or not analise_id or (not include_all and not cliente_id):
+        return None
+    try:
+        query = db.table("analises").select("dados_estruturados").eq("id", analise_id)
+        if cliente_id:
+            query = query.eq("cliente_id", cliente_id)
+        res = query.limit(1).execute()
+        return (res.data[0].get("dados_estruturados") if res.data else None) or None
+    except Exception:
+        logger.warning("dados_estruturados indisponível (migration 2026-10-31 aplicada?)", exc_info=True)
+        return None
+
+
 def salvar_imagem_exame(
     analise_id: str,
     mime_type: str,
@@ -576,6 +599,7 @@ def salvar_analise_com_imagens(
         modo=modo,
         tempo_ms=tempo_ms,
         marcacoes=result.get("annotations") or None,
+        dados_estruturados=result.get("structured") or None,
         **persist,
     )
     if not analise_id:
@@ -962,6 +986,24 @@ def listar_analises_paciente(paciente_id: str, cliente_id: str) -> list[dict]:
         return res.data or []
     except Exception:
         logger.exception("Erro em listar_analises_paciente")
+        return []
+
+
+def listar_laudos_para_correlacao(paciente_id: str, cliente_id: str, limit: int = 10) -> list[dict]:
+    """Texto completo dos laudos do paciente (mais recentes primeiro), sem pareceres de correlação."""
+    db = _get_client()
+    if not db or not paciente_id or not cliente_id:
+        return []
+    try:
+        res = (
+            db.table("analises")
+            .select("id, created_at, tipo_exame, modalidade, analise_completa")
+            .eq("paciente_id", paciente_id).eq("cliente_id", cliente_id).neq("tipo_exame", "correlacao")
+            .order("created_at", desc=True).limit(limit).execute()
+        )
+        return res.data or []
+    except Exception:
+        logger.exception("Erro em listar_laudos_para_correlacao")
         return []
 
 
