@@ -145,14 +145,19 @@ def recuperar_checkouts_abandonados(agora: datetime | None = None) -> dict:
         payment_id = linha.get("asaas_payment_id") or ""
         email = _email(linha)
 
-        # Sem cliente (conta excluída), descadastrado, já avisado nesta rodada ou
-        # com outro plano já pago: marca para não voltar à fila e segue.
-        if (
-            not email
-            or email in descadastrados
-            or email in ja_avisados
-            or db.buscar_pagamento_confirmado_por_email(email) is not None
-        ):
+        # Sem cliente (conta excluída), descadastrado ou já avisado nesta rodada:
+        # marca para não voltar à fila e segue.
+        if not email or email in descadastrados or email in ja_avisados:
+            db.marcar_lembrete_enviado(payment_id)
+            resumo["pulados"] += 1
+            continue
+
+        # Já tem outro plano pago? Se o banco não responder, não arrisca cobrar quem pagou.
+        tem_plano = db.cliente_tem_plano_pago(email)
+        if tem_plano is None:
+            resumo["falhas"] += 1
+            continue
+        if tem_plano:
             db.marcar_lembrete_enviado(payment_id)
             resumo["pulados"] += 1
             continue
@@ -178,11 +183,16 @@ def recuperar_checkouts_abandonados(agora: datetime | None = None) -> dict:
             base_url=base_url,
             link_sair=link_sair,
         )
+        # Reserva no banco ANTES de enviar: execuções simultâneas não duplicam o
+        # lembrete, e se a reserva não grava, não envia (nunca dois lembretes).
+        if not db.reservar_lembrete(payment_id):
+            resumo["pulados"] += 1
+            continue
         if mailer.send_email(email, assunto, corpo, headers=cabecalhos_descadastro(link_sair)):
-            db.marcar_lembrete_enviado(payment_id)
             ja_avisados.add(email)
             resumo["enviados"] += 1
         else:
+            db.liberar_lembrete(payment_id)
             resumo["falhas"] += 1
 
     logger.info("Recuperação de checkout: %s", resumo)

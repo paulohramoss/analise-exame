@@ -1450,6 +1450,7 @@ def listar_checkouts_abandonados(criado_depois_de: str, criado_antes_de: str, li
 
 
 def marcar_lembrete_enviado(asaas_payment_id: str) -> bool:
+    """Tira a cobrança da fila sem enviar (descadastrado, já pago, duplicada)."""
     db = _get_client()
     if not db:
         return False
@@ -1461,6 +1462,64 @@ def marcar_lembrete_enviado(asaas_payment_id: str) -> bool:
     except Exception:
         logger.exception("Erro em marcar_lembrete_enviado")
         return False
+
+
+def reservar_lembrete(asaas_payment_id: str) -> bool:
+    """Reserva atômica do lembrete ANTES de enviar: só um processo consegue.
+
+    O UPDATE só pega a linha se lembrete_enviado_em ainda está vazio; duas
+    execuções simultâneas do cron não mandam o mesmo lembrete. Falha = não reservou.
+    """
+    db = _get_client()
+    if not db:
+        return False
+    try:
+        res = (
+            db.table("pagamentos")
+            .update({"lembrete_enviado_em": datetime.now(timezone.utc).isoformat()})
+            .eq("asaas_payment_id", asaas_payment_id)
+            .is_("lembrete_enviado_em", "null")
+            .execute()
+        )
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em reservar_lembrete")
+        return False
+
+
+def liberar_lembrete(asaas_payment_id: str) -> None:
+    """Desfaz a reserva quando o e-mail não saiu, para tentar de novo no dia seguinte."""
+    db = _get_client()
+    if not db:
+        return
+    try:
+        db.table("pagamentos").update({"lembrete_enviado_em": None}).eq("asaas_payment_id", asaas_payment_id).execute()
+    except Exception:
+        logger.exception("Erro em liberar_lembrete (a cobrança fica sem lembrete)")
+
+
+def cliente_tem_plano_pago(email: str, planos: tuple[str, ...] = ("mensal", "semestral", "anual")) -> bool | None:
+    """True/False se o e-mail tem cobrança confirmada; None se não foi possível consultar.
+
+    Diferente de buscar_pagamento_confirmado_por_email (que devolve None também
+    no erro): aqui quem chama precisa distinguir "não pagou" de "banco fora".
+    """
+    db = _get_client()
+    if not db or not email:
+        return None
+    try:
+        res = (
+            db.table("pagamentos")
+            .select("asaas_payment_id")
+            .in_("external_reference", [email] + [f"{email}|{plano}" for plano in planos])
+            .in_("status", ["CONFIRMED", "RECEIVED"])
+            .limit(1)
+            .execute()
+        )
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em cliente_tem_plano_pago")
+        return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

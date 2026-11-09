@@ -164,9 +164,17 @@ def cenario(monkeypatch):
 
     monkeypatch.setattr(db, "listar_checkouts_abandonados", listar)
     monkeypatch.setattr(db, "emails_descadastrados", lambda emails: {e for e in emails if e in estado["descadastrados"]})
-    monkeypatch.setattr(db, "buscar_pagamento_confirmado_por_email",
-                        lambda email, *a, **k: ("pg", email, None) if email in estado["pagos"] else None)
+    monkeypatch.setattr(db, "cliente_tem_plano_pago", lambda email, *a, **k: email in estado["pagos"])
     monkeypatch.setattr(db, "marcar_lembrete_enviado", lambda pid: estado["marcados"].append(pid) or True)
+
+    def reservar(pid):
+        if pid in estado["marcados"]:
+            return False
+        estado["marcados"].append(pid)
+        return True
+
+    monkeypatch.setattr(db, "reservar_lembrete", reservar)
+    monkeypatch.setattr(db, "liberar_lembrete", lambda pid: estado["marcados"].remove(pid))
     monkeypatch.setattr(db, "atualizar_status_pagamento",
                         lambda pid, status, payload=None: estado["status_atualizados"].append((pid, status)))
     monkeypatch.setattr(asaas, "get_payment", consultar)
@@ -312,3 +320,50 @@ def test_descadastro_apaga_o_lead_e_entra_na_lista_de_supressao(monkeypatch):
     tabelas = [args[0] for name, args, _ in fake.calls if name == "table"]
     assert tabelas == ["email_descadastros", "leads"]
     assert ("delete", (), {}) in fake.calls
+
+
+def test_cobranca_ja_reservada_por_outra_execucao_nao_recebe_segundo_lembrete(cenario, monkeypatch):
+    """Duas execuções do cron ao mesmo tempo: só quem reservar a linha envia."""
+    cenario["cobrancas"] = [_cobranca("pay_1", "ana@clinica.com.br")]
+    monkeypatch.setattr(db, "reservar_lembrete", lambda pid: False)
+
+    resumo = marketing.recuperar_checkouts_abandonados(agora=AGORA)
+
+    assert cenario["enviados"] == []
+    assert resumo["pulados"] == 1
+
+
+def test_banco_fora_na_consulta_de_plano_pago_nao_envia(cenario, monkeypatch):
+    cenario["cobrancas"] = [_cobranca("pay_1", "ana@clinica.com.br")]
+    monkeypatch.setattr(db, "cliente_tem_plano_pago", lambda email, *a, **k: None)
+
+    resumo = marketing.recuperar_checkouts_abandonados(agora=AGORA)
+
+    assert cenario["enviados"] == []
+    assert cenario["marcados"] == []
+    assert resumo["falhas"] == 1
+
+
+def test_reserva_so_pega_cobranca_ainda_sem_lembrete(monkeypatch):
+    from tests.test_db_queries import _use_fake_client
+
+    fake = _use_fake_client(monkeypatch)  # sem linhas: outro processo já reservou
+    assert db.reservar_lembrete("pay_1") is False
+    assert ("is_", ("lembrete_enviado_em", "null"), {}) in fake.calls
+
+
+def test_plano_pago_distingue_erro_de_nao_pagou(monkeypatch):
+    class _Quebrado:
+        def table(self, name):
+            raise RuntimeError("supabase fora")
+
+    monkeypatch.setattr(db, "_get_client", lambda: _Quebrado())
+    assert db.cliente_tem_plano_pago("ana@clinica.com.br") is None
+
+    from tests.test_db_queries import _use_fake_client
+
+    fake = _use_fake_client(monkeypatch)
+    assert db.cliente_tem_plano_pago("ana@clinica.com.br") is False
+    in_call = next(args for name, args, _ in fake.calls if name == "in_" and args[0] == "external_reference")
+    assert in_call[1] == ["ana@clinica.com.br", "ana@clinica.com.br|mensal", "ana@clinica.com.br|semestral",
+                          "ana@clinica.com.br|anual"]
