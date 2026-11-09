@@ -9,7 +9,7 @@ from werkzeug.security import generate_password_hash
 
 from core import asaas, db
 from core.email_validation import validar_email_cadastro
-from web import accounts, config, posthog, security
+from web import accounts, config, marketing, posthog, security
 
 logger = logging.getLogger(__name__)
 
@@ -266,3 +266,19 @@ def webhook_asaas():
             logger.info("Sessões premium revogadas por %s (payment_id=%s)", event, payment_id)
 
     return jsonify({"received": True}), 200
+
+
+@bp.route("/cron/recuperar-checkout")
+def cron_recuperar_checkout():
+    """Lembrete diário para quem gerou a cobrança e não pagou (ver web/marketing.py).
+
+    Chamado pelo cron da Vercel (vercel.json), que envia `Authorization: Bearer
+    <CRON_SECRET>`. Sem CRON_SECRET a rota fica desligada.
+    """
+    segredo = os.environ.get("CRON_SECRET", "").strip()
+    if not segredo:
+        return jsonify({"error": "CRON_SECRET não configurado."}), 503
+    recebido = request.headers.get("Authorization", "")
+    if not hmac.compare_digest(recebido.encode("utf-8"), f"Bearer {segredo}".encode("utf-8")):
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify(marketing.recuperar_checkouts_abandonados())

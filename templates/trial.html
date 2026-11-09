@@ -537,6 +537,28 @@
             flex-shrink: 0;
         }
 
+        /* ── Captura de e-mail (opt-in) ── */
+        .lead-card { margin-top: 1rem; border: 1px solid var(--primary-border); }
+        .lead-head { display: flex; gap: 0.75rem; align-items: flex-start; margin-bottom: 0.85rem; }
+        .lead-head h3 { font-size: 1rem; margin: 0 0 0.2rem; }
+        .lead-head p { font-size: 0.82rem; color: var(--text-muted); margin: 0; }
+        .lead-row { display: flex; gap: 0.6rem; margin-bottom: 0.75rem; }
+        .lead-row input[type="email"] {
+            flex: 1; min-width: 0; padding: 0.65rem 0.8rem; border: 1px solid var(--border);
+            border-radius: 8px; font-size: 0.9rem; font-family: inherit; background: #fff;
+        }
+        .lead-row .btn-primary { width: auto; white-space: nowrap; }
+        .lead-card .consent-check { margin-bottom: 0.25rem; }
+        .lead-card[hidden], .lead-card [hidden] { display: none !important; }
+        .lead-head .icon-badge { flex-shrink: 0; }
+        .lead-hp { position: absolute; left: -10000px; width: 1px; height: 1px; opacity: 0; }
+        .lead-msg { font-size: 0.82rem; margin: 0.4rem 0 0; min-height: 1.1em; color: var(--danger); }
+        .lead-done { display: flex; gap: 0.5rem; align-items: center; font-weight: 700; color: var(--success-dark); font-size: 0.92rem; }
+        @media (max-width: 560px) {
+            .lead-row { flex-direction: column; }
+            .lead-row .btn-primary { width: 100%; }
+        }
+
         /* ── Loading ── */
         .loading-overlay {
             position: fixed;
@@ -816,6 +838,32 @@
                 <button class="btn-secondary" id="btn-new-analysis" onclick="newAnalysis()">
                     {{ layout.icon("scan", 18) }} Nova análise
                 </button>
+            </div>
+
+            <!-- Opt-in de e-mail (LGPD: checkbox desmarcado, texto gravado com o lead) -->
+            <div class="card lead-card" id="lead-card">
+                <div class="lead-head">
+                    <span class="icon-badge">{{ layout.icon("mail", 20) }}</span>
+                    <div>
+                        <h3>Receba artigos de ortopedia e novidades do MedAI</h3>
+                        <p>Conteúdo curto e útil para a prática clínica. Nada do exame é enviado por e-mail.</p>
+                    </div>
+                </div>
+                <form id="lead-form" novalidate>
+                    <div class="lead-row">
+                        <input type="email" id="lead-email" aria-label="Seu e-mail" placeholder="seu@email.com" autocomplete="email" maxlength="254" required>
+                        <button type="submit" class="btn-primary" id="lead-btn">Quero receber</button>
+                    </div>
+                    <input type="text" id="lead-website" name="website" class="lead-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+                    <label class="consent-check" for="lead-consent">
+                        <input type="checkbox" id="lead-consent">
+                        <span>{{ consentimento_marketing }}</span>
+                    </label>
+                    <p class="lead-msg" id="lead-msg" role="status"></p>
+                </form>
+                <div class="lead-done" id="lead-done" hidden>
+                    {{ layout.icon("check-circle", 18) }} Inscrição confirmada! Você vai receber nossos próximos artigos.
+                </div>
             </div>
 
             <!-- Aviso após última análise -->
@@ -1225,6 +1273,53 @@
             showSection('section-result');
         }
 
+
+        // ── Opt-in de e-mail ──
+        const LEAD_KEY = 'threehealth_lead_inscrito';
+        function leadJaInscrito() {
+            try { return localStorage.getItem(LEAD_KEY) === '1'; } catch (e) { return false; }
+        }
+        function mostrarLeadFeito() {
+            document.getElementById('lead-form').hidden = true;
+            document.getElementById('lead-done').hidden = false;
+        }
+        if (leadJaInscrito()) document.getElementById('lead-card').hidden = true;
+
+        document.getElementById('lead-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const msg = document.getElementById('lead-msg');
+            const btn = document.getElementById('lead-btn');
+            const email = document.getElementById('lead-email').value.trim();
+            msg.textContent = '';
+            if (!email) { msg.textContent = 'Informe seu e-mail.'; return; }
+            if (!document.getElementById('lead-consent').checked) {
+                msg.textContent = 'Marque a caixa de consentimento para receber os e-mails.';
+                return;
+            }
+            btn.disabled = true;
+            try {
+                const resp = await fetch('/trial/lead', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email,
+                        consentimento: true,
+                        website: document.getElementById('lead-website').value,
+                    }),
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    msg.textContent = data.error || 'Não foi possível salvar agora. Tente novamente.';
+                    return;
+                }
+                try { localStorage.setItem(LEAD_KEY, '1'); } catch (err) { /* aba anônima */ }
+                mostrarLeadFeito();
+            } catch (err) {
+                msg.textContent = 'Falha de conexão. Tente novamente.';
+            } finally {
+                btn.disabled = false;
+            }
+        });
 
         // ── Copy report ──
         function copyReport() {

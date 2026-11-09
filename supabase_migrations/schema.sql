@@ -51,8 +51,12 @@ create table if not exists public.pagamentos (
     forma_pagamento      text,
     status               text,
     payload_asaas        jsonb,
+    lembrete_enviado_em  timestamptz,               -- lembrete de checkout abandonado já enviado
     created_at           timestamptz not null default now()
 );
+
+alter table public.pagamentos
+    add column if not exists lembrete_enviado_em timestamptz;
 
 create index if not exists pagamentos_external_reference_idx
     on public.pagamentos (external_reference);
@@ -316,6 +320,50 @@ declare
     tabela text;
 begin
     foreach tabela in array array['pacientes', 'tratamentos', 'evolucoes', 'acessos_prontuario']
+    loop
+        execute format('alter table public.%I enable row level security', tabela);
+        if not exists (
+            select 1 from pg_policies p
+            where p.schemaname = 'public' and p.tablename = tabela and p.policyname = 'service_role_all'
+        ) then
+            execute format(
+                'create policy service_role_all on public.%I for all using (auth.role() = ''service_role'')',
+                tabela
+            );
+        end if;
+    end loop;
+end $$;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- MARKETING — opt-in do trial, lista de descadastro e lembrete de checkout
+-- (2026-11-09-leads-recuperacao-checkout.sql; ver web/marketing.py)
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.leads (
+    id                   uuid primary key default gen_random_uuid(),
+    email                text not null unique,
+    origem               text not null default 'trial',
+    consentimento_texto  text not null,
+    consentimento_em     timestamptz not null default now(),
+    created_at           timestamptz not null default now()
+);
+
+create table if not exists public.email_descadastros (
+    email       text primary key,
+    origem      text,
+    created_at  timestamptz not null default now()
+);
+
+-- Busca diária de cobranças pendentes ainda sem lembrete.
+create index if not exists pagamentos_sem_lembrete_idx
+    on public.pagamentos (created_at)
+    where lembrete_enviado_em is null;
+
+-- RLS: mesma convenção de 2026-10-13-rls-tabelas.sql (só a service_role acessa).
+do $$
+declare
+    tabela text;
+begin
+    foreach tabela in array array['leads', 'email_descadastros']
     loop
         execute format('alter table public.%I enable row level security', tabela);
         if not exists (

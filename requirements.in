@@ -14,7 +14,7 @@ flask-limiter>=3.8.0
 # Analytics de produto/erros/IA (ver web/posthog.py). Para os logs, só o
 # exportador OTLP via HTTP — o pacote "opentelemetry-exporter-otlp" completo
 # puxa gRPC (dezenas de MB) sem necessidade, pesando no limite da Vercel.
-posthog>=7.81.1
+posthog>=7.84.2
 opentelemetry-api
 opentelemetry-sdk
 opentelemetry-exporter-otlp-proto-http
@@ -28,9 +28,9 @@ pypdfium2>=5.0.0
 numpy>=2.5.4
 # >=2.16: até a 2.15.x o cliente validava a chave com uma regex de JWT e
 # rejeitava as chaves novas do Supabase (sb_secret_… / sb_publishable_…).
-supabase>=2.33.0,<3
+supabase>=2.34.0,<3
 httpx>=0.28.1
-dnspython>=2.6.1
+dnspython>=2.9.2
 redis>=5.0.0
 rq>=3.0.0
-sentry-sdk[flask]>=2.0.0
+sentry-sdk[flask]>=2.74.0

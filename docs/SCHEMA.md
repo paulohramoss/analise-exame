@@ -37,6 +37,7 @@ clientes ──1:N── pacientes ──1:N── tratamentos
 logs_acesso  ──> referencia cliente_id e analise_id (auditoria de requisições)
 acessos_prontuario ──> quem abriu/alterou qual prontuário (auditoria)
 webhooks_asaas ──> eventos brutos do Asaas, correlacionados por asaas_payment_id
+leads / email_descadastros ──> por e-mail, sem FK (o trial é anônimo)
 ```
 
 ## Tabelas
@@ -56,6 +57,8 @@ webhooks_asaas ──> eventos brutos do Asaas, correlacionados por asaas_paymen
 | `tratamentos` | Tratamentos do paciente (tipo, região, início e fim) | `/pacientes/<id>/tratamentos` |
 | `evolucoes` | Evolução por consulta: dor (EVA 0-10), escore funcional (0-100) e nota | `/pacientes/<id>/evolucoes` |
 | `acessos_prontuario` | Trilha de auditoria de cada visualização/alteração de prontuário | rotas de `/pacientes` |
+| `leads` | E-mail de quem usou o `/trial` e marcou o opt-in de artigos e novidades, com a frase exata aceita (`consentimento_texto`) | `/trial/lead` |
+| `email_descadastros` | Lista de supressão: quem pediu para não receber lembretes nem marketing | `/descadastrar` |
 
 ## Coisas não óbvias
 
@@ -158,6 +161,8 @@ Prazos aplicados diariamente por `aplicar_retencao_dados()` (pg_cron, migration
 | `logs_acesso` | 12 meses | partições descartadas por `criar_particoes_logs()`; Marco Civil exige ≥ 6 meses |
 | laudos de clientes | enquanto a conta existir | o titular exclui pela página `/conta` |
 | prontuários (`pacientes`, `tratamentos`, `evolucoes`, `acessos_prontuario`) | enquanto a conta existir | o profissional exclui o paciente no prontuário, ou a conta em `/conta` |
+| `leads` | até o descadastro | o descadastro apaga a linha; fica só o e-mail na lista de supressão |
+| `email_descadastros` | indefinido | é o que garante que a pessoa não volte a receber e-mail (LGPD art. 18, IX) |
 | `pagamentos` | guarda fiscal | mantidos sem vínculo após a exclusão da conta (LGPD art. 16, I) |
 
 A descrição clínica passa por `core/privacy.py` (remove nome, CPF, CNS, RG,

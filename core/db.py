@@ -1361,6 +1361,168 @@ def buscar_gasto_diario(escopo: str, dia: str) -> float | None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# MARKETING — leads do trial, descadastro e recuperação de checkout
+#
+# Tabelas da migration 2026-11-09-leads-recuperacao-checkout.sql. Toda função
+# falha fechada: sem banco (ou sem a migration), nada é enviado a ninguém.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Status do Asaas de cobrança que ainda pode ser paga. Cobranças recém-criadas
+# ficam com status vazio até o primeiro webhook chegar.
+STATUS_COBRANCA_EM_ABERTO = ("PENDING", "OVERDUE")
+
+
+def salvar_lead(email: str, origem: str, consentimento_texto: str) -> bool:
+    """Grava (ou renova) o opt-in de marketing. Um novo opt-in explícito desfaz o descadastro."""
+    db = _get_client()
+    if not db or not email:
+        return False
+    try:
+        db.table("leads").upsert(
+            {
+                "email": email,
+                "origem": origem,
+                "consentimento_texto": consentimento_texto,
+                "consentimento_em": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="email",
+        ).execute()
+        db.table("email_descadastros").delete().eq("email", email).execute()
+        return True
+    except Exception:
+        logger.exception("Erro em salvar_lead")
+        return False
+
+
+def registrar_descadastro(email: str, origem: str = "") -> bool:
+    db = _get_client()
+    if not db or not email:
+        return False
+    try:
+        db.table("email_descadastros").upsert(
+            {"email": email, "origem": origem or None}, on_conflict="email"
+        ).execute()
+        # Minimização: sem opt-in vigente, o lead não tem mais por que existir.
+        db.table("leads").delete().eq("email", email).execute()
+        return True
+    except Exception:
+        logger.exception("Erro em registrar_descadastro")
+        return False
+
+
+def emails_descadastrados(emails: list[str]) -> set[str] | None:
+    """Quais destes e-mails pediram para não receber mais nada. None = não foi possível consultar."""
+    db = _get_client()
+    if not db:
+        return None
+    if not emails:
+        return set()
+    try:
+        res = db.table("email_descadastros").select("email").in_("email", emails).execute()
+        return {row["email"] for row in (res.data or [])}
+    except Exception:
+        logger.exception("Erro em emails_descadastrados")
+        return None
+
+
+def listar_checkouts_abandonados(criado_depois_de: str, criado_antes_de: str, limite: int) -> list[dict]:
+    """Cobranças em aberto, criadas na janela, que ainda não receberam lembrete (com nome/e-mail do cliente)."""
+    db = _get_client()
+    if not db:
+        return []
+    em_aberto = ",".join(STATUS_COBRANCA_EM_ABERTO)
+    try:
+        res = (
+            db.table("pagamentos")
+            .select("asaas_payment_id, invoice_url, plano, created_at, clientes(nome, email)")
+            .is_("lembrete_enviado_em", "null")
+            .or_(f"status.is.null,status.in.({em_aberto})")
+            .gte("created_at", criado_depois_de)
+            .lte("created_at", criado_antes_de)
+            .order("created_at")
+            .limit(limite)
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        logger.exception("Erro em listar_checkouts_abandonados")
+        return []
+
+
+def marcar_lembrete_enviado(asaas_payment_id: str) -> bool:
+    """Tira a cobrança da fila sem enviar (descadastrado, já pago, duplicada)."""
+    db = _get_client()
+    if not db:
+        return False
+    try:
+        db.table("pagamentos").update(
+            {"lembrete_enviado_em": datetime.now(timezone.utc).isoformat()}
+        ).eq("asaas_payment_id", asaas_payment_id).execute()
+        return True
+    except Exception:
+        logger.exception("Erro em marcar_lembrete_enviado")
+        return False
+
+
+def reservar_lembrete(asaas_payment_id: str) -> bool:
+    """Reserva atômica do lembrete ANTES de enviar: só um processo consegue.
+
+    O UPDATE só pega a linha se lembrete_enviado_em ainda está vazio; duas
+    execuções simultâneas do cron não mandam o mesmo lembrete. Falha = não reservou.
+    """
+    db = _get_client()
+    if not db:
+        return False
+    try:
+        res = (
+            db.table("pagamentos")
+            .update({"lembrete_enviado_em": datetime.now(timezone.utc).isoformat()})
+            .eq("asaas_payment_id", asaas_payment_id)
+            .is_("lembrete_enviado_em", "null")
+            .execute()
+        )
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em reservar_lembrete")
+        return False
+
+
+def liberar_lembrete(asaas_payment_id: str) -> None:
+    """Desfaz a reserva quando o e-mail não saiu, para tentar de novo no dia seguinte."""
+    db = _get_client()
+    if not db:
+        return
+    try:
+        db.table("pagamentos").update({"lembrete_enviado_em": None}).eq("asaas_payment_id", asaas_payment_id).execute()
+    except Exception:
+        logger.exception("Erro em liberar_lembrete (a cobrança fica sem lembrete)")
+
+
+def cliente_tem_plano_pago(email: str, planos: tuple[str, ...] = ("mensal", "semestral", "anual")) -> bool | None:
+    """True/False se o e-mail tem cobrança confirmada; None se não foi possível consultar.
+
+    Diferente de buscar_pagamento_confirmado_por_email (que devolve None também
+    no erro): aqui quem chama precisa distinguir "não pagou" de "banco fora".
+    """
+    db = _get_client()
+    if not db or not email:
+        return None
+    try:
+        res = (
+            db.table("pagamentos")
+            .select("asaas_payment_id")
+            .in_("external_reference", [email] + [f"{email}|{plano}" for plano in planos])
+            .in_("status", ["CONFIRMED", "RECEIVED"])
+            .limit(1)
+            .execute()
+        )
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em cliente_tem_plano_pago")
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # LOGS E WEBHOOKS
 # ─────────────────────────────────────────────────────────────────────────────
 

@@ -24,6 +24,7 @@ O **MedAI Analyzer** (plataforma Three Health) analisa imagens de exames ortopé
 - Referências científicas do PubMed ao final de cada laudo: para cada lesão encontrada, artigos sobre o diagnóstico e o tratamento (revisões sistemáticas, meta-análises e diretrizes), com PMID e DOI
 - Achados circulados dentro das imagens por grau de certeza (verde = forte, amarelo = moderado, vermelho = baixo), com a localização exata de cada estrutura alterada, na tela e no PDF
 - Planos pagos (Asaas: PIX, boleto, cartão na página do Asaas), trial gratuito embutível por iframe
+- Opt-in de e-mail no trial (artigos e novidades) e lembrete automático de checkout abandonado, com descadastro em um clique (`web/marketing.py`)
 - Histórico de laudos, dashboard da clínica e validação clínica dos laudos
 - Prontuário de pacientes: cadastro com nome e CPF (cifrados), laudos vinculados, tratamentos, evolução (dor e função) com gráfico e linha do tempo. Cada profissional vê só os próprios pacientes
 - API REST autenticada por chave (`/api/analyze`)
@@ -169,6 +170,14 @@ Os testes não usam rede nem o seu `.env` (ver `tests/conftest.py`).
 - **Direitos do titular:** em `/conta` o cliente baixa seus dados (JSON) e
   exclui a conta (senha + confirmação). A exclusão apaga laudos, imagens,
   validações, sessões e logs; as cobranças ficam, sem vínculo, por guarda fiscal.
+- **Marketing com consentimento:** o trial continua anônimo; o e-mail só é
+  gravado se a pessoa marcar o opt-in (desmarcado por padrão), junto com a
+  frase aceita. O lembrete de checkout vai uma única vez por cobrança, só para
+  quem gerou a cobrança, e só depois de conferir no Asaas que ela segue em
+  aberto. Todo e-mail tem link e cabeçalho de descadastro; quem sai entra em
+  `email_descadastros` e não recebe mais nada além de e-mail essencial da conta.
+  Para ligar o lembrete: `CRON_SECRET` na Vercel (o cron está em `vercel.json`,
+  todo dia às 10h de Brasília) + SMTP e `APP_BASE_URL` configurados.
 - **Retenção:** prazos aplicados diariamente pelo banco — ver
   [`docs/SCHEMA.md`](docs/SCHEMA.md#retenção-de-dados-lgpd).
 

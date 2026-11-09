@@ -3,7 +3,7 @@
 -c requirements.txt
 -r requirements.in
 pytest>=9.2.0
-ruff>=0.17.3
+ruff>=0.17.4
 fakeredis>=2.40.0
 pip-audit>=2.7.0
 pip-tools>=7.4.0

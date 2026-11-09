@@ -8,7 +8,7 @@ annotated-types==0.8.0
     # via
     #   -c requirements.txt
     #   pydantic
-anthropic==2.3.0
+anthropic==2.6.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -84,7 +84,7 @@ distro==1.9.0
     #   -c requirements.txt
     #   google-genai
     #   posthog
-dnspython==2.9.1
+dnspython==2.9.2
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -144,6 +144,7 @@ httpx==0.28.1
     #   -c requirements.txt
     #   -r requirements.in
     #   postgrest
+    #   realtime
     #   storage3
     #   supabase
     #   supabase-auth
@@ -215,23 +216,23 @@ opentelemetry-api==1.45.2
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
-opentelemetry-exporter-http-transport==0.66b1
+opentelemetry-exporter-http-transport==0.66b2
     # via
     #   -c requirements.txt
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-exporter-otlp-common==0.66b1
+opentelemetry-exporter-otlp-common==0.66b2
     # via
     #   -c requirements.txt
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-exporter-otlp-proto-common==1.45.1
+opentelemetry-exporter-otlp-proto-common==1.45.2
     # via
     #   -c requirements.txt
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-exporter-otlp-proto-http==1.45.1
+opentelemetry-exporter-otlp-proto-http==1.45.2
     # via
     #   -c requirements.txt
     #   -r requirements.in
-opentelemetry-proto==1.45.1
+opentelemetry-proto==1.45.2
     # via
     #   -c requirements.txt
     #   opentelemetry-exporter-otlp-proto-common
@@ -278,11 +279,11 @@ platformdirs==4.13.0
     # via pip-audit
 pluggy==1.6.0
     # via pytest
-postgrest==2.33.0
+postgrest==2.34.0
     # via
     #   -c requirements.txt
     #   supabase
-posthog==7.81.1
+posthog==7.84.2
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -354,7 +355,7 @@ python-dotenv==1.2.4
     # via
     #   -c requirements.txt
     #   -r requirements.in
-realtime==2.33.0
+realtime==2.34.0
     # via
     #   -c requirements.txt
     #   supabase
@@ -381,9 +382,9 @@ rq==3.0.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
-ruff==0.17.3
+ruff==0.17.4
     # via -r requirements-dev.in
-sentry-sdk==2.73.0
+sentry-sdk==2.74.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -400,23 +401,19 @@ sortedcontainers==2.4.0
     # via
     #   cyclonedx-python-lib
     #   fakeredis
-storage3==2.33.0
+storage3==2.34.0
     # via
     #   -c requirements.txt
     #   supabase
-strenum==0.4.15
-    # via
-    #   -c requirements.txt
-    #   supabase-functions
-supabase==2.33.0
+supabase==2.34.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
-supabase-auth==2.33.0
+supabase-auth==2.34.0
     # via
     #   -c requirements.txt
     #   supabase
-supabase-functions==2.33.0
+supabase-functions==2.34.0
     # via
     #   -c requirements.txt
     #   supabase
