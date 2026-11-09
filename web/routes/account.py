@@ -8,7 +8,7 @@ from flask import Blueprint, Response, flash, g, make_response, redirect, render
 from werkzeug.security import check_password_hash
 
 from core import db, patient_report
-from web import posthog, presentation, security
+from web import marketing, posthog, presentation, security
 from web.extensions import rate_limit
 
 logger = logging.getLogger(__name__)
@@ -147,3 +147,24 @@ def excluir_conta():
     resp = make_response(redirect(url_for("analysis.index")))
     resp.delete_cookie(security.PREMIUM_COOKIE)
     return resp
+
+
+@bp.route("/descadastrar", methods=["GET", "POST"])
+@rate_limit("DESCADASTRO_RATE_LIMIT", "30 per hour", methods=["POST"])
+def descadastrar():
+    """Descadastro dos e-mails de marketing e lembretes, pelo link assinado do rodapé.
+
+    GET só mostra a confirmação (antivírus de e-mail abrem links sozinhos); o
+    descadastro acontece no POST — do botão da página ou do "Cancelar inscrição"
+    do Gmail/Outlook (List-Unsubscribe-Post, RFC 8058).
+    """
+    token = request.values.get("t", "")
+    email = marketing.email_do_token_descadastro(token)
+    if not email:
+        return render_template("descadastro.html", estado="invalido"), 400
+    if request.method == "POST":
+        if not db.registrar_descadastro(email, origem="link"):
+            return render_template("descadastro.html", estado="erro", token=token), 503
+        posthog.track("email_unsubscribed")
+        return render_template("descadastro.html", estado="feito", email=marketing.mascarar_email(email))
+    return render_template("descadastro.html", estado="confirmar", email=marketing.mascarar_email(email), token=token)
