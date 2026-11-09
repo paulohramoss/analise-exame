@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Cancelar e-mails — Three Health</title>
+{% import "_layout.html" as layout %}
+{{ layout.head_assets() }}
+<style>
+.auth-card .subtitle { margin-bottom: 1.25rem; }
+.email-display {
+  background: var(--surface-muted); border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); padding: .55rem 1rem;
+  font-size: .88rem; color: var(--text-muted); margin-bottom: 1.25rem;
+  display: flex; align-items: center; gap: .5rem;
+}
+.done-badge {
+  display: flex; align-items: center; gap: .5rem;
+  background: var(--success-light); border: 1.5px solid var(--success-border);
+  border-radius: 10px; padding: .65rem 1rem;
+  font-size: .88rem; color: var(--success-dark); font-weight: 700;
+  margin-bottom: 1rem;
+}
+.note { font-size: .78rem; color: var(--text-subtle); text-align: center; margin-top: 1rem; line-height: 1.5; }
+</style>
+</head>
+<body class="auth-page">
+
+<div class="auth-card">
+  {{ layout.logo() }}
+
+  {% if estado == "confirmar" %}
+    <h1>Parar de receber e-mails?</h1>
+    <p class="subtitle">Você não vai mais receber lembretes de pagamento, artigos nem novidades da Three Health.</p>
+    <div class="email-display">{{ layout.icon("mail", 16) }}<span>{{ email }}</span></div>
+    <form method="POST" action="/descadastrar">
+      <input type="hidden" name="t" value="{{ token }}">
+      <button type="submit" class="btn-primary btn-block">Confirmar descadastro</button>
+    </form>
+    <p class="note">E-mails essenciais da sua conta, como recuperação de acesso, continuam chegando normalmente.</p>
+
+  {% elif estado == "feito" %}
+    <div class="done-badge">{{ layout.icon("check-circle", 18) }} Pronto, descadastro feito.</div>
+    <h1>Você não vai mais receber nossos e-mails</h1>
+    <p class="subtitle">O endereço <strong>{{ email }}</strong> saiu da nossa lista de lembretes e novidades.</p>
+    <a href="/" class="btn-secondary btn-block">Voltar ao site</a>
+
+  {% elif estado == "erro" %}
+    <h1>Não deu certo desta vez</h1>
+    <p class="subtitle">Não conseguimos registrar o descadastro agora. Tente de novo em alguns instantes.</p>
+    <form method="POST" action="/descadastrar">
+      <input type="hidden" name="t" value="{{ token }}">
+      <button type="submit" class="btn-primary btn-block">Tentar novamente</button>
+    </form>
+
+  {% else %}
+    <h1>Link inválido</h1>
+    <p class="subtitle">Este link de descadastro não é válido. Use o link mais recente que chegou no seu e-mail.</p>
+    <a href="/" class="btn-secondary btn-block">Voltar ao site</a>
+  {% endif %}
+</div>
+
+</body>
+</html>

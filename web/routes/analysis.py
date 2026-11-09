@@ -18,7 +18,8 @@ from flask import Blueprint, flash, g, jsonify, redirect, render_template, reque
 
 from core import analyzer, cost_tracking, db, jobs, privacy
 from core.build_info import get_build_version
-from web import config, costs, posthog, presentation, prontuario, security, uploads
+from core.email_validation import validar_email_cadastro
+from web import config, costs, marketing, posthog, presentation, prontuario, security, uploads
 from web.extensions import rate_limit
 
 logger = logging.getLogger(__name__)
@@ -385,7 +386,7 @@ def analyze_resultado(job_id: str):
 def trial():
     """Página de teste gratuito, embutida via iframe na landing page (WordPress)."""
     posthog.track("trial_page_viewed", source=posthog.source_param(request.args.get("src")))
-    return render_template("trial.html")
+    return render_template("trial.html", consentimento_marketing=marketing.CONSENTIMENTO_MARKETING)
 
 
 @bp.route("/trial/analyze", methods=["POST"])
@@ -480,6 +481,28 @@ def trial_analyze_status(job_id: str):
     if status["status"] == "not_found":
         return jsonify({"status": "not_found", "error": "Job não encontrado."}), 404
     return jsonify(_public_status(status)), 200
+
+
+_CONSENTIMENTO_ACEITO = {True, "true", "on", "1", "accepted"}
+
+
+@bp.route("/trial/lead", methods=["POST"])
+@rate_limit("LEAD_RATE_LIMIT", "5 per hour")
+def trial_lead():
+    """Opt-in de quem usou o teste grátis para receber artigos e novidades por e-mail."""
+    data = request.get_json(silent=True) or request.form
+    # Honeypot: campo invisível que só robô preenche. Responde ok e não grava nada.
+    if str(data.get("website") or "").strip():
+        return jsonify({"ok": True})
+    if data.get("consentimento") not in _CONSENTIMENTO_ACEITO:
+        return jsonify({"error": "Marque a caixa de consentimento para receber os e-mails."}), 400
+    email, erro = validar_email_cadastro(str(data.get("email") or ""))
+    if erro:
+        return jsonify({"error": erro}), 400
+    if not db.salvar_lead(email, origem="trial", consentimento_texto=marketing.CONSENTIMENTO_MARKETING):
+        return jsonify({"error": "Não foi possível salvar agora. Tente novamente em instantes."}), 503
+    posthog.track("trial_lead_captured")
+    return jsonify({"ok": True})
 
 
 # ── API REST ──────────────────────────────────────────────────────────────────
