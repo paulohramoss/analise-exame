@@ -63,7 +63,7 @@ flask-limiter==4.1.1
     # via -r requirements.in
 google-auth==2.56.2
     # via google-genai
-google-genai==2.34.0
+google-genai==3.0.0
     # via -r requirements.in
 googleapis-common-protos==1.75.5
     # via opentelemetry-exporter-otlp-proto-http
@@ -82,7 +82,6 @@ httpcore2==2.16.0
 httpx==0.28.1
     # via
     #   -r requirements.in
-    #   google-genai
     #   postgrest
     #   realtime
     #   storage3
@@ -90,7 +89,9 @@ httpx==0.28.1
     #   supabase-auth
     #   supabase-functions
 httpx2==2.16.0
-    # via anthropic
+    # via
+    #   anthropic
+    #   google-genai
 hyperframe==6.1.0
     # via h2
 idna==3.18
