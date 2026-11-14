@@ -1,6 +1,8 @@
 """Testes da pontuação do conjunto de avaliação (evals/scoring.py) — sem chamar APIs."""
 
 import json
+
+import pytest
 from pathlib import Path
 
 from evals import scoring
@@ -109,6 +111,29 @@ def test_red_flag_mentioned_only_outside_section_zero_does_not_count():
     """Fratura citada na seção 3 mas ausente da seção 0 não chega ao destaque de alerta."""
     report = GOOD_REPORT.replace("Derrame articular moderado.", "Derrame articular e fratura do platô.")
     assert scoring.score_report(report, "joelho", FRACTURE_CASE)["missed_red_flags"] == ["fratura"]
+
+
+@pytest.mark.parametrize("section_zero", [
+    "**Nenhum sinal de alerta identificado nas imagens analisadas.** Sem evidência de fratura.",
+    "Não há sinais de alerta. Fratura descartada.",
+    "- Ausência de fratura ou lesão agressiva.",
+])
+def test_negated_red_flag_in_section_zero_is_still_missed(section_zero):
+    """ "Sem evidência de fratura" na seção 0 nega o alerta: não pode contar como detectado."""
+    report = GOOD_REPORT.replace(
+        "**Nenhum sinal de alerta identificado nas imagens analisadas.**", section_zero,
+    ).replace("Derrame articular moderado.", "Fratura do platô tibial.")
+    result = scoring.score_report(report, "joelho", FRACTURE_CASE)
+    assert result["missed_red_flags"] == ["fratura"]
+    assert result["passed"] is False
+
+
+def test_red_flag_without_tag_but_affirmative_counts():
+    report = GOOD_REPORT.replace(
+        "**Nenhum sinal de alerta identificado nas imagens analisadas.**",
+        "- Suspeita de fratura do platô tibial — encaminhar à ortopedia (urgente)",
+    )
+    assert scoring.score_report(report, "joelho", FRACTURE_CASE)["missed_red_flags"] == []
 
 
 def test_false_alarm_is_recorded_but_not_penalized():
