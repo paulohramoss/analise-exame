@@ -21,11 +21,17 @@ O **MedAI Analyzer** (plataforma Three Health) analisa imagens de exames ortopé
 - Detecção da região anatômica pela descrição/nome do arquivo e, se preciso, pela própria imagem
 - Comparação com imagens de referência normais (`reference_data/<região>/`)
 - Laudo por consenso dual Gemini + Claude (ou só Gemini, sem chave Anthropic)
+- **Sinais de alerta no topo** (seção 0, destacada em vermelho): fratura, lesão agressiva, infecção, compressão neural, osteonecrose, rotura com janela cirúrgica — com especialidade e urgência do encaminhamento
+- **Consenso conservador:** um achado só vira [FORTE] se as duas análises concordarem; o que só uma viu fica como [A CONFIRMAR], fora da impressão. Sinais de alerta seguem a regra inversa: basta uma análise apontar
+- Saída como **documento de apoio**, não laudo radiológico: "impressão de imagem" em hipóteses, sem indicar cirurgia ou medicamento, com critérios de encaminhamento e considerações para a reabilitação (uso por médicos, fisioterapeutas e estudantes)
 - Referências científicas do PubMed ao final de cada laudo: para cada lesão encontrada, artigos sobre o diagnóstico e o tratamento (revisões sistemáticas, meta-análises e diretrizes), com PMID e DOI
 - Achados circulados dentro das imagens por grau de certeza (verde = forte, amarelo = moderado, vermelho = baixo), com a localização exata de cada estrutura alterada, na tela e no PDF
 - Planos pagos (Asaas: PIX, boleto, cartão na página do Asaas), trial gratuito embutível por iframe
 - Opt-in de e-mail no trial (artigos e novidades) e lembrete automático de checkout abandonado, com descadastro em um clique (`web/marketing.py`)
 - Histórico de laudos, dashboard da clínica e validação clínica dos laudos
+- **Registro profissional conferido** (formato e UF/região do CRM, CREFITO ou outro conselho, coerente com o perfil) e **termo de responsabilidade** aceito por versão, registrado na conta (`/termo-responsabilidade`, `web/professional.py`)
+- **Leitura pela CIF** (estruturas, funções, atividades e participação, fatores contextuais) e **plano de reabilitação** no laudo — metas, medidas para reavaliação e prazo —, que vira tratamento no prontuário com um clique ("Montar plano a partir deste laudo")
+- **"A IA errou isso"** em um clique, por categoria (achado inventado, achado perdido, alerta perdido…); com autorização do profissional, vira rascunho de caso de avaliação (`python -m evals.import_feedback`)
 - Prontuário de pacientes: cadastro com nome e CPF (cifrados), laudos vinculados, tratamentos, evolução (dor e função) com gráfico e linha do tempo. Cada profissional vê só os próprios pacientes
 - API REST autenticada por chave (`/api/analyze`)
 - Fila assíncrona opcional (Redis + RQ) e orçamento de custo diário por escopo

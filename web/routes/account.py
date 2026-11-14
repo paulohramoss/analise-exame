@@ -8,7 +8,8 @@ from flask import Blueprint, Response, flash, g, make_response, redirect, render
 from werkzeug.security import check_password_hash
 
 from core import db, patient_report
-from web import marketing, posthog, presentation, security
+from core import professional_register as registro
+from web import marketing, posthog, presentation, professional, security
 from web.extensions import rate_limit
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,52 @@ def conta():
         # A marca vale para quem tem cliente_id — inclusive o admin, na conta própria.
         pode_personalizar=bool(g.get("cliente_id")),
         marca=db.buscar_marca_clinica(g.get("cliente_id")) if g.get("cliente_id") else {},
+        perfil=professional.perfil_da_conta(),
+        perfis_profissionais=registro.PERFIS,
+        termo_versao=professional.TERMO_VERSAO,
     )
+
+
+@bp.route("/termo-responsabilidade")
+def termo_responsabilidade():
+    """Texto do termo de responsabilidade profissional (público: dá para ler antes de assinar)."""
+    return render_template("termo_responsabilidade.html", termo_versao=professional.TERMO_VERSAO)
+
+
+@bp.route("/conta/perfil", methods=["POST"])
+@security.premium_required
+@rate_limit("ACCOUNT_PROFILE_RATE_LIMIT", "30 per hour")
+def salvar_perfil():
+    """Perfil profissional (preenche o responsável dos laudos) e aceite do termo."""
+    cliente_id = g.get("cliente_id")
+    if not cliente_id:
+        flash("Disponível para contas de profissional.", "error")
+        return redirect(url_for("account.conta"))
+
+    perfil = presentation.form_text("profissional_perfil", 80)
+    if perfil and perfil not in registro.PERFIS:
+        flash("Escolha um perfil profissional da lista.", "error")
+        return redirect(url_for("account.conta") + "#perfil")
+    numero, erro = registro.validar_registro(perfil, presentation.form_text("profissional_registro", 80))
+    if erro:
+        flash(erro, "error")
+        return redirect(url_for("account.conta") + "#perfil")
+
+    campos = {
+        "profissional_nome": presentation.form_text("profissional_nome", 160) or None,
+        "profissional_perfil": perfil or None,
+        "profissional_registro": numero or None,
+        "profissional_instituicao": presentation.form_text("profissional_instituicao", 120) or None,
+    }
+    if professional.aceite_no_formulario():
+        campos["termo_aceito_em"] = datetime.now(timezone.utc).isoformat()
+        campos["termo_versao"] = professional.TERMO_VERSAO
+
+    if db.salvar_perfil_profissional(cliente_id, campos):
+        flash("Perfil profissional salvo. Ele preenche o responsável dos próximos laudos.", "success")
+    else:
+        flash("Não foi possível salvar o perfil agora.", "error")
+    return redirect(url_for("account.conta") + "#perfil")
 
 
 @bp.route("/conta/clinica", methods=["POST"])

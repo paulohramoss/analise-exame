@@ -92,6 +92,7 @@ def test_analyze_sync_success_renders_result(client, monkeypatch):
             privacy_consent="accepted",
             responsible_name="Dra. Ana",
             responsible_role="Ortopedista",
+            responsible_register="CRM-SP 123456",
             description="dor no joelho",
         ),
         content_type="multipart/form-data",
@@ -111,6 +112,7 @@ def test_analyze_sync_analyzer_failure_flashes_and_redirects(client, monkeypatch
             privacy_consent="accepted",
             responsible_name="Dra. Ana",
             responsible_role="Ortopedista",
+            responsible_register="CRM-SP 123456",
         ),
         content_type="multipart/form-data",
     )

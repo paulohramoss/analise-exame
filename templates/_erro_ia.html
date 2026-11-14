@@ -1,0 +1,61 @@
+{# "A IA errou isso" — um clique por categoria (POST /feedback/erro).
+   Requer analysis_id; responsible_role é opcional. Usado em result.html e laudo_detalhe.html. #}
+{% if analysis_id %}
+<div class="ai-error-box" id="ai-error-box">
+    <h3>A IA errou algo?</h3>
+    <p class="card-description">Um clique registra o erro. É assim que medimos — e melhoramos — a qualidade dos laudos.</p>
+    <div class="ai-error-chips" role="group" aria-label="Tipo de erro da IA">
+        {% for key, cat in AI_ERROR_CATEGORIES.items() %}
+        <button type="button" class="ai-error-chip" data-category="{{ key }}">{{ cat.label }}</button>
+        {% endfor %}
+    </div>
+    <input type="text" id="ai-error-comment" class="ai-error-comment" maxlength="1500"
+           placeholder="Opcional: o que estava errado (ex.: o menisco medial está íntegro no corte 2)" aria-label="Detalhe do erro (opcional)">
+    <label class="consent-check ai-error-consent">
+        <input type="checkbox" id="ai-error-allow">
+        <span>Autorizo usar este laudo e a descrição clínica, sem identificar o paciente, nos testes de qualidade da IA
+            (<a href="{{ url_for('account.termo_responsabilidade') }}" target="_blank" rel="noopener">termo</a>, item 7).</span>
+    </label>
+    <p class="feedback-status" id="ai-error-status" role="status" aria-live="polite"></p>
+</div>
+<script>
+(function () {
+    const box = document.getElementById('ai-error-box');
+    if (!box) return;
+    const status = document.getElementById('ai-error-status');
+    const analysisId = {{ analysis_id|tojson }};
+    const role = {{ (responsible_role|default('', true))|tojson }};
+    box.querySelectorAll('.ai-error-chip').forEach(function (chip) {
+        chip.addEventListener('click', async function () {
+            if (chip.classList.contains('sent')) return;
+            chip.disabled = true;
+            status.textContent = 'Registrando…';
+            status.className = 'feedback-status';
+            try {
+                const response = await fetch('/feedback/erro', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        analysis_id: analysisId,
+                        category: chip.dataset.category,
+                        comment: document.getElementById('ai-error-comment').value.trim(),
+                        allow_eval: document.getElementById('ai-error-allow').checked,
+                        responsible_role: role
+                    })
+                });
+                const data = await response.json().catch(function () { return {}; });
+                if (!response.ok || !data.success) throw new Error(data.error || 'Não foi possível registrar. Tente de novo.');
+                chip.classList.add('sent');
+                chip.textContent = '✓ ' + chip.textContent;
+                status.textContent = data.message;
+                status.className = 'feedback-status success';
+            } catch (error) {
+                chip.disabled = false;
+                status.textContent = error instanceof TypeError ? 'Falha de conexão. Tente de novo.' : error.message;
+                status.className = 'feedback-status error';
+            }
+        });
+    });
+})();
+</script>
+{% endif %}

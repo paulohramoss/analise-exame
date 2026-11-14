@@ -40,6 +40,7 @@
 
         /* Campos no mesmo padrão dos formulários do prontuário (static/prontuario.css). */
         .clinic-form input[type="text"],
+        .clinic-form select,
         .delete-form input[type="text"],
         .delete-form input[type="password"] {
             width: 100%; padding: .6rem .75rem; border: 1px solid var(--border-input); border-radius: 8px;
@@ -47,7 +48,7 @@
             transition: border-color .15s, box-shadow .15s;
         }
         .clinic-form input::placeholder, .delete-form input::placeholder { color: var(--text-subtle); }
-        .clinic-form input:focus, .delete-form input:focus {
+        .clinic-form input:focus, .clinic-form select:focus, .delete-form input:focus {
             outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring);
         }
 
@@ -93,6 +94,45 @@
         </div>
 
         {% if pode_personalizar %}
+        <section class="card account-card clinic-card" id="perfil">
+            <h2>{{ layout.icon("shield", 20) }} Perfil profissional e termo de responsabilidade</h2>
+            <p class="card-description">
+                Preenche o responsável de cada laudo. O formato do registro e a UF/região do conselho são conferidos
+                (não é consulta ao CRM ou ao CREFITO).
+            </p>
+            <form class="clinic-form" method="POST" action="{{ url_for('account.salvar_perfil') }}">
+                <div>
+                    <label for="profissional_nome">Nome</label>
+                    <input type="text" id="profissional_nome" name="profissional_nome" maxlength="160" value="{{ perfil.profissional_nome or '' }}" placeholder="Ex.: Dra. Ana Souza">
+                </div>
+                <div>
+                    <label for="profissional_perfil">Perfil</label>
+                    <select id="profissional_perfil" name="profissional_perfil">
+                        <option value="">— Selecione —</option>
+                        {% for p in perfis_profissionais %}<option value="{{ p }}"{% if p == perfil.profissional_perfil %} selected{% endif %}>{{ p }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="profissional_registro">Registro no conselho</label>
+                    <input type="text" id="profissional_registro" name="profissional_registro" maxlength="80" value="{{ perfil.profissional_registro or '' }}" placeholder="Ex.: CRM-SP 123456, CREFITO-3 123456-F">
+                    <p class="field-hint">Obrigatório para médicos e fisioterapeutas. Estudantes não informam.</p>
+                </div>
+                <div>
+                    <label for="profissional_instituicao">Clínica ou instituição de ensino</label>
+                    <input type="text" id="profissional_instituicao" name="profissional_instituicao" maxlength="120" value="{{ perfil.profissional_instituicao or '' }}" placeholder="Ex.: Clínica Movimento, Universidade X">
+                </div>
+                {% if perfil.termo_versao == termo_versao %}
+                <p class="field-hint">Termo de responsabilidade (versão {{ termo_versao }}) aceito em {{ (perfil.termo_aceito_em or '')[:10]|date_br }}. <a href="{{ url_for('account.termo_responsabilidade') }}" target="_blank" rel="noopener">Ler o termo</a></p>
+                {% else %}
+                <label class="consent-check">
+                    <input type="checkbox" name="termo_responsabilidade" value="accepted">
+                    <span>Li e aceito o <a href="{{ url_for('account.termo_responsabilidade') }}" target="_blank" rel="noopener">termo de responsabilidade profissional</a> (versão {{ termo_versao }}).</span>
+                </label>
+                {% endif %}
+                <button type="submit" class="btn-primary">Salvar perfil</button>
+            </form>
+        </section>
+
         <section class="card account-card clinic-card" id="clinica">
             <h2>{{ layout.icon("file-text", 20) }} Sua clínica no relatório do paciente</h2>
             <p class="card-description">

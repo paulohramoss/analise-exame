@@ -34,7 +34,7 @@ _ALIASES = {
 
 def build_localization_prompt(analysis: str, num_images: int) -> str:
     """Pedido de localização dos achados já descritos no laudo final."""
-    return f"""Você é um radiologista musculoesquelético. Abaixo está o laudo final já emitido para
+    return f"""Você é um sistema de localização de achados em imagens musculoesqueléticas. Abaixo está o laudo final já emitido para
 {"a imagem" if num_images == 1 else f"as {num_images} imagens"} do exame que você recebeu acima.
 
 TAREFA: localize, DENTRO DAS IMAGENS, cada achado do laudo, para que o profissional veja onde
@@ -45,7 +45,10 @@ Regras:
 - "certeza":
   - "forte" para achados marcados [FORTE] no laudo;
   - "moderado" para achados marcados [MODERADO];
-  - "baixo" para os achados listados como descartados por evidência insuficiente.
+  - "baixo" para os achados listados como descartados por evidência insuficiente ou marcados
+    [A CONFIRMAR];
+  - um [ALERTA] da seção 0 usa a certeza do mesmo achado na seção 3; se ele só aparece como
+    suspeita na seção 0, use "baixo".
 - "imagem": número da imagem do exame (1 a {num_images}) em que o achado é visível. Se o achado
   aparece em mais de uma imagem, repita o achado uma vez para cada imagem.
 - "box_2d": [ymin, xmin, ymax, xmax] em coordenadas normalizadas de 0 a 1000 em relação à imagem

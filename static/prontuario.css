@@ -236,3 +236,12 @@
     .page-head { grid-template-columns: 1fr; }
     .page-head { flex-direction: column; }
 }
+
+/* Plano de tratamento a partir do laudo (web/prontuario.plano_sugerido) */
+.plan-from-report { border: 1px dashed var(--border); border-radius: 10px; padding: .75rem 1rem; margin: 0 0 1rem; }
+.plan-from-report ul { margin: .35rem 0 0 1.1rem; padding: 0; font-size: .9rem; }
+.plan-from-report li { margin-bottom: .2rem; }
+.plan-notice {
+    display: flex; align-items: center; gap: .4rem; margin: 0 0 .75rem; padding: .55rem .8rem; border-radius: 8px;
+    background: var(--success-light); border: 1px solid var(--success-border); color: var(--success-dark); font-size: .88rem; font-weight: 700;
+}

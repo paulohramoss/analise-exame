@@ -5,7 +5,9 @@
  *
  * O texto do laudo vem da IA (e pode ser influenciado por prompt injection):
  * ele é ESCAPADO antes de qualquer conversão, e só as tags geradas aqui
- * (h2–h4, p, ul/ol/li, blockquote, table, strong, em) entram como HTML.
+ * (h2–h4, p, ul/ol/li, blockquote, table, strong, em, section) entram como HTML.
+ * A seção "0. SINAIS DE ALERTA" vira um bloco destacado: vermelho quando há
+ * [ALERTA], neutro quando o laudo diz "Nenhum sinal de alerta".
  * Uma implementação só, para a tela e o PDF ficarem iguais nas três páginas.
  */
 (function () {
@@ -26,9 +28,21 @@
             .replace(/(^|[^*])\*(?!\s)(.+?)\*(?!\*)/g, '$1<em>$2</em>');
     }
 
+    // Há alerta se a seção 0 traz [ALERTA] ou não diz que não há nenhum.
+    // As linhas são aparadas como no renderizador: o laudo salvo chega indentado
+    // (textContent do template) e com \r\n.
+    function hasAlert(text) {
+        const normalized = String(text || '').replace(/\r\n?/g, '\n').split('\n').map(l => l.trim()).join('\n');
+        const match = /^#{1,4}\s*0\s*[.)]\s*SINAIS DE ALERTA[^\n]*\n([\s\S]*?)(?=^#{1,4}\s|(?![\s\S]))/im.exec(normalized);
+        if (!match) return false;
+        const body = match[1];
+        return /\[ALERTA\]/i.test(body) || (body.trim() !== '' && !/nenhum sinal de alerta/i.test(body));
+    }
+
     function renderLaudoMarkdown(text) {
         const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
         const out = [];
+        let alertOpen = false;  // dentro da seção 0 (<section class="laudo-alertas">)
         let paragraph = [];
         let list = null;        // { tag: 'ul' | 'ol', items: [] }
         let quote = [];
@@ -75,6 +89,11 @@
             const heading = /^(#{1,4})\s+(.+)$/.exec(line);
             if (heading) {
                 flushAll();
+                if (alertOpen) { out.push('</section>'); alertOpen = false; }
+                if (/^0\s*[.)]\s*SINAIS DE ALERTA/i.test(heading[2])) {
+                    out.push('<section class="laudo-alertas ' + (hasAlert(text) ? 'has-alert' : 'no-alert') + '">');
+                    alertOpen = true;
+                }
                 const level = Math.min(heading[1].length + 1, 4);   // # → h2, ## → h3, ### → h4
                 out.push('<h' + level + '>' + inline(heading[2]) + '</h' + level + '>');
                 continue;
@@ -97,6 +116,7 @@
             paragraph.push(line);
         }
         flushAll();
+        if (alertOpen) out.push('</section>');
         return out.join('\n');
     }
 

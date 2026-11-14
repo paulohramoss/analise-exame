@@ -12,11 +12,21 @@ dá uma nota de 0 a 1 (`scoring.py`):
 
 | Peso | Métrica |
 |------|---------|
-| 40% | achados esperados presentes (com sinônimos, sem acento) |
-| 20% | as 6 seções obrigatórias do laudo presentes |
-| 20% | região anatômica detectada correta |
+| 35% | achados esperados presentes (com sinônimos, sem acento) |
+| 15% | **sinais de alerta esperados presentes na seção 0** |
+| 15% | as 7 seções obrigatórias do laudo presentes (0 a 6) |
+| 15% | região anatômica detectada correta |
 | 10% | achados com rótulo de evidência ([FORTE]/[MODERADO]) |
-| 10% | nenhum achado proibido na **impressão diagnóstica** |
+| 10% | nenhum achado proibido na **impressão** |
+
+**Sinal de alerta perdido reprova o caso**, qualquer que seja a nota: é o falso
+negativo que machuca paciente (fratura, lesão agressiva, infecção, compressão
+neural…). Em casos sem alerta (`"expected_red_flags": []`), um alerta emitido
+mesmo assim aparece como "alerta a mais": é registrado, mas não tira nota.
+O resumo da execução traz a **sensibilidade para sinais de alerta**.
+
+> Execuções salvas antes da seção 0 existir perdem pontos em "seções" ao serem
+> repontuadas; para comparar versões, gere uma linha de base nova.
 
 A nota mede o que é objetivo. Não substitui a leitura de um especialista.
 
@@ -50,3 +60,44 @@ python -m evals.run_eval --rescore evals/results/<execucao>.json
 - Cubra as 7 regiões e os erros já observados (ex.: região trocada, achado
   inventado). Comece com 2–3 casos por região.
 - `cases/exemplo-joelho-lca.json` mostra o formato completo.
+
+## Protocolo mínimo antes de uso clínico
+
+Dois casos de exemplo não medem nada: eles mostram o formato. Para poder dizer
+a um cliente "a ferramenta acerta X%", o conjunto precisa de:
+
+1. **Pelo menos 50 casos, idealmente 100**, distribuídos pelas 7 regiões e pelas
+   modalidades que os clientes mais enviam (RX e RM primeiro).
+2. **Padrão-ouro de radiologista** (laudo original ou revisão por especialista)
+   para cada caso. Sem padrão-ouro, o caso não entra.
+3. **Ao menos 20% de casos com sinal de alerta** (`expected_red_flags`):
+   fratura sutil, fratura de escafoide, fratura por estresse, lesão lítica,
+   espondilodiscite, compressão medular, osteonecrose, rotura completa de
+   tendão de Aquiles.
+4. **Ao menos 20% de exames normais** (`"expected_red_flags": []`, sem achados
+   esperados), para medir alerta a mais e achado inventado.
+5. Casos difíceis de propósito: imagem de baixa qualidade, região ambígua,
+   print de tela com régua e texto, PDF de laudo.
+
+Números a acompanhar a cada mudança de prompt ou modelo: sensibilidade para
+sinais de alerta (meta: 100% nos casos do conjunto), casos aprovados e média.
+Guarde a execução de referência e rode com `--baseline` antes de publicar.
+
+## Erros apontados pelos clientes → casos
+
+Os profissionais marcam "a IA errou isso" no laudo, em um clique por categoria.
+
+```bash
+python -m evals.import_feedback --since 2026-11-01
+```
+
+- Mostra o placar: quantos erros por categoria e por região, o mapa do que
+  priorizar no prompt.
+- Para os laudos cujo profissional **autorizou** o uso, grava rascunhos em
+  `evals/cases/rascunhos/` (fora do git), com o laudo da IA, a descrição
+  clínica sem identificação, os apontamentos e o que preencher no padrão-ouro.
+- O app **não guarda as imagens** dos exames: para virar caso, peça ao
+  profissional as imagens anonimizadas, preencha os achados esperados com um
+  especialista e mova o arquivo para `evals/cases/`.
+- Um "deixou passar sinal de alerta" é o rascunho mais valioso: ele vira um caso
+  com `expected_red_flags`, que reprova qualquer versão que repita o erro.

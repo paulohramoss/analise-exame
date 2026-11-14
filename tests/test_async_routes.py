@@ -112,6 +112,7 @@ def test_premium_analyze_redirects_to_processing_then_result(
             privacy_consent="accepted",
             responsible_name="Dra. Ana",
             responsible_role="Ortopedista",
+            responsible_register="CRM-SP 123456",
         ),
         content_type="multipart/form-data",
     )

@@ -90,6 +90,18 @@ def test_lesoes_vem_dos_achados_e_impressao_sem_os_descartados():
     assert labels == ["Lesão do ligamento cruzado anterior", "Lesão meniscal"]
 
 
+def test_achados_a_confirmar_nao_ganham_referencia():
+    """Achado visto por só uma das análises ([A CONFIRMAR]) não sustenta o laudo."""
+    laudo = LAUDO.replace(
+        "## 4.",
+        "> **Achados a confirmar (vistos por apenas uma das análises):**\n"
+        "- **[A CONFIRMAR]** possível fratura subcondral do platô\n## 4.",
+        1,
+    )
+    labels = [label for label, _ in pubmed.detect_topics(laudo)]
+    assert labels == ["Lesão do ligamento cruzado anterior", "Lesão meniscal"]
+
+
 def test_lesao_de_estrutura_exige_termo_de_lesao_no_titulo():
     [(_, lca), _] = pubmed.detect_topics(LAUDO)
     assert '"anterior cruciate ligament"[ti]' in lca and "tear[ti]" in lca and "rupture[ti]" in lca

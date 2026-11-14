@@ -133,7 +133,7 @@ FOCO_ASSOCIADAS = "Lesões associadas"
 
 
 def _relevant_text(analysis: str) -> str:
-    """Achados e impressão diagnóstica (seções 3 e 4), sem os achados descartados.
+    """Achados e impressão (seções 3 e 4), sem os achados descartados nem os "a confirmar".
 
     A seção 2 compara cada estrutura com o normal e citaria quase tudo; os
     descartados não sustentam o laudo e não devem ganhar referência.
@@ -141,6 +141,8 @@ def _relevant_text(analysis: str) -> str:
     match = re.search(r"##\s*3\..*?(?=##\s*5\.|\Z)", analysis or "", re.DOTALL)
     text = match.group(0) if match else (analysis or "")
     text = re.sub(r"(?im)^.*achados descartados.*$", "", text)
+    text = re.sub(r"(?im)^.*achados a confirmar.*$", "", text)
+    text = re.sub(r"(?im)^.*\[A CONFIRMAR\].*$", "", text)
     return re.sub(r"(?im)^.*\[FRACO\].*$", "", text)
 
 

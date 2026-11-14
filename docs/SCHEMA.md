@@ -112,6 +112,21 @@ leads / email_descadastros ──> por e-mail, sem FK (o trial é anônimo)
 - As consultas dessas colunas são separadas de `buscar_analise`: sem a migration
   `2026-10-27-relatorio-paciente.sql`, só o relatório fica indisponível.
 
+## Perfil profissional, termo e erros apontados
+
+Migration `2026-11-14-perfil-profissional-termo-erros-ia.sql`.
+
+- `clientes.profissional_*` guardam o perfil que preenche o responsável dos laudos.
+  O registro é gravado normalizado (`core/professional_register.py`): formato e
+  UF/região conferidos, sem consulta ao conselho.
+- `clientes.termo_aceito_em` / `termo_versao`: aceite do termo de responsabilidade.
+  Subir `TERMO_VERSAO` (`web/professional.py`) pede o aceite de novo a todos.
+- `feedbacks_ia.secao = 'erro_ia'` com `categoria_erro` e `autoriza_avaliacao`:
+  o "a IA errou isso". `evals/import_feedback.py` faz o placar por categoria e
+  transforma os autorizados em rascunhos de caso.
+- Sem a migration o app segue: o termo é pedido a cada análise e o erro é gravado
+  como feedback comum, com `[erro_ia:<categoria>]` no início do comentário.
+
 ## Tipos de exame: imagem, dinamometria, laboratoriais e correlação
 
 - `analises.tipo_exame` guarda a região nos laudos de imagem (`joelho`, `ombro`…) e

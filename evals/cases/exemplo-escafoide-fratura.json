@@ -1,0 +1,26 @@
+{
+  "id": "exemplo-escafoide-fratura",
+  "images": [
+    "images/exemplo-escafoide-fratura.jpg"
+  ],
+  "description": "Raio-X do punho esquerdo, 24 anos, queda com a mão espalmada há 5 dias, dor na tabaqueira anatômica",
+  "expected_region": "mao_punho",
+  "expected_findings": [
+    [
+      "fratura do escafoide",
+      "fratura de escafoide",
+      "traco de fratura no escafoide",
+      "fratura da cintura do escafoide"
+    ]
+  ],
+  "forbidden_findings": [],
+  "expected_red_flags": [
+    [
+      "fratura",
+      "traco de fratura",
+      "suspeita de fratura"
+    ]
+  ],
+  "pass_score": 0.7,
+  "notes": "Caso de EXEMPLO de sinal de alerta: fratura de escafoide (risco de osteonecrose e pseudartrose). Se a seção 0 não citar a fratura, o caso reprova mesmo com nota alta. A imagem não está no repositório (ver README)."
+}

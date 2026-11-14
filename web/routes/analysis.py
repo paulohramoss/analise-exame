@@ -19,7 +19,7 @@ from flask import Blueprint, flash, g, jsonify, redirect, render_template, reque
 from core import analyzer, cost_tracking, db, jobs, privacy
 from core.build_info import get_build_version
 from core.email_validation import validar_email_cadastro
-from web import config, costs, marketing, posthog, presentation, prontuario, security, uploads
+from web import config, costs, marketing, posthog, presentation, professional, prontuario, security, uploads
 from web.extensions import rate_limit
 
 logger = logging.getLogger(__name__)
@@ -254,6 +254,9 @@ def index():
         prontuario_disponivel=premium and bool(g.get("cliente_id")),
         pacientes=_patient_options(g.get("cliente_id")) if premium else [],
         paciente_selecionado=request.args.get("paciente") or "",
+        responsavel_conta=professional.responsavel_da_conta() if premium else {},
+        termo_pendente=premium and professional.termo_pendente(),
+        perfis_profissionais=professional.registro.PERFIS,
     )
 
 
@@ -272,9 +275,17 @@ def analyze():
     if not presentation.has_privacy_consent():
         return _back("Confirme o consentimento LGPD e a ciência de que a IA é ferramenta de apoio antes de enviar o exame.")
 
+    termo_erro = professional.exigir_termo()
+    if termo_erro:
+        return _back(termo_erro)
+
     # Dados do responsável são opcionais: quando vazios, laudo e PDF caem no
     # texto neutro ("Responsável não informado") já previsto nos templates.
-    responsible_info = presentation.responsible_info_from_form()
+    # Com um perfil que exige conselho (médico, fisioterapeuta…), o registro é
+    # obrigatório e tem o formato conferido.
+    responsible_info, registro_erro = professional.validar_responsavel(presentation.responsible_info_from_form())
+    if registro_erro:
+        return _back(registro_erro)
 
     api_key = config.get_api_key()
     if not config.has_ai_provider():

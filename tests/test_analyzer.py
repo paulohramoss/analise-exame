@@ -15,12 +15,13 @@ from core import analyzer
 from core.reference_images import detect_exam_type
 
 REQUIRED_SECTIONS = [
+    "## 0. SINAIS DE ALERTA E ENCAMINHAMENTO",
     "## 1. IDENTIFICAÇÃO DO EXAME",
     "## 2. ANÁLISE ESTRUTURAL",
     "## 3. ACHADOS",
-    "## 4. IMPRESSÃO DIAGNÓSTICA",
+    "## 4. IMPRESSÃO DE IMAGEM — HIPÓTESES",
     "## 5. IMPACTO NA ESTRUTURA FÍSICA DO PACIENTE",
-    "## 6. CONDUTA E PRÓXIMOS PASSOS",
+    "## 6. CONDUTA, ENCAMINHAMENTO E REABILITAÇÃO",
 ]
 
 
@@ -45,12 +46,67 @@ def test_build_analysis_prompt_multi_image_note():
 
 
 def test_synthesis_prompt_references_same_sections():
-    """A síntese de consenso deve exigir a mesma estrutura de 6 seções do prompt individual."""
+    """A síntese de consenso deve exigir a mesma estrutura de seções (0 a 6) do prompt individual."""
     import inspect
 
     source = inspect.getsource(analyzer._synthesize_analyses)
     for section in REQUIRED_SECTIONS:
         assert section in source
+
+
+def test_prompt_only_claims_reference_material_actually_sent():
+    """Sem imagem de referência, o prompt não pode dizer que o modelo recebeu uma — o laudo
+    afirmaria uma comparação que nunca aconteceu."""
+    bare = analyzer.build_analysis_prompt("cotovelo")
+    assert "imagem(ns) de referência de anatomia normal" not in bare
+    assert "Atlas de anatomia em PDF" not in bare
+    assert "Não afirme que comparou com uma imagem de referência" in bare
+
+    full = analyzer.build_analysis_prompt("joelho", has_atlas=True, num_reference_images=1, has_validated_case=True)
+    assert "1 imagem(ns) de referência de anatomia normal" in full
+    assert "Atlas de anatomia em PDF" in full
+    assert "Caso clínico validado" in full
+
+
+def test_prompt_does_not_claim_unprovided_textbooks():
+    """Os livros-texto não são enviados ao modelo: citá-los como base dava falsa autoridade."""
+    prompt = analyzer.build_analysis_prompt("joelho")
+    for book in ("Gray's", "Netter", "Stoller", "Resnick", "Helms"):
+        assert book not in prompt
+
+
+def test_prompt_states_analysis_base_and_role_limits():
+    prompt = analyzer.build_analysis_prompt("joelho", num_images=3)
+    assert "**Base da análise:** 3 imagem(ns)" in prompt
+    assert "não o estudo completo" in prompt
+    # Cirurgia/medicamento é ato médico: o laudo descreve critérios, não indica.
+    assert "conservador vs. cirúrgico" not in prompt
+    assert "sem indicá-la" in prompt
+    assert "Não se apresente como médico" in prompt
+
+
+def test_synthesis_rules_are_conservative_for_findings_and_union_for_alerts():
+    import inspect
+
+    source = inspect.getsource(analyzer._synthesize_analyses)
+    # Um modelo sozinho não eleva achado a [FORTE] nem o leva para a impressão.
+    assert "Se pelo menos um classificou como **[FORTE]**" not in source
+    assert "Ambos [FORTE] → **[FORTE]**" in source
+    assert "[A CONFIRMAR]" in source
+    # Sinal de alerta de qualquer das análises sobrevive ao consenso.
+    assert "UNIÃO, nunca interseção" in source
+    # O laudo não se passa por um especialista humano.
+    assert "especialista humano sênior" not in source
+    assert "não se apresente como médico" in source
+
+
+def test_content_parts_pass_reference_flags_to_prompt():
+    """O texto do prompt enviado ao Claude reflete as referências realmente incluídas."""
+    exam = [(b"img", "image/png")]
+    without_refs = analyzer._build_claude_content(exam, "cotovelo", "", [])
+    assert "Não afirme que comparou" in without_refs[-1]["text"]
+    with_refs = analyzer._build_claude_content(exam, "joelho", "", [(b"ref", "image/png")])
+    assert "1 imagem(ns) de referência" in with_refs[-1]["text"]
 
 
 def test_is_quota_exhausted_true_for_resource_exhausted():

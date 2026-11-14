@@ -259,8 +259,9 @@
         <div class="disclaimer-banner">
             <span class="disclaimer-icon">{{ layout.icon("shield", 22) }}</span>
             <p>
-                <strong>Aviso CFM/LGPD:</strong> Este laudo foi gerado por IA como ferramenta de apoio à decisão clínica.
-                <strong>Não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
+                <strong>Aviso CFM/COFFITO/LGPD:</strong> Documento de apoio gerado por IA — <strong>não é laudo radiológico nem diagnóstico médico</strong>.
+                Baseia-se só nas imagens enviadas (em RM/TC, cortes selecionados, não o estudo completo).
+                O diagnóstico por imagem e a indicação de cirurgia ou medicamento são atos médicos; fisioterapeutas o usam para planejar a reabilitação e decidir o encaminhamento, conforme o Código de Ética e Deontologia da Fisioterapia (Resolução COFFITO nº 424/2013).
             </p>
         </div>
 
@@ -375,6 +376,7 @@
                 <button type="button" class="btn-primary btn-small" id="submit-feedback" disabled>Salvar feedback</button>
                 <span class="feedback-status" id="feedback-status"></span>
             </div>
+            {% include "_erro_ia.html" %}
         </div>
 
         {% include "_validacao_clinica_form.html" %}

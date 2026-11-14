@@ -164,18 +164,32 @@
                     </div>
                     {% endfor %}
 
+                    {% if laudos_com_plano %}
+                    <div class="plan-from-report">
+                        <strong>Montar o plano a partir de um laudo</strong>
+                        <p class="card-description">Copia as metas, as medidas para reavaliação e o prazo sugeridos pela análise para o formulário abaixo. Nada é salvo até você revisar.</p>
+                        <ul>
+                            {% for a in laudos_com_plano|reverse %}
+                            <li><a href="{{ url_for('pacientes.detalhe', paciente_id=paciente.id, plano_de=a.id) }}#tratamentos">Laudo de {{ (a.created_at or '')[:10]|date_br }}{% if a.tipo_exame %} — {{ a.tipo_exame|replace('_', ' ') }}{% endif %}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    {% if plano %}
+                    <p class="plan-notice">{{ layout.icon("check-circle", 16) }} Plano do laudo de {{ plano.analise_data }} copiado para o formulário. Revise, ajuste e salve.</p>
+                    {% endif %}
                     <form class="pt-form" method="POST" action="{{ url_for('pacientes.novo_tratamento', paciente_id=paciente.id) }}">
                         <div class="pt-grid">
                             <div>
                                 <label for="tr-tipo">Tipo</label>
                                 <select id="tr-tipo" name="tipo" required>
                                     <option value="">— Selecione —</option>
-                                    {% for tipo in tipos_tratamento %}<option value="{{ tipo }}">{{ tipo }}</option>{% endfor %}
+                                    {% for tipo in tipos_tratamento %}<option value="{{ tipo }}"{% if plano and plano.tipo == tipo %} selected{% endif %}>{{ tipo }}</option>{% endfor %}
                                 </select>
                             </div>
                             <div>
                                 <label for="tr-regiao">Região</label>
-                                <input type="text" id="tr-regiao" name="regiao" maxlength="120" placeholder="Ex: joelho direito">
+                                <input type="text" id="tr-regiao" name="regiao" maxlength="120" placeholder="Ex: joelho direito" value="{{ plano.regiao if plano else '' }}">
                             </div>
                         </div>
                         <div class="pt-grid">
@@ -190,7 +204,7 @@
                         </div>
                         <div class="pt-field">
                             <label for="tr-descricao">Descrição</label>
-                            <textarea id="tr-descricao" name="descricao" rows="2" maxlength="2000" placeholder="Protocolo, frequência, medicação e dose, técnica cirúrgica..."></textarea>
+                            <textarea id="tr-descricao" name="descricao" rows="{{ 7 if plano else 2 }}" maxlength="2000" placeholder="Protocolo, frequência, medicação e dose, técnica cirúrgica...">{{ plano.descricao if plano else '' }}</textarea>
                         </div>
                         <button type="submit" class="btn-secondary">Adicionar tratamento</button>
                     </form>

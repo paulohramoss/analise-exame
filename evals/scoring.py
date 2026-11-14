@@ -17,23 +17,35 @@ Formato do caso (evals/cases/*.json):
         ["edema osseo", "contusao ossea"]
       ],
       "forbidden_findings": [["rotura do menisco medial"]],   # não pode na impressão
+      "expected_red_flags": [["fratura", "traco de fratura"]],  # opcional: devem estar na seção 0
       "pass_score": 0.7                               # opcional (padrão 0.7)
     }
+
+Sinais de alerta (seção 0): um sinal esperado que não aparece na seção 0 é um
+falso negativo grave e reprova o caso, qualquer que seja a nota. Num caso com
+"expected_red_flags": [] (exame sem sinal de alerta), um alerta emitido mesmo
+assim é registrado como "false_alarm" — informativo, não reduz a nota, porque
+alertar demais é o lado seguro do erro.
 """
 
 import re
 import unicodedata
 
 REQUIRED_SECTIONS = {
+    0: "sinais de alerta",
     1: "identificacao",
     2: "analise estrutural",
     3: "achados",
-    4: "impressao diagnostica",
+    4: "impressao",
     5: "impacto",
     6: "conduta",
 }
 DEFAULT_PASS_SCORE = 0.7
-WEIGHTS = {"findings_recall": 0.4, "sections": 0.2, "region": 0.2, "evidence_labels": 0.1, "no_forbidden": 0.1}
+WEIGHTS = {
+    "findings_recall": 0.35, "red_flags": 0.15, "sections": 0.15, "region": 0.15,
+    "evidence_labels": 0.1, "no_forbidden": 0.1,
+}
+NO_ALERT_PHRASE = "nenhum sinal de alerta"
 
 
 def normalize(text: str) -> str:
@@ -61,6 +73,23 @@ def _mentions(text_norm: str, alternatives: list[str]) -> bool:
     return any(f" {normalize(alt)} " in f" {text_norm} " for alt in alternatives)
 
 
+# Linha da seção 0 que NEGA um sinal ("sem evidência de fratura", "fratura
+# descartada", "ausência de lesão agressiva") não é um alerta emitido.
+_NEGATION = re.compile(r"\b(nenhum|nenhuma|sem|nao|ausencia|ausente|ausentes|descartad[oa]s?|afastad[oa]s?|exclui\w*)\b")
+
+
+def _affirmative_alerts(section_zero: str) -> str:
+    """Texto normalizado só das linhas que afirmam um alerta.
+
+    Com a marca [ALERTA] (formato pedido no prompt), valem só as linhas marcadas;
+    sem nenhuma marca, valem as linhas que não negam.
+    """
+    lines = [normalize(line) for line in (section_zero or "").splitlines() if line.strip()]
+    tagged = [line for line in lines if "[alerta]" in line]
+    kept = tagged or [line for line in lines if not _NEGATION.search(line)]
+    return " ".join(kept)
+
+
 def score_report(report: str, exam_type: str, case: dict) -> dict:
     # A seção de referências do PubMed (core/pubmed.py) lista títulos de artigos:
     # um achado citado ali não pode contar como achado do laudo.
@@ -74,22 +103,35 @@ def score_report(report: str, exam_type: str, case: dict) -> dict:
     missing = [alts[0] for alts in expected if alts[0] not in found]
     forbidden = [alts[0] for alts in case.get("forbidden_findings") or [] if _mentions(impression_norm, alts)]
 
+    alerts_norm = normalize(sections.get(0, ""))
+    affirmative_norm = _affirmative_alerts(sections.get(0, ""))
+    expected_alerts = case.get("expected_red_flags") or []
+    found_alerts = [alts[0] for alts in expected_alerts if _mentions(affirmative_norm, alts)]
+    missed_alerts = [alts[0] for alts in expected_alerts if alts[0] not in found_alerts]
+    alert_emitted = "[alerta]" in alerts_norm or (bool(alerts_norm) and NO_ALERT_PHRASE not in alerts_norm)
+    false_alarm = "expected_red_flags" in case and not expected_alerts and alert_emitted
+
     metrics = {
         "findings_recall": len(found) / len(expected) if expected else 1.0,
         "sections": len(sections) / len(REQUIRED_SECTIONS),
         "region": 1.0 if not case.get("expected_region") or exam_type == case["expected_region"] else 0.0,
         "evidence_labels": 1.0 if ("[FORTE]" in report or "[MODERADO]" in report) else 0.0,
         "no_forbidden": 0.0 if forbidden else 1.0,
+        "red_flags": len(found_alerts) / len(expected_alerts) if expected_alerts else 1.0,
     }
     score = sum(WEIGHTS[name] * value for name, value in metrics.items())
     return {
         "score": round(score, 3),
-        "passed": score >= case.get("pass_score", DEFAULT_PASS_SCORE),
+        # Sinal de alerta perdido reprova o caso: é o erro que machuca paciente.
+        "passed": score >= case.get("pass_score", DEFAULT_PASS_SCORE) and not missed_alerts,
         "metrics": {name: round(value, 3) for name, value in metrics.items()},
         "missing_sections": [n for n in REQUIRED_SECTIONS if n not in sections],
         "found_findings": found,
         "missing_findings": missing,
         "forbidden_in_impression": forbidden,
+        "expected_red_flags": [alts[0] for alts in expected_alerts],
+        "missed_red_flags": missed_alerts,
+        "false_alarm": false_alarm,
         "weak_label_present": "[FRACO]" in report,
         "words": len(report_norm.split()),
     }

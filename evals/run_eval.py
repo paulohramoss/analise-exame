@@ -112,19 +112,38 @@ def main() -> int:
         run["cases"][case_id] = {**output, **score}
         status = "ok " if score["passed"] else "FALHOU"
         print(f"[{status}] {case_id}: {score['score']:.2f}  faltando={score['missing_findings']}  "
-              f"proibidos={score['forbidden_in_impression']}")
+              f"proibidos={score['forbidden_in_impression']}"
+              + (f"  ALERTA PERDIDO={score['missed_red_flags']}" if score["missed_red_flags"] else "")
+              + ("  alerta-a-mais" if score["false_alarm"] else ""))
 
     if not run["cases"]:
         print("Nenhum caso executado.", file=sys.stderr)
         return 1
 
     scores = [c["score"] for c in run["cases"].values()]
+    expected_alerts = sum(len(c.get("expected_red_flags", [])) for c in run["cases"].values())
+    missed_alerts = sum(len(c.get("missed_red_flags", [])) for c in run["cases"].values())
+    normal_cases = [cid for cid, c in run["cases"].items() if "expected_red_flags" in cases[cid]
+                    and not cases[cid]["expected_red_flags"]]
     run["summary"] = {
         "cases": len(scores),
         "mean_score": round(sum(scores) / len(scores), 3),
         "passed": sum(1 for c in run["cases"].values() if c["passed"]),
+        # Sensibilidade para sinais de alerta: o número que mais importa para uso clínico.
+        "red_flag_sensitivity": round((expected_alerts - missed_alerts) / expected_alerts, 3) if expected_alerts else None,
+        "red_flags_expected": expected_alerts,
+        "red_flags_missed": missed_alerts,
+        "false_alarms": sum(1 for cid in normal_cases if run["cases"][cid].get("false_alarm")),
+        "cases_without_red_flag": len(normal_cases),
     }
-    print(f"\nMédia {run['summary']['mean_score']:.3f} — {run['summary']['passed']}/{len(scores)} casos aprovados")
+    summary = run["summary"]
+    print(f"\nMédia {summary['mean_score']:.3f} — {summary['passed']}/{len(scores)} casos aprovados")
+    if expected_alerts:
+        print(f"Sinais de alerta: {expected_alerts - missed_alerts}/{expected_alerts} detectados "
+              f"(sensibilidade {summary['red_flag_sensitivity']:.0%}); "
+              f"alertas a mais em {summary['false_alarms']}/{summary['cases_without_red_flag']} casos sem alerta")
+    else:
+        print("Sinais de alerta: nenhum caso com expected_red_flags — a sensibilidade não foi medida.")
 
     exit_code = 0
     if args.baseline:

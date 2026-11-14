@@ -782,3 +782,20 @@
 }
 .lab-prev { font-size: 0.7rem; color: var(--primary-dark) !important; font-weight: 700; }
 .lab-old { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: #fff7e6; color: #8a5300; font-size: 0.85rem; font-weight: 600; }
+
+/* ===== "A IA errou isso" (templates/_erro_ia.html) ===== */
+.ai-error-box { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.ai-error-box h3 { margin: 0 0 .25rem; font-size: 1rem; }
+.ai-error-chips { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+.ai-error-chip {
+    border: 1px solid var(--danger-border); border-radius: 999px; background: #fff; color: var(--danger-dark);
+    padding: .45rem .8rem; font: inherit; font-size: .88rem; font-weight: 700; cursor: pointer;
+}
+.ai-error-chip:hover { background: var(--danger-light); }
+.ai-error-chip.sent { background: var(--danger-light); border-color: var(--danger); cursor: default; }
+.ai-error-chip:disabled:not(.sent) { opacity: .6; }
+.ai-error-comment {
+    width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: .6rem .75rem; font: inherit; margin-bottom: .6rem;
+}
+.ai-error-consent { font-size: .85rem; }
+@media (max-width: 720px) { .ai-error-chip { width: 100%; text-align: left; border-radius: 10px; } }

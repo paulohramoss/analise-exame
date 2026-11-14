@@ -526,6 +526,55 @@ def salvar_marca_clinica(cliente_id: str, campos: dict) -> bool:
         return False
 
 
+_PERFIL_PROFISSIONAL_CAMPOS = (
+    "profissional_nome", "profissional_perfil", "profissional_registro", "profissional_instituicao",
+    "termo_aceito_em", "termo_versao",
+)
+
+
+def buscar_perfil_profissional(cliente_id: str) -> dict | None:
+    """Perfil profissional e aceite do termo do cliente.
+
+    None quando o banco não responde (ou falta a migration
+    2026-11-14-perfil-profissional-termo-erros-ia.sql): quem chama trata como
+    "termo não aceito" e pede o aceite de novo, sem travar a análise.
+    """
+    db = _get_client()
+    if not db or not cliente_id:
+        return None
+    try:
+        res = (
+            db.table("clientes").select(", ".join(_PERFIL_PROFISSIONAL_CAMPOS))
+            .eq("id", cliente_id).limit(1).execute()
+        )
+        return {k: v for k, v in (res.data[0] if res.data else {}).items() if v}
+    except Exception:
+        logger.exception("Erro em buscar_perfil_profissional")
+        return None
+
+
+def salvar_perfil_profissional(cliente_id: str, campos: dict) -> bool:
+    """Atualiza só os campos do perfil profissional informados."""
+    db = _get_client()
+    campos = {k: v for k, v in campos.items() if k in _PERFIL_PROFISSIONAL_CAMPOS}
+    if not db or not cliente_id or not campos:
+        return False
+    try:
+        res = db.table("clientes").update(campos).eq("id", cliente_id).execute()
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em salvar_perfil_profissional")
+        return False
+
+
+def registrar_aceite_termo(cliente_id: str, versao: str) -> bool:
+    """Grava a data e a versão do termo de responsabilidade aceito."""
+    return salvar_perfil_profissional(cliente_id, {
+        "termo_aceito_em": datetime.now(timezone.utc).isoformat(),
+        "termo_versao": versao,
+    })
+
+
 def buscar_dados_estruturados(analise_id: str, cliente_id: str | None = None, include_all: bool = False) -> dict | None:
     """Valores lidos/calculados de um exame estruturado (dinamometria, laboratoriais).
 
@@ -779,6 +828,60 @@ def salvar_feedback(
         return res.data[0]["id"] if res.data else None
     except Exception:
         logger.exception("Erro em salvar_feedback")
+        return None
+
+
+# Prefixo do comentário quando o erro apontado é gravado sem a migration
+# 2026-11-14 (sem a coluna categoria_erro nem a seção 'erro_ia'). O
+# evals/import_feedback.py reconhece os dois formatos.
+ERRO_IA_PREFIXO = "[erro_ia:"
+
+
+def salvar_erro_ia(
+    analise_id: str,
+    categoria: str,
+    tipo: str,
+    comentario: str = "",
+    autoriza_avaliacao: bool = False,
+    fonte: str = "medico",
+    fonte_nome: str = "",
+) -> str | None:
+    """Grava um "a IA errou isso" (secao = 'erro_ia').
+
+    Se o banco ainda não tem a migration, grava como feedback comum com a
+    categoria no início do comentário — o sinal não se perde por ordem de deploy.
+    """
+    db = _get_client()
+    if not db or not analise_id:
+        return None
+    base = {
+        "analise_id": analise_id,
+        "tipo": tipo,
+        "fonte": fonte,
+        "fonte_nome": fonte_nome or None,
+    }
+    try:
+        res = db.table("feedbacks_ia").insert({
+            **base,
+            "secao": "erro_ia",
+            "categoria_erro": categoria,
+            "autoriza_avaliacao": bool(autoriza_avaliacao),
+            "comentario": comentario or None,
+        }).execute()
+        return res.data[0]["id"] if res.data else None
+    except Exception:
+        logger.warning("salvar_erro_ia: gravando no formato antigo (migration 2026-11-14 pendente?)", exc_info=True)
+    try:
+        # Sem a coluna autoriza_avaliacao não há como registrar a autorização:
+        # o caso fica como não autorizado.
+        res = db.table("feedbacks_ia").insert({
+            **base,
+            "secao": "validacao_medica",
+            "comentario": f"{ERRO_IA_PREFIXO}{categoria}] {comentario}".strip(),
+        }).execute()
+        return res.data[0]["id"] if res.data else None
+    except Exception:
+        logger.exception("Erro em salvar_erro_ia")
         return None
 
 
@@ -1162,6 +1265,9 @@ def exportar_dados_cliente(cliente_id: str) -> dict | None:
         )
         if not cliente:
             return None
+        perfil = buscar_perfil_profissional(cliente_id)
+        if perfil:
+            cliente = [{**cliente[0], **perfil}]
         analises = (
             db.table("analises").select(
                 "id, created_at, tipo_exame, modalidade, descricao_usuario, analise_completa, modelo_ia, "
