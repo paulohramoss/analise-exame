@@ -522,3 +522,20 @@ a {
 @media (prefers-reduced-motion: reduce) {
     .toast { transition: none; }
 }
+
+/* ===== Laudo: seção 0 — sinais de alerta (static/laudo-ui.js) ===== */
+.laudo-alertas {
+    margin: 0 0 18px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--success-border);
+    background: var(--success-light);
+}
+.laudo-alertas > :first-child { margin-top: 0; }
+.laudo-alertas.has-alert {
+    border: 2px solid var(--danger);
+    background: var(--danger-light);
+}
+.laudo-alertas.has-alert h2,
+.laudo-alertas.has-alert h3,
+.laudo-alertas.has-alert h4 { color: var(--danger-dark); }

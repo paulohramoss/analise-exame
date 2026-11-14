@@ -79,6 +79,10 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
 .report ul, .report ol { padding-left: 18px; margin: 4px 0; }
 .report li { margin-bottom: 2px; }
 .report p { margin: 4px 0; }
+.report .laudo-alertas { margin: 0 0 10px; padding: 8px 12px; border: 1px solid #86efac; background: #f0fdf4; border-radius: 8px; break-inside: avoid; }
+.report .laudo-alertas.has-alert { border: 2px solid #dc2626; background: #fef2f2; }
+.report .laudo-alertas.has-alert h3 { color: #b91c1c; }
+.support-banner { margin: 0 0 14px; padding: 8px 12px; border: 1px solid #f59e0b; background: #fffbeb; border-radius: 8px; font-size: 11.5px; line-height: 1.5; color: #78350f; }
 .report strong { color: #0f172a; }
 .report blockquote { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--primary); background: var(--soft); color: var(--muted); break-inside: avoid; }
 
@@ -167,7 +171,7 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
             sections.push(['Achados marcados nas imagens', `<ol class="findings">${rows}</ol>
                 <p class="f-note">Verde: forte grau de certeza · Amarelo: moderado · Vermelho: baixo. A posição das marcações é estimada pela IA e aproximada.</p>`]);
         }
-        sections.push(['Análise por inteligência artificial', `<div class="report">${opts.reportHTML || ''}</div>`]);
+        sections.push(['Análise de apoio por inteligência artificial', `<div class="report">${opts.reportHTML || ''}</div>`]);
 
         const sectionsHTML = sections.map(([title, body], i) => `
     <section class="section">
@@ -194,20 +198,22 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
             ${opts.badge ? `<span class="badge">${esc(opts.badge)}</span>` : ''}
         </div>
         <div class="doc-title-block">
-            <div class="doc-title">Laudo de análise por inteligência artificial</div>
+            <div class="doc-title">Análise de apoio por inteligência artificial</div>
             <div class="doc-subtitle">Ortopedia · Sistema musculoesquelético</div>
         </div>
     </header>
 
+    <div class="support-banner"><strong>Documento de apoio gerado por IA — não é laudo radiológico nem diagnóstico médico.</strong>
+        Baseado apenas nas imagens enviadas (em RM/TC, cortes selecionados, não o estudo completo). Deve ser revisado por profissional habilitado antes de qualquer decisão.</div>
     <div class="ident">${identItems.join('')}</div>
     ${sectionsHTML}
 
     <div class="validation">
-        <h2 class="section-title" style="margin-bottom:6px">Validação do médico responsável</h2>
-        <p class="validation-text">Declaro que revisei as imagens e o conteúdo desta análise, e que a conduta clínica é de minha responsabilidade.</p>
+        <h2 class="section-title" style="margin-bottom:6px">Validação do profissional responsável</h2>
+        <p class="validation-text">Declaro que revisei as imagens e o conteúdo desta análise, e que a conduta adotada, dentro das atribuições da minha profissão, é de minha responsabilidade.</p>
         <div class="sign-grid">
             <div class="sign-line">Assinatura e carimbo</div>
-            <div class="sign-line">CRM / registro</div>
+            <div class="sign-line">Registro profissional (CRM, CREFITO…)</div>
             <div class="sign-line">Data</div>
         </div>
     </div>
@@ -224,8 +230,9 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
             <span>Gerado por IA em ${esc(opts.generatedAt)}</span>
         </div>
         <div class="disclaimer">
-            <strong>AVISO CFM/LGPD:</strong> Este laudo foi gerado por Inteligência Artificial como ferramenta de apoio à decisão clínica.
-            <strong>Não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável.
+            <strong>AVISO CFM/COFFITO/LGPD:</strong> Documento gerado por Inteligência Artificial como ferramenta de apoio à decisão clínica.
+            <strong>Não substitui</strong> o laudo radiológico, o diagnóstico nem a conduta do médico responsável: o diagnóstico por imagem e a indicação de cirurgia ou medicamento são atos médicos (Lei 12.842/2013).
+            Fisioterapeutas o utilizam, dentro das atribuições definidas pelo COFFITO, para planejar a reabilitação e decidir o encaminhamento.
             O uso da IA deve ser informado ao paciente, os dados devem ser tratados conforme a LGPD e a decisão final deve ser registrada pelo profissional habilitado.
         </div>
     </footer>
