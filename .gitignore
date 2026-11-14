@@ -25,3 +25,4 @@ build/
 # Avaliação de laudos: exames (mesmo anonimizados) e resultados ficam fora do git
 evals/images/
 evals/results/
+evals/cases/rascunhos/

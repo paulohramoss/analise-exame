@@ -232,7 +232,7 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
         <div class="disclaimer">
             <strong>AVISO CFM/COFFITO/LGPD:</strong> Documento gerado por Inteligência Artificial como ferramenta de apoio à decisão clínica.
             <strong>Não substitui</strong> o laudo radiológico, o diagnóstico nem a conduta do médico responsável: o diagnóstico por imagem e a indicação de cirurgia ou medicamento são atos médicos (Lei 12.842/2013).
-            Fisioterapeutas o utilizam, dentro das atribuições definidas pelo COFFITO, para planejar a reabilitação e decidir o encaminhamento.
+            Fisioterapeutas o utilizam, dentro das atribuições definidas pelo COFFITO e do Código de Ética e Deontologia da Fisioterapia (Resolução COFFITO nº 424/2013), para planejar a reabilitação e decidir o encaminhamento.
             O uso da IA deve ser informado ao paciente, os dados devem ser tratados conforme a LGPD e a decisão final deve ser registrada pelo profissional habilitado.
         </div>
     </footer>

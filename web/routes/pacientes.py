@@ -24,6 +24,8 @@ _UNAVAILABLE = (
     "dos dados do paciente não configurados). Fale com o suporte."
 )
 _DUPLICATED = "Já existe um paciente com este CPF no seu cadastro."
+# Laudos que não pedem plano de reabilitação (ver core/analyzer.build_analysis_prompt).
+_SEM_PLANO = {"correlacao", "dinamometria", "laboratorial"}
 
 
 def _professional_id() -> str | None:
@@ -117,6 +119,18 @@ def detalhe(paciente_id: str):
     evolucoes = db.listar_evolucoes(paciente_id, cliente_id)
     db.registrar_acesso_prontuario(cliente_id, paciente_id, "visualizar")
 
+    # "Montar plano a partir do laudo": só pré-preenche o formulário de tratamento;
+    # nada é gravado até o profissional revisar e salvar.
+    plano = None
+    plano_de = (request.args.get("plano_de") or "").strip()
+    if plano_de:
+        if any(a.get("id") == plano_de for a in analises):
+            analise = db.buscar_analise(plano_de, cliente_id)
+            plano = prontuario.plano_sugerido(analise) if analise else None
+        if plano is None:
+            flash("Este laudo não traz um plano de reabilitação (laudos anteriores a essa função, "
+                  "dinamometria e exames laboratoriais não têm). Preencha o tratamento à mão.", "error")
+
     return render_template(
         "paciente_detalhe.html",
         paciente=paciente,
@@ -129,6 +143,8 @@ def detalhe(paciente_id: str):
         grafico=prontuario.grafico_evolucao(evolucoes, tratamentos, analises),
         tipos_tratamento=prontuario.TIPOS_TRATAMENTO,
         exames_correlacionaveis=sum(1 for a in analises if a.get("tipo_exame") != "correlacao"),
+        plano=plano,
+        laudos_com_plano=[a for a in analises if a.get("tipo_exame") not in _SEM_PLANO],
     )
 
 

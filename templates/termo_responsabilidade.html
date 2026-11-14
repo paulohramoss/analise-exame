@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Termo de responsabilidade profissional — Three Health</title>
+{% import "_layout.html" as layout %}
+{{ layout.head_assets() }}
+<style>
+.term-card { max-width: 760px; margin: 2rem auto; padding: 1.75rem 1.5rem; }
+.term-card h1 { margin: 0 0 .35rem; font-size: 1.45rem; }
+.term-card .version { color: var(--text-muted); font-size: .85rem; margin: 0 0 1.25rem; }
+.term-card ol { padding-left: 1.2rem; line-height: 1.65; }
+.term-card li { margin-bottom: .7rem; }
+.term-card .note { font-size: .85rem; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1.25rem; }
+@media (max-width: 640px) { .term-card { margin: 1rem; padding: 1.25rem 1rem; } }
+</style>
+</head>
+<body>
+<main class="card term-card">
+  {{ layout.logo() }}
+  <h1>Termo de responsabilidade profissional</h1>
+  <p class="version">Versão {{ termo_versao }}</p>
+
+  <p>Ao usar a Three Health para analisar exames, declaro que:</p>
+  <ol>
+    <li><strong>Sou profissional de saúde habilitado</strong>, com registro ativo no meu conselho (CRM, CREFITO ou outro), e informo esse registro corretamente;
+      ou <strong>sou estudante da área da saúde</strong> e uso a ferramenta para estudo, sob supervisão de docente ou preceptor, sem aplicar o resultado a paciente sem essa supervisão.</li>
+    <li>Entendo que o resultado é um <strong>documento de apoio gerado por inteligência artificial</strong>, que pode conter erros e omissões.
+      Ele <strong>não é laudo radiológico</strong> e não substitui diagnóstico, prognóstico ou conduta médica.</li>
+    <li><strong>Reviso todo resultado</strong> com as imagens originais e o exame físico antes de usá-lo, e a decisão clínica é minha,
+      dentro das atribuições da minha profissão. O diagnóstico por imagem e a indicação de cirurgia ou medicamento são atos médicos (Lei 12.842/2013).
+      Fisioterapeutas atuam conforme as resoluções do COFFITO e o Código de Ética e Deontologia da Fisioterapia (Resolução COFFITO nº 424/2013); médicos, conforme o Código de Ética Médica (CFM).</li>
+    <li>Diante de qualquer <strong>sinal de alerta</strong> (seção 0 do resultado) ou de suspeita clínica de condição grave, <strong>encaminho o paciente ao médico</strong>
+      e não inicio, ou suspendo, a intervenção sobre a região até essa avaliação.</li>
+    <li>Envio apenas exames de pacientes que atendo ou estudo com base legal adequada (LGPD, Lei 13.709/2018), <strong>informo o paciente do uso de IA</strong>
+      como apoio e evito enviar imagens com nome, documento ou outros identificadores.</li>
+    <li>A análise considera <strong>só as imagens que eu envio</strong>. Em RM, TC e ultrassom, são cortes ou quadros selecionados: o que ficar de fora não é avaliado.</li>
+    <li>Quando eu apontar um erro da IA e <strong>autorizar</strong>, o laudo gerado, a descrição clínica sem identificação e o meu apontamento podem ser usados,
+      sem identificar o paciente, no conjunto de testes que mede a qualidade da ferramenta. Sem a autorização, o apontamento só entra nas estatísticas de erro.</li>
+  </ol>
+
+  <p class="note">O aceite fica registrado na sua conta, com data e versão. Se o termo mudar, ele é pedido de novo na próxima análise.
+    Dúvidas sobre o uso dos seus dados: veja <a href="{{ url_for('account.conta') }}">Meus dados</a>.</p>
+</main>
+</body>
+</html>

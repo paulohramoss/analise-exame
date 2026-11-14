@@ -3,6 +3,7 @@
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
 from core import annotations, cost_tracking, db, lab_tests, patient_report
+from core import professional_register as registro
 from web import costs, posthog, presentation
 from web.extensions import rate_limit
 from web.security import premium_required
@@ -235,6 +236,48 @@ def feedback():
     return jsonify({"success": True, "message": "Feedback médico salvo no histórico de validação."})
 
 
+@bp.route("/feedback/erro", methods=["POST"])
+@premium_required
+@rate_limit("ERROR_FEEDBACK_RATE_LIMIT", "120 per hour")
+def feedback_erro():
+    """Registra um erro da IA apontado em um clique; com autorização, vira candidato a caso de avaliação."""
+    g.modo = "premium"
+    data = request.get_json(silent=True) or request.form
+    analise_id = str(data.get("analysis_id") or "").strip()
+    categoria = str(data.get("category") or "").strip()
+    comentario = str(data.get("comment") or "").strip()[:1500]
+    autoriza = data.get("allow_eval") in (True, "true", "1", "on", 1)
+    responsible_role = str(data.get("responsible_role") or "").strip()[:80]
+
+    if categoria not in presentation.ERROR_CATEGORIES:
+        return jsonify({"error": "Tipo de erro inválido."}), 400
+    if not analise_id:
+        return jsonify({"error": "Laudo sem identificação."}), 400
+    if not _find_own_analysis(analise_id):
+        return jsonify({"error": "Laudo não encontrado para este acesso."}), 404
+
+    feedback_id = db.salvar_erro_ia(
+        analise_id=analise_id,
+        categoria=categoria,
+        tipo=presentation.ERROR_CATEGORIES[categoria]["tipo"],
+        comentario=comentario,
+        autoriza_avaliacao=autoriza,
+        fonte=presentation.feedback_source_for_role(responsible_role),
+        fonte_nome=g.get("user_email") or ("admin" if g.get("is_admin") else ""),
+    )
+    if not feedback_id:
+        return jsonify({"error": "Não foi possível registrar agora. Tente de novo."}), 503
+    if posthog.posthog_client is not None:
+        posthog.posthog_client.capture(
+            "ai_error_flagged", properties={"category": categoria, "allow_eval": autoriza},
+        )
+    return jsonify({
+        "success": True,
+        "message": "Erro registrado. Obrigado: ele entra nos testes de qualidade da IA."
+        if autoriza else "Erro registrado nas estatísticas de qualidade da IA.",
+    })
+
+
 @bp.route("/validacao-clinica", methods=["POST"])
 @premium_required
 def validacao_clinica():
@@ -265,6 +308,10 @@ def validacao_clinica():
         return _respond("Laudo sem identificação para validação.", 400, False)
     if not final_diagnosis:
         return _respond("Informe o diagnóstico final ou parecer validado.", 400, False)
+
+    reviewer_register, registro_erro = registro.validar_registro(reviewer_role, reviewer_register)
+    if registro_erro:
+        return _respond(registro_erro, 400, False)
 
     row = _find_own_analysis(analise_id)
     if not row:

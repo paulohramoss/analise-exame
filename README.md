@@ -29,6 +29,9 @@ O **MedAI Analyzer** (plataforma Three Health) analisa imagens de exames ortopé
 - Planos pagos (Asaas: PIX, boleto, cartão na página do Asaas), trial gratuito embutível por iframe
 - Opt-in de e-mail no trial (artigos e novidades) e lembrete automático de checkout abandonado, com descadastro em um clique (`web/marketing.py`)
 - Histórico de laudos, dashboard da clínica e validação clínica dos laudos
+- **Registro profissional conferido** (formato e UF/região do CRM, CREFITO ou outro conselho, coerente com o perfil) e **termo de responsabilidade** aceito por versão, registrado na conta (`/termo-responsabilidade`, `web/professional.py`)
+- **Leitura pela CIF** (estruturas, funções, atividades e participação, fatores contextuais) e **plano de reabilitação** no laudo — metas, medidas para reavaliação e prazo —, que vira tratamento no prontuário com um clique ("Montar plano a partir deste laudo")
+- **"A IA errou isso"** em um clique, por categoria (achado inventado, achado perdido, alerta perdido…); com autorização do profissional, vira rascunho de caso de avaliação (`python -m evals.import_feedback`)
 - Prontuário de pacientes: cadastro com nome e CPF (cifrados), laudos vinculados, tratamentos, evolução (dor e função) com gráfico e linha do tempo. Cada profissional vê só os próprios pacientes
 - API REST autenticada por chave (`/api/analyze`)
 - Fila assíncrona opcional (Redis + RQ) e orçamento de custo diário por escopo

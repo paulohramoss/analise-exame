@@ -260,7 +260,7 @@
             <p>
                 <strong>Aviso CFM/COFFITO/LGPD:</strong> Documento de apoio gerado por IA — <strong>não é laudo radiológico nem diagnóstico médico</strong>.
                 Baseia-se só nas imagens enviadas (em RM/TC, cortes selecionados, não o estudo completo).
-                O diagnóstico por imagem e a indicação de cirurgia ou medicamento são atos médicos; fisioterapeutas o usam para planejar a reabilitação e decidir o encaminhamento.
+                O diagnóstico por imagem e a indicação de cirurgia ou medicamento são atos médicos; fisioterapeutas o usam para planejar a reabilitação e decidir o encaminhamento, conforme o Código de Ética e Deontologia da Fisioterapia (Resolução COFFITO nº 424/2013).
                 O uso da IA deve ser informado ao paciente, os dados devem ser tratados conforme a LGPD e a decisão final deve ser registrada pelo profissional habilitado.
             </p>
         </div>
@@ -289,6 +289,7 @@
         <div class="alert alert-success">
             {{ layout.icon('check-circle') }}
             Laudo salvo no prontuário do paciente. <a href="{{ url_for('pacientes.detalhe', paciente_id=paciente_id) }}">Abrir prontuário</a>
+            {% if show_findings|default(true) %} · <a href="{{ url_for('pacientes.detalhe', paciente_id=paciente_id, plano_de=analysis_id) }}#tratamentos">Montar plano de tratamento a partir deste laudo</a>{% endif %}
         </div>
         {% endif %}
 
@@ -384,6 +385,7 @@
                 <button type="button" class="btn-primary btn-small" id="submit-feedback" disabled>Salvar feedback</button>
                 <span class="feedback-status" id="feedback-status"></span>
             </div>
+            {% include "_erro_ia.html" %}
             {% else %}
             <p class="card-description">
                 O feedback ficará disponível quando o laudo for salvo no histórico. Verifique a configuração do Supabase para persistência.

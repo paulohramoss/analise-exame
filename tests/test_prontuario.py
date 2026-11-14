@@ -221,6 +221,9 @@ def fake_prontuario(monkeypatch):
     ):
         monkeypatch.setattr(db, name, getattr(fake, name))
     monkeypatch.setattr(db, "listar_analises_paciente", lambda paciente_id, cliente_id: [])
+    # Termo já aceito: o fluxo do termo tem testes próprios (test_professional.py).
+    from web import professional
+    monkeypatch.setattr(db, "buscar_perfil_profissional", lambda cliente_id: {"termo_versao": professional.TERMO_VERSAO})
     return fake
 
 

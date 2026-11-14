@@ -1,5 +1,6 @@
 """Prontuário: leitura dos formulários, linha do tempo e gráfico de evolução."""
 
+import re
 from datetime import date, datetime
 
 from core import patient_crypto
@@ -246,4 +247,50 @@ def grafico_evolucao(evolucoes: list[dict], tratamentos: list[dict], analises: l
         "exames": [{"x": x_of(d), "label": label, "data": d} for d, label in exames],
         "inicio": inicio,
         "fim": fim,
+    }
+
+
+# Rótulo pedido no fim da seção 6 do laudo (core/analyzer.build_analysis_prompt).
+_PLANO_ROTULO = re.compile(r"^\s*\**\s*plano de reabilita[cç][aã]o\b.*$", re.IGNORECASE | re.MULTILINE)
+_PLANO_ITEM = re.compile(r"^\s*[-*•]\s+(.+)$")
+_REGIOES = {
+    "joelho": "Joelho", "coluna": "Coluna", "ombro": "Ombro", "quadril": "Quadril",
+    "pe_tornozelo": "Pé e tornozelo", "mao_punho": "Mão e punho", "cotovelo": "Cotovelo",
+}
+
+
+def plano_do_laudo(analise: str) -> str | None:
+    """Itens do bloco "Plano de reabilitação — metas e reavaliação" do laudo, um por linha.
+
+    None quando o laudo não tem o bloco (laudos anteriores a ele, dinamometria
+    e exames laboratoriais).
+    """
+    texto = re.split(r"(?m)^##\s*7\.\s*REFER", analise or "")[0]
+    rotulos = list(_PLANO_ROTULO.finditer(texto))
+    if not rotulos:
+        return None
+    itens = []
+    for linha in texto[rotulos[-1].end():].splitlines():
+        if not linha.strip():
+            if itens:
+                break
+            continue
+        item = _PLANO_ITEM.match(linha)
+        if not item:
+            break
+        itens.append("- " + item.group(1).replace("**", "").strip())
+    return "\n".join(itens)[:1800] or None
+
+
+def plano_sugerido(analise: dict) -> dict | None:
+    """Campos do formulário de tratamento pré-preenchidos com o plano do laudo, para o profissional revisar."""
+    plano = plano_do_laudo(analise.get("analise_completa") or "")
+    if not plano:
+        return None
+    data = presentation.format_date_br(str(analise.get("created_at") or "")[:10])
+    return {
+        "tipo": "Fisioterapia",
+        "regiao": _REGIOES.get(analise.get("tipo_exame") or "", ""),
+        "descricao": f"Plano sugerido pela análise de {data} — revisado pelo profissional:\n{plano}",
+        "analise_data": data,
     }

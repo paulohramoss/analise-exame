@@ -492,7 +492,7 @@ O resultado é lido por médicos, fisioterapeutas e estudantes da área da saúd
 não um laudo radiológico: o diagnóstico por imagem e a indicação de cirurgia ou medicamento são atos médicos.
 Responda diretamente com o conteúdo estruturado abaixo — sem saudações, introduções, apresentações ou assinaturas.
 Não se apresente como médico, radiologista ou outro profissional humano.
-Seja completo, mas objetivo: o laudo inteiro deve caber em até 1.500 palavras.
+Seja completo, mas objetivo: o laudo inteiro deve caber em até 1.700 palavras.
 
 **FONTES:** use seu conhecimento de anatomia e radiologia musculoesquelética e as classificações padronizadas
 (Outerbridge, Kellgren-Lawrence, Pfirrmann, ICRS etc.). Não cite livros, artigos ou fontes que não foram
@@ -606,6 +606,20 @@ Descreva o curso natural esperado da condição identificada — estabilização
 **5d. Fatores de risco estrutural:**
 Identifique achados que representam vulnerabilidade adicional: estruturas adjacentes comprometidas, assimetrias biomecânicas, sinais de sobrecarga compensatória.
 
+**5e. Leitura pela CIF (Classificação Internacional de Funcionalidade):**
+Traduza os achados para a linguagem da funcionalidade, em uma tabela curta:
+
+| Componente da CIF | O que os achados sugerem |
+|---|---|
+| Estruturas do corpo (s) | estrutura alterada pela imagem |
+| Funções do corpo (b) | dor, mobilidade articular, força, estabilidade — prováveis, a confirmar no exame físico |
+| Atividades e participação (d) | o que tende a ficar limitado (andar, subir escadas, agachar, alcançar, levantar peso, trabalho, esporte) |
+| Fatores contextuais a investigar (e/pessoais) | ocupação, nível de atividade, ambiente, crenças sobre a dor — o que a imagem não mostra |
+
+Ponha o código da CIF entre parênteses só quando tiver segurança dele (ex.: b280 Sensação de dor,
+s75011 Articulação do joelho, d450 Andar); na dúvida, escreva só o nome da categoria. A imagem mostra
+estrutura: funções e atividades são hipóteses para o exame físico confirmar, nunca fato.
+
 ## 6. CONDUTA, ENCAMINHAMENTO E REABILITAÇÃO
 
 Use o histórico clínico fornecido (idade, sexo, atividade física, queixa, tempo de evolução, mecanismo, tratamentos anteriores) para personalizar esta seção. Se algum campo relevante não foi informado, indique o que mudaria na interpretação caso fosse conhecido.
@@ -616,6 +630,15 @@ Use o histórico clínico fornecido (idade, sexo, atividade física, queixa, tem
 - **Exames complementares que poderiam agregar** (artro-RM, ultrassom dinâmico, etc.) — como sugestão ao médico solicitante, somente se mudarem a conduta
 - **Considerações para a reabilitação:** estruturas a proteger, precauções de carga e de amplitude, movimentos ou técnicas a evitar por ora, e o que monitorar na evolução. Não prescreva protocolo de exercícios, séries, cargas nem medicamentos.
 - **Prognóstico funcional:** o que se pode esperar, de forma geral, com tratamento adequado
+
+Termine a seção com o bloco abaixo, com este rótulo exato (ele é copiado para o plano de tratamento do
+prontuário). Se houver [ALERTA] na seção 0, a primeira meta é a avaliação médica e as demais ficam condicionadas a ela.
+
+**Plano de reabilitação — metas e reavaliação:**
+- Meta de curto prazo (2–4 semanas): <meta funcional mensurável, ligada a uma atividade da CIF>
+- Meta de médio prazo (6–12 semanas): <meta funcional mensurável>
+- Medidas para a avaliação inicial e a reavaliação: <escalas e testes validados para a condição — ex.: END/EVA, KOOS, IKDC, LEFS, Oswestry, DASH, SPADI, goniometria, dinamometria, testes funcionais>
+- Reavaliar em: <prazo em semanas>, ou antes se <critério de piora ou de alerta>
 
 ---
 
@@ -1031,6 +1054,9 @@ confiança, mas não é prova.
 **5. Completude:**
    - Combine descrições complementares do mesmo achado para enriquecer a caracterização.
    - Preserve na seção 1 a "Base da análise" (quantas imagens, e que não é o estudo completo).
+   - Preserve na seção 5 a tabela "5e. Leitura pela CIF" e, no fim da seção 6, o bloco
+     "**Plano de reabilitação — metas e reavaliação:**" com este rótulo exato e os quatro itens
+     (meta de curto prazo, meta de médio prazo, medidas, reavaliar em).
 
 **ESTRUTURA OBRIGATÓRIA DO RELATÓRIO FINAL** (siga exatamente, sem modificar os títulos):
 
@@ -1044,7 +1070,7 @@ confiança, mas não é prova.
 
 **Regras finais:**
 - Não invente achados que nenhum modelo identificou
-- Seja completo, mas objetivo: priorize um laudo de até 1.200 palavras
+- Seja completo, mas objetivo: priorize um laudo de até 1.400 palavras
 - Use terminologia ortopédica precisa em todo o relatório
 - Responda diretamente com o relatório — sem introdução, sem explicação do processo de síntese, sem menção aos "Modelos A e B" (use "uma das análises")
 - Escreva um documento coeso, mas **não se apresente como médico, radiologista ou outro profissional humano**: este é um documento de apoio gerado por IA
@@ -1705,7 +1731,8 @@ O que mudou entre exames repetidos e como isso acompanha os tratamentos e a dor/
 Divergências entre exames, dados que faltam e exames que ajudariam a fechar a correlação.
 
 ## 5. SÍNTESE CLÍNICA
-Quadro integrado em poucas linhas, com o grau de certeza de cada conclusão.
+Quadro integrado em poucas linhas, com o grau de certeza de cada conclusão, organizado pela CIF:
+estruturas e funções do corpo, atividades e participação, e fatores contextuais que pesam na evolução.
 
 ## 6. CONDUTA E PRÓXIMOS PASSOS
 Prioridades de tratamento/reabilitação, critérios objetivos de progresso (ex.: índice de simetria ≥ 90%),

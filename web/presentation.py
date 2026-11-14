@@ -25,6 +25,17 @@ _EXAM_LABELS = {
 }
 
 
+# "A IA errou isso": um clique por categoria. tipo segue o vocabulário de feedbacks_ia.
+ERROR_CATEGORIES = {
+    "achado_inventado": {"label": "Apontou achado que não existe", "tipo": "falso_positivo"},
+    "achado_perdido": {"label": "Deixou passar um achado", "tipo": "falso_negativo"},
+    "alerta_perdido": {"label": "Deixou passar sinal de alerta", "tipo": "falso_negativo"},
+    "alerta_indevido": {"label": "Alerta sem motivo", "tipo": "falso_positivo"},
+    "regiao_lado": {"label": "Região ou lado errado", "tipo": "correcao"},
+    "classificacao": {"label": "Grau ou classificação errada", "tipo": "correcao"},
+}
+
+
 # ── Formulários ───────────────────────────────────────────────────────────────
 
 def has_privacy_consent() -> bool:

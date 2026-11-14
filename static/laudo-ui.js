@@ -29,8 +29,11 @@
     }
 
     // Há alerta se a seção 0 traz [ALERTA] ou não diz que não há nenhum.
+    // As linhas são aparadas como no renderizador: o laudo salvo chega indentado
+    // (textContent do template) e com \r\n.
     function hasAlert(text) {
-        const match = /^#{1,4}\s*0\s*[.)]\s*SINAIS DE ALERTA[^\n]*\n([\s\S]*?)(?=^#{1,4}\s|(?![\s\S]))/im.exec(String(text || ''));
+        const normalized = String(text || '').replace(/\r\n?/g, '\n').split('\n').map(l => l.trim()).join('\n');
+        const match = /^#{1,4}\s*0\s*[.)]\s*SINAIS DE ALERTA[^\n]*\n([\s\S]*?)(?=^#{1,4}\s|(?![\s\S]))/im.exec(normalized);
         if (!match) return false;
         const body = match[1];
         return /\[ALERTA\]/i.test(body) || (body.trim() !== '' && !/nenhum sinal de alerta/i.test(body));

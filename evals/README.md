@@ -82,3 +82,22 @@ a um cliente "a ferramenta acerta X%", o conjunto precisa de:
 Números a acompanhar a cada mudança de prompt ou modelo: sensibilidade para
 sinais de alerta (meta: 100% nos casos do conjunto), casos aprovados e média.
 Guarde a execução de referência e rode com `--baseline` antes de publicar.
+
+## Erros apontados pelos clientes → casos
+
+Os profissionais marcam "a IA errou isso" no laudo, em um clique por categoria.
+
+```bash
+python -m evals.import_feedback --since 2026-11-01
+```
+
+- Mostra o placar: quantos erros por categoria e por região, o mapa do que
+  priorizar no prompt.
+- Para os laudos cujo profissional **autorizou** o uso, grava rascunhos em
+  `evals/cases/rascunhos/` (fora do git), com o laudo da IA, a descrição
+  clínica sem identificação, os apontamentos e o que preencher no padrão-ouro.
+- O app **não guarda as imagens** dos exames: para virar caso, peça ao
+  profissional as imagens anonimizadas, preencha os achados esperados com um
+  especialista e mova o arquivo para `evals/cases/`.
+- Um "deixou passar sinal de alerta" é o rascunho mais valioso: ele vira um caso
+  com `expected_red_flags`, que reprova qualquer versão que repita o erro.

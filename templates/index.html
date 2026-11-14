@@ -320,7 +320,7 @@
                         Esta ferramenta usa IA apenas como apoio à decisão clínica.
                         O resultado <strong>não substitui</strong> diagnóstico, prognóstico, conduta ou laudo emitido pelo médico responsável:
                         o diagnóstico por imagem e a indicação de cirurgia ou medicamento são atos médicos (Lei 12.842/2013).
-                        Fisioterapeutas o utilizam, dentro das atribuições definidas pelo COFFITO, para planejar a reabilitação e decidir o encaminhamento.
+                        Fisioterapeutas o utilizam, dentro das atribuições definidas pelo COFFITO e do Código de Ética e Deontologia da Fisioterapia (Resolução COFFITO nº 424/2013), para planejar a reabilitação e decidir o encaminhamento.
                         A análise considera só as imagens enviadas: em RM e TC, envie os cortes que mostram a alteração — o que ficar de fora não é avaliado.
                         Use somente com ciência do paciente e base legal adequada para o tratamento dos dados de saúde.
                     </p>
@@ -524,19 +524,19 @@
                         </div>
                     </div>
                     <div class="form-step-body">
+                        {% set conta = responsavel_conta|default({}) %}
                         <div class="form-row">
                             <div class="form-group form-group-half">
                                 <label for="responsible_name">Nome do responsável</label>
-                                <input type="text" name="responsible_name" id="responsible_name" placeholder="Ex: Dra. Ana Souza">
+                                <input type="text" name="responsible_name" id="responsible_name" value="{{ conta.name|default('', true) }}" placeholder="Ex: Dra. Ana Souza">
                             </div>
                             <div class="form-group form-group-half">
                                 <label for="responsible_role">Perfil profissional</label>
                                 <select name="responsible_role" id="responsible_role">
                                     <option value="">— Selecione —</option>
-                                    <option value="Médico">Médico</option>
-                                    <option value="Laudista">Laudista</option>
-                                    <option value="Fisioterapeuta">Fisioterapeuta</option>
-                                    <option value="Outro profissional de saúde">Outro profissional de saúde</option>
+                                    {% for perfil in perfis_profissionais|default([]) %}
+                                    <option value="{{ perfil }}"{% if perfil == conta.role %} selected{% endif %}>{{ perfil }}</option>
+                                    {% endfor %}
                                 </select>
                             </div>
                         </div>
@@ -544,13 +544,15 @@
                         <div class="form-row">
                             <div class="form-group form-group-half">
                                 <label for="responsible_register">Registro profissional</label>
-                                <input type="text" name="responsible_register" id="responsible_register" placeholder="Ex: CRM-SP 000000, CREFITO-3 000000-F">
+                                <input type="text" name="responsible_register" id="responsible_register" value="{{ conta.register|default('', true) }}" placeholder="Ex: CRM-SP 123456, CREFITO-3 123456-F" aria-describedby="responsible_register_hint">
+                                <small class="field-hint" id="responsible_register_hint">Obrigatório para médicos e fisioterapeutas; o formato e a UF/região são conferidos. Estudantes não precisam informar.</small>
                             </div>
                             <div class="form-group form-group-half">
                                 <label for="responsible_organization">Clínica ou instituição</label>
-                                <input type="text" name="responsible_organization" id="responsible_organization" placeholder="Ex: Clínica Movimento">
+                                <input type="text" name="responsible_organization" id="responsible_organization" value="{{ conta.organization|default('', true) }}" placeholder="Ex: Clínica Movimento">
                             </div>
                         </div>
+                        {% if premium %}<p class="form-step-hint">Salve esses dados em <a href="{{ url_for('account.conta') }}#perfil">Meus dados</a> para não precisar preencher a cada análise.</p>{% endif %}
                     </div>
                 </section>
 
@@ -559,9 +561,19 @@
                         <input type="checkbox" name="privacy_consent" id="privacy_consent" value="accepted" required>
                         <span>
                             Confirmo que tenho autorização/base legal para processar as imagens e informações clínicas,
-                            que o paciente foi informado sobre o uso de IA como apoio, e que o resultado será revisado por médico responsável.
+                            que o paciente foi informado sobre o uso de IA como apoio, e que o resultado será revisado por profissional habilitado.
                         </span>
                     </label>
+                    {% if termo_pendente %}
+                    <label class="consent-check">
+                        <input type="checkbox" name="termo_responsabilidade" id="termo_responsabilidade" value="accepted" required>
+                        <span>
+                            Li e aceito o <a href="{{ url_for('account.termo_responsabilidade') }}" target="_blank" rel="noopener">termo de responsabilidade profissional</a>:
+                            reviso todo resultado antes de usá-lo, decido dentro das atribuições da minha profissão e encaminho ao médico diante de sinal de alerta.
+                            O aceite fica registrado na conta.
+                        </span>
+                    </label>
+                    {% endif %}
                     <p class="field-error" id="consent-error" hidden>{{ layout.icon("alert-triangle", 16) }} <span>Confirme o consentimento para enviar o exame.</span></p>
 
                     <button type="submit" class="btn-primary" id="submit-btn">
@@ -805,6 +817,28 @@
             return parts.join(' | ');
         }
 
+        // Mesma regra de core/professional_register.py, em versão resumida: evita
+        // perder os arquivos escolhidos num redirect por registro mal digitado.
+        // O servidor confere de novo (e normaliza a grafia).
+        function checkResponsibleRegister() {
+            const role = document.getElementById('responsible_role').value;
+            const reg = document.getElementById('responsible_register').value.trim().toUpperCase();
+            const crmRoles = ['Médico', 'Radiologista', 'Ortopedista', 'Laudista'];
+            if (!role || role === 'Estudante da área da saúde') return '';
+            if (!reg) {
+                return role === 'Fisioterapeuta'
+                    ? 'Informe o registro no CREFITO (ex.: CREFITO-3 123456-F).'
+                    : (crmRoles.includes(role) ? 'Informe o registro no CRM (ex.: CRM-SP 123456).' : 'Informe o registro profissional.');
+            }
+            if (crmRoles.includes(role) && !/CRM/.test(reg) && !/^\d{3,7}\s*[-/ ]\s*[A-Z]{2}$/.test(reg)) {
+                return 'O perfil ' + role + ' usa registro no CRM (ex.: CRM-SP 123456).';
+            }
+            if (role === 'Fisioterapeuta' && !/CREFITO/.test(reg)) {
+                return 'O perfil Fisioterapeuta usa registro no CREFITO (ex.: CREFITO-3 123456-F).';
+            }
+            return '';
+        }
+
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
 
@@ -818,6 +852,18 @@
             }
             if (missingConsent) {
                 privacyConsent.focus();
+                return;
+            }
+            const termo = document.getElementById('termo_responsabilidade');
+            if (termo && !termo.checked) {
+                showToast('Aceite o termo de responsabilidade profissional para enviar o exame.', 'warning', 5000);
+                termo.focus();
+                return;
+            }
+            const registroErro = checkResponsibleRegister();
+            if (registroErro) {
+                showToast(registroErro, 'warning', 6000);
+                document.getElementById('responsible_register').focus();
                 return;
             }
 

@@ -36,6 +36,15 @@ create table if not exists public.clientes (
 alter table public.clientes
     add column if not exists sessao_versao integer not null default 0;
 
+-- Perfil profissional (preenche o responsável do laudo) e termo de responsabilidade.
+alter table public.clientes
+    add column if not exists profissional_nome         text,
+    add column if not exists profissional_perfil       text,
+    add column if not exists profissional_registro     text,
+    add column if not exists profissional_instituicao  text,
+    add column if not exists termo_aceito_em           timestamptz,
+    add column if not exists termo_versao              text;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- PAGAMENTOS — cobranças criadas no Asaas (PIX/boleto/cartão)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -159,6 +168,14 @@ create table if not exists public.feedbacks_ia (
 
 create index if not exists feedbacks_ia_analise_created_idx
     on public.feedbacks_ia (analise_id, created_at desc);
+
+-- "A IA errou isso" (secao = 'erro_ia'): categoria e autorização para virar caso de avaliação.
+alter table public.feedbacks_ia
+    add column if not exists categoria_erro      text,
+    add column if not exists autoriza_avaliacao  boolean not null default false;
+
+create index if not exists feedbacks_ia_erro_idx
+    on public.feedbacks_ia (created_at desc) where secao = 'erro_ia';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- DIAGNÓSTICOS VALIDADOS — validação clínica formal por profissional,
