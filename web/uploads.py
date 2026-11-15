@@ -7,6 +7,7 @@ import os
 import tempfile
 import uuid
 from pathlib import Path
+from typing import Any
 
 from flask import g, request
 from PIL import Image, ImageDraw, ImageStat
@@ -74,7 +75,7 @@ def _dicom_first_number(value, default: float | None = None) -> float | None:
         return default
 
 
-def _extract_dicom_metadata(ds) -> dict:
+def _extract_dicom_metadata(ds) -> dict[str, Any]:
     rows = getattr(ds, "Rows", None)
     cols = getattr(ds, "Columns", None)
     metadata = {
@@ -132,7 +133,7 @@ def _normalize_dicom_pixels(ds, pixel_array):
     return image
 
 
-def _convert_dicom_to_jpeg(filepath: Path) -> tuple[Path, str, str, dict] | None:
+def _convert_dicom_to_jpeg(filepath: Path) -> tuple[Path, str, str, dict[str, Any]] | None:
     try:
         pydicom = importlib.import_module("pydicom")
         ds = pydicom.dcmread(str(filepath), force=True)
@@ -149,7 +150,7 @@ def _convert_dicom_to_jpeg(filepath: Path) -> tuple[Path, str, str, dict] | None
         return None
 
 
-def _dicom_context(upload_items: list[dict]) -> str:
+def _dicom_context(upload_items: list[dict[str, Any]]) -> str:
     parts = []
     for item in upload_items:
         metadata = item.get("dicom_metadata") or {}
@@ -169,7 +170,7 @@ def _dicom_context(upload_items: list[dict]) -> str:
     return " | ".join(parts)
 
 
-def _pdf_context(upload_items: list[dict], full_text: bool = False) -> str:
+def _pdf_context(upload_items: list[dict[str, Any]], full_text: bool = False) -> str:
     parts = []
     for item in upload_items:
         texto = item.get("pdf_text_full") if full_text and item.get("pdf_text_full") else item.get("pdf_text")
@@ -181,7 +182,7 @@ def _pdf_context(upload_items: list[dict], full_text: bool = False) -> str:
     return " | ".join(parts)
 
 
-def description_with_dicom_context(user_description: str, upload_items: list[dict], full_text: bool = False) -> str:
+def description_with_dicom_context(user_description: str, upload_items: list[dict[str, Any]], full_text: bool = False) -> str:
     """Descrição do usuário + contexto tirado dos arquivos (metadados DICOM, texto de PDF).
 
     full_text: o texto inteiro do PDF (dinamometria/laboratoriais), não só o trecho
@@ -231,7 +232,7 @@ def _pdf_redaction_boxes(textpage, text: str, page_height: float, scale: float) 
     return boxes
 
 
-def _convert_pdf(filepath: Path, original_name: str) -> list[dict]:
+def _convert_pdf(filepath: Path, original_name: str) -> list[dict[str, Any]]:
     """Páginas do PDF como JPEG (sem identificadores), mais o texto do documento."""
     try:
         pdfium = importlib.import_module("pypdfium2")
@@ -329,7 +330,7 @@ def _without_repeated_lines(page_texts: list[str]) -> str:
 
 # ── Upload ────────────────────────────────────────────────────────────────────
 
-def save_upload(file) -> list[dict]:
+def save_upload(file) -> list[dict[str, Any]]:
     """Salva um upload e devolve uma entrada por imagem: um PDF vira uma por página.
 
     Lista vazia se o arquivo é inválido ou não pôde ser convertido.
@@ -348,7 +349,7 @@ def save_upload(file) -> list[dict]:
     return [item] if item else []
 
 
-def save_upload_file(file) -> dict | None:
+def save_upload_file(file) -> dict[str, Any] | None:
     """
     Salva um arquivo de imagem ou DICOM em disco (PDF: ver save_upload).
     Retorna metadados da imagem processada ou None se inválido.
@@ -390,7 +391,7 @@ def save_upload_file(file) -> dict | None:
     }
 
 
-def read_upload_bytes(upload_items: list[dict]) -> tuple[list[tuple[bytes, str]], list[dict]]:
+def read_upload_bytes(upload_items: list[dict[str, Any]]) -> tuple[list[tuple[bytes, str]], list[dict[str, Any]]]:
     """Lê os bytes de cada upload (para análise/fila) e os metadados de persistência.
 
     Usa sempre a imagem já convertida ("filepath"): para DICOM o arquivo original
@@ -408,7 +409,7 @@ def read_upload_bytes(upload_items: list[dict]) -> tuple[list[tuple[bytes, str]]
     return images, image_meta
 
 
-def cleanup_upload_files(upload_items: list[dict]) -> None:
+def cleanup_upload_files(upload_items: list[dict[str, Any]]) -> None:
     paths = {
         str(upload_item[key])
         for upload_item in upload_items
