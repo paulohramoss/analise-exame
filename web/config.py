@@ -4,6 +4,8 @@ import os
 import secrets
 from zoneinfo import ZoneInfo
 
+from core.env import configured
+
 DEFAULT_FLASK_SECRET_KEY = "dev-secret-key-change-in-prod"
 
 # Gerada uma vez por processo (nunca hardcoded/commitada) — usada apenas quando
@@ -73,7 +75,7 @@ DEFAULT_PLAN = "anual"
 def env_value(*names: str) -> str:
     """Retorna a primeira variável de ambiente preenchida."""
     for name in names:
-        value = os.environ.get(name, "").strip()
+        value = configured(os.environ.get(name, ""))
         if value:
             return value
     return ""
@@ -84,7 +86,7 @@ def get_api_key() -> str:
 
 
 def get_anthropic_api_key() -> str:
-    return os.environ.get("ANTHROPIC_API_KEY", "")
+    return env_value("ANTHROPIC_API_KEY")
 
 
 def has_ai_provider() -> bool:

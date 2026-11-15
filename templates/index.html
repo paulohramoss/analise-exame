@@ -393,7 +393,7 @@
                                 type="file"
                                 name="exam_images"
                                 id="exam_images"
-                                accept=".png,.jpg,.jpeg,.webp,.gif,.dcm,.pdf,application/pdf"
+                                accept=".png,.jpg,.jpeg,.jfif,.webp,.gif,.dcm,.pdf,application/pdf"
                                 class="file-input"
                                 multiple
                                 required
@@ -401,7 +401,7 @@
                             <label for="exam_images" class="upload-label" id="upload-label">
                                 <span class="upload-icon icon-badge">{{ layout.icon("upload", 26) }}</span>
                                 <span class="upload-text">Clique para selecionar ou arraste as imagens aqui</span>
-                                <span class="upload-hint">RM · Raio-X · TC · DICOM, PDF, PNG, JPG, WEBP — Máximo 20MB por arquivo · Até {{ max_images|default(5) }} imagens (cada página de PDF conta como uma)</span>
+                                <span class="upload-hint">RM · Raio-X · TC · DICOM, PDF, PNG, JPG, JFIF, WEBP — Máximo 20MB por arquivo · Até {{ max_images|default(5) }} imagens (cada página de PDF conta como uma)</span>
                             </label>
                             <div id="thumbnails-container">
                                 <div class="image-thumbnails" id="image-thumbnails"></div>

@@ -23,6 +23,7 @@ from google.genai import types
 from PIL import Image, ImageOps
 
 from core import annotations, dynamometry, lab_tests, pubmed
+from core.env import configured
 from core.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,13 @@ _RETRY_DELAY = float(os.environ.get("AI_RETRY_DELAY_SECONDS", "1.0"))
 # 22s com timeouts proporcionais: a síntese (que exige 12s livres) quase nunca
 # cabia, e o "consenso dual" virava "consenso rápido" sem ninguém perceber.
 _ANALYSIS_BUDGET_SECONDS = float(os.environ.get("ANALYSIS_BUDGET_SECONDS", "90"))
+# Parte dos 90 s reservada ao que acontece fora do analisador (receber o
+# upload, salvar o laudo, responder): tudo aqui dentro — laudo, marcações e
+# referências — termina antes, para a resposta inteira caber no orçamento.
+_RESPONSE_MARGIN_SECONDS = float(os.environ.get("ANALYSIS_RESPONSE_MARGIN_SECONDS", "5"))
+# Marcações só começam com pelo menos este tempo restante; abaixo disso o laudo
+# sai sem elas (ele nunca depende das marcações).
+_ANNOTATION_MIN_SECONDS = float(os.environ.get("ANNOTATION_MIN_SECONDS", "8"))
 _GEMINI_HTTP_TIMEOUT_MS = int(os.environ.get("GEMINI_HTTP_TIMEOUT_MS", "60000"))
 _GEMINI_MAX_OUTPUT_TOKENS = int(os.environ.get("GEMINI_MAX_OUTPUT_TOKENS", "6144"))
 # thinking_budget=0 desabilita o thinking interno do Gemini 2.5 Flash, reduzindo
@@ -926,6 +934,36 @@ def _close_truncated_text(message) -> str:
     return text.rstrip() + _TRUNCATION_NOTICE
 
 
+_DEADLINE_NOTICE = (
+    "\n\n> Laudo resumido: a análise atingiu o limite de tempo e o texto foi encerrado no último "
+    "trecho completo. Para o laudo completo, envie o exame novamente."
+)
+_PARTIAL_MIN_CHARS = 1200  # abaixo disso o trecho não serve como laudo: vira erro
+
+
+def _partial_laudo(text: str) -> str | None:
+    """Laudo interrompido pelo prazo, cortado no último parágrafo completo (ou None se curto demais)."""
+    text = text.rstrip()
+    cut = text.rfind("\n\n")
+    if cut > len(text) // 2:
+        text = text[:cut].rstrip()
+    if len(text) < _PARTIAL_MIN_CHARS:
+        return None
+    return text + _DEADLINE_NOTICE
+
+
+def _partial_claude_usage(stream, text: str) -> dict | None:
+    """Uso de um stream interrompido: entrada real; saída estimada pelo texto recebido."""
+    try:
+        item = _extract_claude_usage(_CLAUDE_MODEL, stream.current_message_snapshot)
+    except Exception:
+        item = None
+    item = item or {"model": _CLAUDE_MODEL, "input_tokens": 0, "output_tokens": 0}
+    # output_tokens só chega no fim do stream; ~3 caracteres por token em português.
+    item["output_tokens"] = max(item["output_tokens"], len(text) // 3)
+    return item
+
+
 def _analyze_with_claude(
     anthropic_api_key: str,
     exam_images: list[tuple[bytes, str]],
@@ -939,8 +977,13 @@ def _analyze_with_claude(
     ai_trace_id: str | None = None,
     posthog_distinct_id: str | None = None,
     stop_at: Callable[[], float] | None = None,
+    keep_partial: bool = False,
 ) -> tuple[str, dict | None] | None:
     """Análise independente com Claude. Retorna (texto, uso_de_tokens) ou None em caso de falha.
+
+    keep_partial: ao estourar o prazo, devolve o que já foi escrito (cortado no
+    último parágrafo, com aviso) em vez de falhar — usado quando o Claude é o
+    único provedor e não há outro laudo para entregar.
 
     Usa streaming: sem ele o timeout HTTP valia para o laudo inteiro, e um laudo
     longo do Claude (>45s) estourava com ReadTimeout. Agora timeout_seconds é o
@@ -961,9 +1004,15 @@ def _analyze_with_claude(
             timeout=timeout_seconds,
             **_posthog_generation_kwargs(ai_session_id, ai_trace_id, posthog_distinct_id),
         ) as stream:
-            for _ in stream.text_stream:
+            chunks: list[str] = []
+            for chunk in stream.text_stream:
+                chunks.append(chunk)
                 limit = stop_at() if stop_at else started + timeout_seconds
                 if time.monotonic() > limit:
+                    partial = _partial_laudo("".join(chunks)) if keep_partial else None
+                    if partial:
+                        logger.warning("Claude: prazo esgotado; laudo entregue até o último trecho completo.")
+                        return partial, _partial_claude_usage(stream, "".join(chunks))
                     raise TimeoutError("Claude: análise excedeu o prazo.")
             message = stream.get_final_message()
         logger.info("Claude: análise concluída.")
@@ -1273,6 +1322,7 @@ def _produce_final_analysis(
             _remaining_seconds(deadline, _CLAUDE_ANALYSIS_TIMEOUT_SECONDS), validated_case_text,
             posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
             stop_at=(lambda: deadline) if deadline else None,
+            keep_partial=True,
         )
         if not claude_pair:
             raise RuntimeError("Claude: análise falhou e o Gemini está indisponível.")
@@ -1426,8 +1476,11 @@ def _locate_findings(
     ai_session_id: str | None = None,
     ai_trace_id: str | None = None,
     posthog_distinct_id: str | None = None,
+    deadline: float | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Marca os achados do laudo nas imagens. Retorna (marcações, lista de uso de tokens).
+
+    deadline: prazo da análise inteira; as marcações nunca passam dele.
 
     Gemini primeiro (é treinado para devolver caixas box_2d); sem ele, Claude.
     Com Gemini, cada marcação passa ainda por um refinamento num recorte
@@ -1436,7 +1489,8 @@ def _locate_findings(
     """
     prompt = annotations.build_localization_prompt(analysis, len(exam_images))
     gemini_parts, claude_content = _exam_images_with_labels(exam_images)
-    deadline = time.monotonic() + _ANNOTATION_TIMEOUT_SECONDS
+    own_deadline = time.monotonic() + _ANNOTATION_TIMEOUT_SECONDS
+    deadline = min(deadline, own_deadline) if deadline else own_deadline
 
     if gemini_client is not None:
         locate_model = _ANNOTATION_MODEL or model_name
@@ -1582,8 +1636,126 @@ def _generate_structured_text(
             return provider()
         except Exception as exc:
             last_exc = exc
-            logger.warning("Exame estruturado: geração falhou (%s); tentando o outro provedor.", provider.__name__, exc_info=True)
+            logger.warning("Geração falhou (%s); tentando o outro provedor.", provider.__name__, exc_info=True)
     raise last_exc or RuntimeError("Nenhum provedor de IA disponível.")
+
+
+# ── Triagem: as imagens enviadas são de exame? ────────────────────────────────
+# Antes do laudo de imagem, uma chamada rápida confere cada imagem. Foto de
+# animal, pessoa, objeto etc. recebe uma mensagem clara (ExamReadError) em vez
+# de um "laudo" inventado. Na dúvida a imagem passa: a triagem só barra o que é
+# claramente outra coisa, e qualquer falha dela (timeout, resposta ilegível,
+# provedor fora) deixa a análise seguir — nunca bloqueia um exame real por erro.
+_EXAM_SCREENING_ENABLED = os.environ.get("EXAM_SCREENING_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+_EXAM_SCREENING_TIMEOUT_SECONDS = float(os.environ.get("EXAM_SCREENING_TIMEOUT_SECONDS", "10"))
+_SCREENING_DESCRIPTION_MAX_CHARS = 60
+
+_SCREENING_PROMPT = (
+    "Você faz a triagem dos arquivos enviados a um serviço que analisa exames médicos de imagem.\n\n"
+    "Classifique CADA imagem numerada em um destes tipos:\n"
+    '- "exame": exame de imagem médica (raio-X, tomografia, ressonância, ultrassom, mamografia, '
+    "densitometria, cintilografia, PET, angiografia etc.). Inclui foto da tela/monitor, de filme no "
+    "negatoscópio ou impresso e captura do visualizador DICOM, mesmo com reflexo, moldura, cortes "
+    "parciais ou baixa qualidade.\n"
+    '- "documento": documento médico com texto (laudo, relatório de exame, pedido de exame, resultado '
+    "laboratorial).\n"
+    '- "outro": qualquer coisa que não seja exame nem documento médico: pessoas, selfies, animais, '
+    "paisagens, comida, objetos, veículos, memes, desenhos, capturas de tela de sites ou aplicativos "
+    "não médicos, fotos da pele ou de partes do corpo sem exame de imagem.\n\n"
+    'Na dúvida, escolha "exame". Use "outro" somente quando estiver claro que não é exame nem documento médico.\n\n'
+    "Responda APENAS com JSON, sem texto fora dele:\n"
+    '{"imagens": [{"numero": 1, "tipo": "exame", "descricao": "ressonância do joelho"}]}\n'
+    '"descricao": no máximo 6 palavras, em português, dizendo o que a imagem mostra.'
+)
+
+
+def _rejected_images(text: str, num_images: int) -> list[tuple[int, str]]:
+    """(número, descrição) das imagens classificadas como "outro". Resposta ilegível → nenhuma."""
+    from core.annotations import _extract_json
+
+    data = _extract_json(text)
+    items = data.get("imagens") if isinstance(data, dict) else data
+    if not isinstance(items, list):
+        return []
+    rejected = []
+    for position, item in enumerate(items, 1):
+        if not isinstance(item, dict) or str(item.get("tipo", "")).strip().lower() != "outro":
+            continue
+        try:
+            number = int(item.get("numero", position))
+        except (TypeError, ValueError):
+            number = position
+        if not 1 <= number <= num_images:
+            continue
+        description = " ".join(str(item.get("descricao") or "").split())[:_SCREENING_DESCRIPTION_MAX_CHARS]
+        rejected.append((number, description.rstrip(".").lower()))
+    return sorted(set(rejected))
+
+
+def _screening_message(rejected: list[tuple[int, str]], num_images: int) -> str:
+    accepted = "raio-X, tomografia, ressonância, ultrassom ou laudo"
+    if num_images == 1:
+        seen = f" (parece ser: {rejected[0][1]})" if rejected[0][1] else ""
+        return (
+            f"A imagem enviada não parece ser um exame médico{seen}. "
+            f"Envie as imagens do exame ({accepted}) para que a análise possa ser feita."
+        )
+    parts = [f"{n}{f' ({d})' if d else ''}" for n, d in rejected]
+    listed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])} e {parts[-1]}"
+    if len(rejected) == num_images:
+        return (
+            "Nenhuma das imagens enviadas parece ser um exame médico. "
+            f"Envie as imagens do exame ({accepted}) para que a análise possa ser feita."
+        )
+    subject = f"A imagem {listed} não parece" if len(rejected) == 1 else f"As imagens {listed} não parecem"
+    return (
+        f"{subject} ser exame médico. Remova-as e envie apenas as imagens do exame ({accepted})."
+    )
+
+
+def screen_exam_images(
+    gemini_client: genai.Client | None,
+    model_name: str,
+    anthropic_api_key: str,
+    exam_images: list[tuple[bytes, str]],
+    deadline: float | None,
+    on_late_usage: Callable[[dict], None] | None = None,
+    *,
+    ai_session_id: str | None = None,
+    ai_trace_id: str | None = None,
+    posthog_distinct_id: str | None = None,
+    posthog_client=None,
+) -> list[dict]:
+    """Confere se as imagens são de exame. Retorna o uso de tokens da triagem.
+
+    Levanta ExamReadError (mensagem para o usuário) quando alguma imagem
+    claramente não é exame nem documento médico.
+    """
+    own_deadline = time.monotonic() + _EXAM_SCREENING_TIMEOUT_SECONDS
+    screening_deadline = min(deadline, own_deadline) if deadline else own_deadline
+    try:
+        text, item, _ = _generate_structured_text(
+            gemini_client, model_name, anthropic_api_key, exam_images, _SCREENING_PROMPT, screening_deadline,
+            prefer_claude=False, json_mode=True, ai_session_id=ai_session_id, ai_trace_id=ai_trace_id,
+            posthog_distinct_id=posthog_distinct_id, posthog_client=posthog_client,
+        )
+    except Exception:
+        logger.warning("Triagem das imagens indisponível; a análise segue sem ela.", exc_info=True)
+        return []
+    usage = [item] if item else []
+    rejected = _rejected_images(text, len(exam_images))
+    if not rejected:
+        return usage
+    logger.info("Triagem recusou %d de %d imagem(ns) por não serem exame.", len(rejected), len(exam_images))
+    # A análise para aqui: o custo da triagem não chega ao resultado, então é
+    # contabilizado como o de uma chamada descartada.
+    if on_late_usage is not None:
+        for usage_item in usage:
+            try:
+                on_late_usage(usage_item)
+            except Exception:
+                logger.exception("Falha ao contabilizar uso da triagem recusada")
+    raise ExamReadError(_screening_message(rejected, len(exam_images)))
 
 
 def _clinical_history(description: str) -> str:
@@ -1817,6 +1989,8 @@ def analyze_exam_from_bytes(
         processed_bytes, mime_type = _process_image_bytes(raw_bytes)
         exam_images.append((processed_bytes, mime_type))
 
+    started = time.monotonic()
+    api_key, anthropic_api_key = configured(api_key), configured(anthropic_api_key)
     exam_category = exam_category if exam_category in EXAM_CATEGORIES else "imagem"
     cache_key = _analysis_cache_key(
         [data for data, _ in exam_images], f"{exam_category}|{user_description}", model_name, bool(anthropic_api_key)
@@ -1825,7 +1999,7 @@ def analyze_exam_from_bytes(
     if cached_result:
         return cached_result
 
-    deadline = time.monotonic() + _ANALYSIS_BUDGET_SECONDS
+    deadline = started + _ANALYSIS_BUDGET_SECONDS - _RESPONSE_MARGIN_SECONDS
     if posthog_client is not None:
         ai_trace_id = ai_trace_id or str(uuid.uuid4())
         ai_session_id = f"analysis-{ai_trace_id}"
@@ -1845,6 +2019,18 @@ def analyze_exam_from_bytes(
         )
         _store_cached_analysis(cache_key, result)
         return result
+
+    screening_usage: list[dict] = []
+    if _EXAM_SCREENING_ENABLED:
+        _notify(on_progress, "verificando_imagens")
+        screening_usage = screen_exam_images(
+            gemini_client, model_name, anthropic_api_key, exam_images, deadline, on_late_usage,
+            ai_session_id=ai_session_id, ai_trace_id=ai_trace_id,
+            posthog_distinct_id=posthog_distinct_id, posthog_client=posthog_client,
+        )
+
+    if gemini_client is not None and anthropic_api_key and _gemini_circuit_is_open():
+        gemini_client = None  # a triagem acabou de receber erro de permissão/chave do Gemini
 
     keyword_type = detect_exam_type(exam_filename, user_description)
     if keyword_type != "geral":
@@ -1895,6 +2081,7 @@ def analyze_exam_from_bytes(
         deadline, validated_case_text, on_late_usage, on_progress,
         posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
     )
+    usage = screening_usage + usage
 
     # Referências do PubMed: só termos do dicionário saem para o NCBI (nada do
     # paciente). Roda em paralelo com a marcação das imagens.
@@ -1905,16 +2092,18 @@ def analyze_exam_from_bytes(
     references_executor.shutdown(wait=False)
 
     marcacoes: list[dict] = []
-    if _ANNOTATIONS_ENABLED:
+    if _ANNOTATIONS_ENABLED and not _deadline_expired(deadline, reserve_seconds=_ANNOTATION_MIN_SECONDS):
         _notify(on_progress, "marcando_achados")
         marcacoes, annotation_usage = _locate_findings(
             gemini_client, model_name, anthropic_api_key, exam_images, final_analysis,
-            posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
+            posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id, deadline=deadline,
         )
         usage.extend(annotation_usage)
+    elif _ANNOTATIONS_ENABLED:
+        logger.info("Sem tempo para marcar os achados; o laudo segue sem marcações.")
 
     try:
-        references = references_future.result(timeout=pubmed.timeout_seconds() + 2)
+        references = references_future.result(timeout=_remaining_seconds(deadline, pubmed.timeout_seconds() + 2))
     except Exception:
         logger.warning("Referências do PubMed indisponíveis.", exc_info=True)
         references = []
@@ -1934,5 +2123,7 @@ def analyze_exam_from_bytes(
         "usage": usage,
         "cache_hit": False,
     }
-    _store_cached_analysis(cache_key, result)
+    if _DEADLINE_NOTICE not in final_analysis:  # laudo resumido: reenviar deve tentar de novo
+        _store_cached_analysis(cache_key, result)
+    logger.info("Análise concluída em %.1fs (modelo: %s).", time.monotonic() - started, model_used)
     return result

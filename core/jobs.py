@@ -120,7 +120,7 @@ def get_job_status(job_id: str) -> dict:
     Em "finished", inclui "result" (o dict retornado por run_analysis_job).
     Em "failed", inclui "error" com uma mensagem genérica (não expõe traceback interno).
     Sempre inclui "owner" (gravado no enqueue) para a rota conferir quem consulta
-    e "stage" (etapa atual: na_fila, identificando_regiao, analisando, consenso, salvando).
+    e "stage" (etapa atual: na_fila, verificando_imagens, identificando_regiao, analisando, consenso, salvando).
     """
     connection = _get_redis_connection()
     if connection is None:
@@ -142,8 +142,10 @@ def get_job_status(job_id: str) -> dict:
 
 
 def _env_first(*names: str) -> str:
+    from core.env import configured
+
     for name in names:
-        value = os.environ.get(name, "").strip()
+        value = configured(os.environ.get(name, ""))
         if value:
             return value
     return ""

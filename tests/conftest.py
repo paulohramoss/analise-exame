@@ -41,6 +41,9 @@ os.environ.setdefault("ANNOTATIONS_ENABLED", "0")
 # Referências do PubMed: chamada de rede ao NCBI depois do laudo. Desligada por
 # padrão; test_pubmed.py liga e simula as respostas.
 os.environ.setdefault("PUBMED_REFERENCES_ENABLED", "0")
+# Triagem "a imagem é de exame?": chamada extra à IA antes do laudo. Os testes
+# que simulam o modelo não a esperam; test_exam_screening.py liga e testa.
+os.environ.setdefault("EXAM_SCREENING_ENABLED", "0")
 
 import fakeredis
 import pytest

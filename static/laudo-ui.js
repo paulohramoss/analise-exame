@@ -126,7 +126,8 @@
 
     const STAGES = {
         na_fila: 'Na fila — aguardando um analisador livre',
-        identificando_regiao: 'Identificando a região anatômica',
+        verificando_imagens: 'Verificando se as imagens são de exame',
+        identificando_regiao:'Identificando a região anatômica',
         analisando: 'Analisando as imagens com os modelos de IA',
         consenso: 'Gerando o laudo de consenso entre os modelos',
         marcando_achados: 'Marcando os achados nas imagens',

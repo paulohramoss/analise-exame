@@ -32,8 +32,10 @@ _NO_CASE = object()
 @lru_cache(maxsize=1)
 def _get_client():
     """Retorna cliente Supabase (singleton). None se não configurado."""
-    url = os.environ.get("SUPABASE_URL", "")
-    key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    from core.env import configured
+
+    url = configured(os.environ.get("SUPABASE_URL", ""))
+    key = configured(os.environ.get("SUPABASE_SERVICE_KEY", ""))
     if not url or not key:
         logger.warning("SUPABASE_URL ou SUPABASE_SERVICE_KEY não configurados — persistência desativada.")
         return None

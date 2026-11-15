@@ -233,3 +233,11 @@ def test_pdf_protegido_ou_corrompido_avisa(client, monkeypatch):
         "exam_images": [(io.BytesIO(b"%PDF-1.4 corrompido"), "x.pdf")], "privacy_consent": "accepted",
     }, content_type="multipart/form-data", follow_redirects=True)
     assert "PDF protegido por senha não é aceito" in resp.get_data(as_text=True)
+
+
+def test_jfif_is_accepted_as_jpeg():
+    """.jfif é JPEG (Windows/navegadores salvam fotos assim): aceito e tratado como image/jpeg."""
+    from web import uploads
+
+    assert uploads.allowed_file("exame.JFIF")
+    assert uploads._MIME_BY_EXTENSION["jfif"] == "image/jpeg"

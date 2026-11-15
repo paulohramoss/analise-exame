@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 UPLOAD_FOLDER = Path(tempfile.gettempdir()) / "analise_exame_uploads"
 UPLOAD_FOLDER.mkdir(exist_ok=True)
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "dcm", "pdf"}
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "jfif", "webp", "gif", "dcm", "pdf"}
 MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20MB
 MAX_IMAGES_PER_ANALYSIS = 5
 # Acesso admin (/admin/entrar) é usado para testes internos com séries DICOM
@@ -28,7 +28,7 @@ MAX_IMAGES_PER_ANALYSIS = 5
 MAX_IMAGES_PER_ANALYSIS_ADMIN = int(os.environ.get("MAX_IMAGES_PER_ANALYSIS_ADMIN", "20"))
 
 _MIME_BY_EXTENSION = {
-    "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+    "jpg": "image/jpeg", "jpeg": "image/jpeg", "jfif": "image/jpeg", "png": "image/png",
     "webp": "image/webp", "gif": "image/gif",
 }
 
