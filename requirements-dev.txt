@@ -8,7 +8,7 @@ annotated-types==0.8.0
     # via
     #   -c requirements.txt
     #   pydantic
-anthropic==2.6.0
+anthropic==2.8.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -110,7 +110,7 @@ google-auth==2.56.2
     # via
     #   -c requirements.txt
     #   google-genai
-google-genai==3.0.0
+google-genai==3.3.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -279,11 +279,11 @@ platformdirs==4.13.0
     # via pip-audit
 pluggy==1.6.0
     # via pytest
-postgrest==2.34.0
+postgrest==2.34.1
     # via
     #   -c requirements.txt
     #   supabase
-posthog==7.84.2
+posthog==7.91.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -337,7 +337,7 @@ pyjwt==2.15.1
     #   supabase-auth
 pyparsing==3.3.3
     # via pip-requirements-parser
-pypdfium2==5.14.0
+pypdfium2==5.15.2
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -355,7 +355,7 @@ python-dotenv==1.2.4
     # via
     #   -c requirements.txt
     #   -r requirements.in
-realtime==2.34.0
+realtime==2.34.1
     # via
     #   -c requirements.txt
     #   supabase
@@ -382,9 +382,9 @@ rq==3.0.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
-ruff==0.17.4
+ruff==0.17.5
     # via -r requirements-dev.in
-sentry-sdk==2.74.0
+sentry-sdk==2.75.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -401,19 +401,19 @@ sortedcontainers==2.4.0
     # via
     #   cyclonedx-python-lib
     #   fakeredis
-storage3==2.34.0
+storage3==2.34.1
     # via
     #   -c requirements.txt
     #   supabase
-supabase==2.34.0
+supabase==2.34.1
     # via
     #   -c requirements.txt
     #   -r requirements.in
-supabase-auth==2.34.0
+supabase-auth==2.34.1
     # via
     #   -c requirements.txt
     #   supabase
-supabase-functions==2.34.0
+supabase-functions==2.34.1
     # via
     #   -c requirements.txt
     #   supabase
