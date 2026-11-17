@@ -10,7 +10,10 @@ from datetime import date, timedelta
 ASAAS_SANDBOX_URL = "https://sandbox.asaas.com/api/v3"
 ASAAS_PROD_URL = "https://www.asaas.com/api/v3"
 
-CONFIRMED_STATUSES = {"RECEIVED", "CONFIRMED"}
+# Status do Asaas que contam como pago. Tem que bater com v_pagos do trigger
+# atualizar_premium_cliente (supabase_migrations/2026-11-17-premium-fonte-unica.sql);
+# tests/test_premium_fonte_unica.py confere.
+CONFIRMED_STATUSES = frozenset({"CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"})
 
 
 def _base_url() -> str:

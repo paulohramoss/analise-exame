@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 
 from core import patient_crypto
+from core.asaas import CONFIRMED_STATUSES
 from core.ttl_cache import TTLCache
 from collections import Counter
 
@@ -254,7 +255,7 @@ def buscar_pagamento_confirmado_por_email(
             db.table("pagamentos")
             .select("asaas_payment_id, external_reference, created_at, payload_asaas")
             .in_("external_reference", referencias)
-            .in_("status", ["CONFIRMED", "RECEIVED"])
+            .in_("status", sorted(CONFIRMED_STATUSES))
             .order("created_at", desc=True)
             .limit(1)
             .execute()
@@ -1644,7 +1645,7 @@ def cliente_tem_plano_pago(email: str, planos: tuple[str, ...] = ("mensal", "sem
             db.table("pagamentos")
             .select("asaas_payment_id")
             .in_("external_reference", [email] + [f"{email}|{plano}" for plano in planos])
-            .in_("status", ["CONFIRMED", "RECEIVED"])
+            .in_("status", sorted(CONFIRMED_STATUSES))
             .limit(1)
             .execute()
         )
