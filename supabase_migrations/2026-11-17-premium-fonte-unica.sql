@@ -14,7 +14,30 @@
 --    e desliga clientes.premium se a validade zerar;
 --  * plano desconhecido conta como mensal (conservador).
 --
+-- Robustez (review do PR #46):
+--  * transições NULL-safe: pagamento criado com status NULL também libera ao
+--    confirmar (pagamentos.status passa a ter default 'PENDING', como em prod);
+--  * revogação reconhece toda a família de estorno/chargeback do Asaas e
+--    desconta UMA vez, mesmo passando por estados intermediários
+--    (ex.: CONFIRMED → REFUND_IN_PROGRESS → REFUNDED). "Já foi creditado" é
+--    confirmado_em preenchido, gravado pelo próprio trigger na confirmação;
+--  * chargeback revertido (volta a RECEIVED/CONFIRMED) devolve os dias;
+--  * pagamentos_status_check passa a aceitar RECEIVED_IN_CASH,
+--    REFUND_IN_PROGRESS e PARTIALLY_REFUNDED: o Asaas manda esses status e o
+--    UPDATE do webhook falhava (pagamento em dinheiro nunca liberava acesso).
+--
 -- Idempotente.
+
+ALTER TABLE public.pagamentos ALTER COLUMN status SET DEFAULT 'PENDING';
+
+ALTER TABLE public.pagamentos DROP CONSTRAINT IF EXISTS pagamentos_status_check;
+ALTER TABLE public.pagamentos ADD CONSTRAINT pagamentos_status_check CHECK (status = ANY (ARRAY[
+    'PENDING','AWAITING_RISK_ANALYSIS','APPROVED_BY_RISK_ANALYSIS',
+    'CONFIRMED','RECEIVED','RECEIVED_IN_CASH',
+    'REFUNDED','PARTIALLY_REFUNDED','REFUND_REQUESTED','REFUND_IN_PROGRESS',
+    'OVERDUE','CHARGEBACK_DISPUTE','CHARGEBACK_REQUESTED','AWAITING_CHARGEBACK_REVERSAL',
+    'DUNNING_REQUESTED','DUNNING_RECEIVED'
+]));
 
 CREATE OR REPLACE FUNCTION public.atualizar_premium_cliente()
  RETURNS trigger
@@ -22,9 +45,15 @@ CREATE OR REPLACE FUNCTION public.atualizar_premium_cliente()
  SET search_path TO ''
 AS $function$
 DECLARE
-    v_duracao interval;
+    v_duracao   interval;
+    v_pagos     text[] := ARRAY['CONFIRMED','RECEIVED','RECEIVED_IN_CASH'];
+    v_revogados text[] := ARRAY['REFUNDED','PARTIALLY_REFUNDED','REFUND_REQUESTED',
+                                'REFUND_IN_PROGRESS','CHARGEBACK_REQUESTED',
+                                'CHARGEBACK_DISPUTE','AWAITING_CHARGEBACK_REVERSAL'];
+    v_old       text := coalesce(OLD.status, '');
+    v_new       text := coalesce(NEW.status, '');
 BEGIN
-    IF NEW.cliente_id IS NULL THEN
+    IF NEW.cliente_id IS NULL OR v_new = v_old THEN
         RETURN NEW;
     END IF;
 
@@ -35,9 +64,9 @@ BEGIN
                     ELSE INTERVAL '30 days'  -- plano desconhecido: conservador
                  END;
 
-    -- Pagamento confirmado: libera/renova
-    IF NEW.status IN ('CONFIRMED','RECEIVED')
-       AND OLD.status NOT IN ('CONFIRMED','RECEIVED') THEN
+    -- Entrou em "pago" vindo de qualquer outro estado (inclusive NULL ou de um
+    -- chargeback revertido): libera/renova, somando a partir do vencimento atual.
+    IF v_new = ANY (v_pagos) AND NOT (v_old = ANY (v_pagos)) THEN
 
         UPDATE public.clientes
         SET premium        = TRUE,
@@ -47,9 +76,10 @@ BEGIN
 
         NEW.confirmado_em = NOW();
 
-    -- Pagamento que tinha sido confirmado foi reembolsado / contestado: devolve os dias
-    ELSIF NEW.status IN ('REFUNDED','CHARGEBACK_REQUESTED')
-          AND OLD.status IN ('CONFIRMED','RECEIVED') THEN
+    -- Entrou na família de estorno/chargeback vindo de fora dela, e o pagamento
+    -- já tinha sido creditado: desconta uma vez só.
+    ELSIF v_new = ANY (v_revogados) AND NOT (v_old = ANY (v_revogados))
+          AND (v_old = ANY (v_pagos) OR NEW.confirmado_em IS NOT NULL) THEN
 
         UPDATE public.clientes
         SET premium_expira = premium_expira - v_duracao,

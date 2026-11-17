@@ -58,7 +58,7 @@ create table if not exists public.pagamentos (
     external_reference   text,
     plano                text,
     forma_pagamento      text,
-    status               text,
+    status               text not null default 'PENDING',
     payload_asaas        jsonb,
     lembrete_enviado_em  timestamptz,               -- lembrete de checkout abandonado já enviado
     created_at           timestamptz not null default now()
