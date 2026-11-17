@@ -47,30 +47,55 @@ def email_from_reference(ext_ref: str | None) -> str:
     return str(ext_ref or "").split("|", 1)[0].strip().lower()
 
 
-def plan_valid_until(plan_key: str, inicio_iso: str | None) -> float | None:
-    if not inicio_iso:
+def _to_epoch(iso: str | None) -> float | None:
+    if not iso:
         return None
     try:
-        inicio = datetime.fromisoformat(str(inicio_iso).replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
     except ValueError:
-        logger.warning("Data de início de plano ilegível: %r", inicio_iso)
+        logger.warning("Data de plano ilegível: %r", iso)
         return None
-    if inicio.tzinfo is None:
-        inicio = inicio.replace(tzinfo=config.LOCAL_TZ or timezone.utc)
-    return inicio.timestamp() + config.PLANS[plan_key]["cookie_max_age"]
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=config.LOCAL_TZ or timezone.utc)
+    return dt.timestamp()
+
+
+def plan_valid_until(plan_key: str, inicio_iso: str | None) -> float | None:
+    """Validade calculada pelo pagamento (início + duração do plano).
+
+    Só é usada quando a validade oficial (clientes.premium_expira) não pode ser
+    lida — banco fora ou ambiente sem banco (testes, local).
+    """
+    inicio = _to_epoch(inicio_iso)
+    if inicio is None:
+        return None
+    return inicio + config.PLANS[plan_key]["cookie_max_age"]
 
 
 def find_active_plan(email: str) -> ActivePlan | None:
     """Plano ativo do e-mail: pagamento confirmado E dentro da validade do plano.
 
-    Antes, qualquer pagamento confirmado — de qualquer data — reemitia o cookie
-    no login, então o plano nunca expirava de fato.
+    A validade oficial é clientes.premium_expira, mantida no banco pelo trigger
+    de pagamentos (soma renovações, desconta reembolsos). É a mesma fonte que a
+    view clientes_premium_ativos usa, então app e relatórios não divergem.
+    O cálculo pelo pagamento (plan_valid_until) fica só como fallback quando o
+    banco não responde.
     """
     result = db.buscar_pagamento_confirmado_por_email(email, planos=tuple(config.PLANS))
     if not result:
         return None
     payment_id, ext_ref, *rest = result
     plan_key = plan_key_from_reference(ext_ref)
+
+    validade = db.buscar_validade_premium(email)
+    if validade is not None:
+        premium, expira_iso = validade
+        valid_until = _to_epoch(expira_iso)
+        if not premium or valid_until is None or valid_until <= time.time():
+            logger.info("Plano inativo no banco (payment_id=%s, plano=%s)", payment_id, plan_key)
+            return None
+        return ActivePlan(payment_id, plan_key, valid_until)
+
     valid_until = plan_valid_until(plan_key, rest[0] if rest else None)
     if valid_until is not None and valid_until <= time.time():
         logger.info("Plano expirado (payment_id=%s, plano=%s)", payment_id, plan_key)
@@ -81,9 +106,9 @@ def find_active_plan(email: str) -> ActivePlan | None:
 def start_premium_session(resp, *, email: str, payment_id: str, plan_key: str, valid_until: float | None = None):
     """Emite o cookie premium (até o fim do plano) e registra a sessão no banco."""
     now = time.time()
-    expires_at = now + config.PLANS[plan_key]["cookie_max_age"]
-    if valid_until is not None:
-        expires_at = min(expires_at, valid_until)
+    # Com a validade oficial em mãos (renovações somadas no banco), o cookie vai
+    # até ela; sem, dura um ciclo do plano.
+    expires_at = valid_until if valid_until is not None else now + config.PLANS[plan_key]["cookie_max_age"]
     max_age = max(int(expires_at - now), 0)
 
     sessao = db.buscar_sessao_cliente(email)
