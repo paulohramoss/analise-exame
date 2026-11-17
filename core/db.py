@@ -283,6 +283,30 @@ def _inicio_do_plano(row: dict) -> str | None:
     return row.get("created_at")
 
 
+def buscar_validade_premium(email: str) -> tuple[bool, str | None] | None:
+    """(premium, premium_expira_iso) do cliente — a validade oficial do plano.
+
+    clientes.premium_expira é mantida pelo trigger trg_premium_ao_confirmar
+    (supabase_migrations/2026-11-17-premium-fonte-unica.sql): soma a duração do
+    plano a cada pagamento confirmado e desconta no reembolso/chargeback.
+
+    None = não foi possível consultar (sem banco, erro, cliente inexistente);
+    quem chama decide o fallback.
+    """
+    db = _get_client()
+    if not db or not email:
+        return None
+    try:
+        res = db.table("clientes").select("premium, premium_expira").eq("email", email).limit(1).execute()
+    except Exception:
+        logger.exception("Erro em buscar_validade_premium")
+        return None
+    if not res.data:
+        return None
+    row = res.data[0]
+    return bool(row.get("premium")), row.get("premium_expira")
+
+
 def buscar_pagamento_id(asaas_payment_id: str) -> str | None:
     """Retorna UUID interno do pagamento pelo ID do Asaas, ou None."""
     db = _get_client()
