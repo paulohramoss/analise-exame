@@ -108,3 +108,38 @@ def test_status_do_trigger_cabem_no_check_constraint():
 def test_transicoes_sao_null_safe():
     sql = MIGRATION.read_text(encoding="utf-8")
     assert "coalesce(OLD.status, '')" in sql
+
+
+def test_status_pagos_do_app_batem_com_o_trigger():
+    """Pagamento que o banco credita (ex.: em dinheiro) também tem que destravar login e checkout."""
+    from core.asaas import CONFIRMED_STATUSES
+
+    sql = MIGRATION.read_text(encoding="utf-8")
+    assert set(CONFIRMED_STATUSES) == _lista_sql(sql, "v_pagos")
+
+
+def test_pagamento_em_dinheiro_conta_como_confirmado(monkeypatch):
+    from core import asaas
+
+    monkeypatch.setattr(asaas, "get_payment", lambda payment_id: {"status": "RECEIVED_IN_CASH"})
+    assert asaas.is_payment_confirmed("pay_1") is True
+
+
+def test_busca_de_pagamento_confirmado_inclui_dinheiro(monkeypatch):
+    capturado = {}
+
+    class _Q:
+        def __getattr__(self, nome):
+            def _f(*args, **kwargs):
+                if nome == "in_" and args[0] == "status":
+                    capturado["status"] = set(args[1])
+                if nome == "execute":
+                    return type("R", (), {"data": []})()
+                return self
+            return _f
+
+    monkeypatch.setattr(db, "_get_client", lambda: type("C", (), {"table": lambda self, t: _Q()})())
+
+    db.buscar_pagamento_confirmado_por_email("a@example.com")
+
+    assert "RECEIVED_IN_CASH" in capturado["status"]
