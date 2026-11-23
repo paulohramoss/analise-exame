@@ -24,6 +24,7 @@ from PIL import Image, ImageOps
 
 from core import annotations, dynamometry, lab_tests, pubmed
 from core.env import configured
+from core import ai_monitor, shared_cache
 from core.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -176,7 +177,11 @@ def _get_cached_analysis(cache_key: str) -> dict | None:
         return None
     cached = _analysis_result_cache.get(cache_key)
     if cached is None:
-        return None
+        # Outra instância (ou o worker) pode ter feito a mesma análise.
+        cached = shared_cache.get("analise", cache_key)
+        if not isinstance(cached, dict):
+            return None
+        _analysis_result_cache.set(cache_key, cached)
     logger.info("Cache hit para análise (hash=%s...)", cache_key[:12])
     result = dict(cached)
     result["cache_hit"] = True
@@ -188,6 +193,8 @@ def _store_cached_analysis(cache_key: str, result: dict) -> None:
     if not _ANALYSIS_RESULT_CACHE_ENABLED:
         return
     _analysis_result_cache.set(cache_key, result)
+    shared_cache.set("analise", cache_key, {k: v for k, v in result.items() if k != "usage"},
+                     _ANALYSIS_RESULT_CACHE_TTL_SECONDS)
 
 
 def _make_gemini_client(api_key: str, posthog_client=None):
@@ -1797,6 +1804,7 @@ def _analyze_structured_exam(
     try:
         data = module.compute(module.parse_extraction(text))
     except ValueError as exc:
+        ai_monitor.registrar("extracao_vazia" if text and "{" in text else "json_invalido", f"{category}: {exc}")
         # Engano comum: enviar o PEDIDO de exames (lista do que colher) em vez do resultado.
         if re.search(r"solicita[çc][ãa]o de exame|solicito (o |os )?exame|pedido de exame|requisi[çc][ãa]o", user_description, re.I):
             raise ExamReadError(
@@ -2018,6 +2026,7 @@ def analyze_exam_from_bytes(
             deadline, on_progress, posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
         )
         _store_cached_analysis(cache_key, result)
+        ai_monitor.registrar_duracao(time.monotonic() - started)
         return result
 
     screening_usage: list[dict] = []
@@ -2126,4 +2135,5 @@ def analyze_exam_from_bytes(
     if _DEADLINE_NOTICE not in final_analysis:  # laudo resumido: reenviar deve tentar de novo
         _store_cached_analysis(cache_key, result)
     logger.info("Análise concluída em %.1fs (modelo: %s).", time.monotonic() - started, model_used)
+    ai_monitor.registrar_duracao(time.monotonic() - started)
     return result

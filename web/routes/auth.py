@@ -6,7 +6,7 @@ import logging
 from flask import Blueprint, flash, g, make_response, redirect, render_template, request, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from core import cost_tracking, db, mailer
+from core import ai_monitor, cost_tracking, db, mailer
 from core.email_validation import validar_email_cadastro
 from web import accounts, config, posthog, security
 from web.extensions import rate_limit
@@ -64,6 +64,9 @@ def admin_custos():
         alert_ratio=ratio_limit,
         alert_minimum=minimum,
         persistent=cost_tracking.has_persistent_storage(),
+        falhas_ia=ai_monitor.resumo_do_dia(),
+        ai_alert_threshold=ai_monitor.limite_alerta(),
+        ai_slow_seconds=ai_monitor.limite_lenta_segundos(),
     )
 
 

@@ -91,8 +91,8 @@ def run_pending_jobs():
     from rq.worker import SimpleWorker
 
     def _run(conn) -> None:
-        queue = rq.Queue(jobs._QUEUE_NAME, connection=conn)
-        SimpleWorker([queue], connection=conn).work(burst=True)
+        queues = [rq.Queue(name, connection=conn) for name in (jobs._PRIORITY_QUEUE_NAME, jobs._QUEUE_NAME)]
+        SimpleWorker(queues, connection=conn).work(burst=True)
 
     return _run
 

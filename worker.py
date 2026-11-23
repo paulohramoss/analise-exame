@@ -77,10 +77,11 @@ def main() -> None:
         )
         sys.exit(1)
 
-    queue = jobs.get_queue()
-    if queue is None:
+    queues = jobs.get_queues()
+    if not queues:
         logger.error("Falha ao conectar ao Redis da fila de análise.")
         sys.exit(1)
+    queue = queues[0]
 
     import rq
 
@@ -88,9 +89,10 @@ def main() -> None:
     # portável — necessária no Windows, onde os.fork() não existe. Em Linux
     # (produção), o Worker padrão isola cada job num processo filho.
     worker_class = rq.worker.SimpleWorker if os.name == "nt" else rq.Worker
-    worker = worker_class([queue], connection=queue.connection)
+    # Ordem importa: o RQ sempre tenta a primeira fila (plano pago) antes da segunda.
+    worker = worker_class(queues, connection=queue.connection)
 
-    logger.info("Worker iniciado (fila=%s, classe=%s)", queue.name, worker_class.__name__)
+    logger.info("Worker iniciado (filas=%s, classe=%s)", ",".join(q.name for q in queues), worker_class.__name__)
     if posthog_log_capture_enabled():
         posthog_logger.info(
             "analysis_queue_worker_started",

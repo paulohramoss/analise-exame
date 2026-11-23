@@ -29,6 +29,9 @@ from core.logging_config import bind_trace_id, current_trace_id, unbind_trace_id
 logger = logging.getLogger(__name__)
 
 _QUEUE_NAME = os.environ.get("ANALYSIS_QUEUE_NAME", "analysis")
+# Plano pago (premium e API) passa na frente do trial: o worker esvazia esta fila primeiro.
+_PRIORITY_QUEUE_NAME = f"{_QUEUE_NAME}-prioridade"
+_PRIORITY_MODES = {"premium", "api"}
 _JOB_TIMEOUT_SECONDS = int(os.environ.get("ANALYSIS_JOB_TIMEOUT_SECONDS", "180"))
 _JOB_RESULT_TTL_SECONDS = int(os.environ.get("ANALYSIS_JOB_RESULT_TTL_SECONDS", "3600"))
 
@@ -65,13 +68,55 @@ def _get_redis_connection():
     return _redis_conn
 
 
-def get_queue():
-    """Retorna a Queue RQ, ou None se Redis não estiver disponível."""
+def _retries() -> int:
+    try:
+        return max(0, int(os.environ.get("ANALYSIS_JOB_RETRIES", "1")))
+    except ValueError:
+        return 1
+
+
+def get_queue(priority: bool = False):
+    """Retorna a Queue RQ (a prioritária para plano pago), ou None se Redis não estiver disponível."""
     connection = _get_redis_connection()
     if connection is None:
         return None
     import rq
-    return rq.Queue(_QUEUE_NAME, connection=connection)
+    return rq.Queue(_PRIORITY_QUEUE_NAME if priority else _QUEUE_NAME, connection=connection)
+
+
+def get_queues() -> list:
+    """Filas na ordem em que o worker deve consumir: prioritária primeiro."""
+    queues = [get_queue(priority=True), get_queue()]
+    return [q for q in queues if q is not None]
+
+
+def requeue_failed(limit: int = 100) -> dict:
+    """Reprocessa jobs que falharam por erro de infraestrutura/IA (não os de arquivo inválido).
+
+    Uso: `python -m scripts.reprocessar_fila`. Jobs com `user_error` (arquivo não é
+    exame, pedido em vez de resultado…) falhariam de novo e ficam de fora.
+    """
+    connection = _get_redis_connection()
+    if connection is None:
+        return {"reprocessados": 0, "ignorados": 0, "disponivel": False}
+    import rq
+
+    stats = {"reprocessados": 0, "ignorados": 0, "disponivel": True}
+    for queue in get_queues():
+        registry = rq.registry.FailedJobRegistry(queue=queue)
+        for job_id in registry.get_job_ids()[:limit]:
+            try:
+                job = rq.job.Job.fetch(job_id, connection=connection)
+            except Exception:
+                continue
+            if (job.meta or {}).get("user_error"):
+                stats["ignorados"] += 1
+                continue
+            job.meta["stage"] = "na_fila"
+            job.save_meta()
+            registry.requeue(job_id)
+            stats["reprocessados"] += 1
+    return stats
 
 
 def health_check_redis() -> bool:
@@ -98,10 +143,14 @@ def enqueue_analysis(owner: str | None = None, **kwargs) -> str | None:
     `owner` identifica quem pode consultar o resultado (ver get_job_status) e
     fica em job.meta, fora dos argumentos da função.
     """
-    queue = get_queue()
+    priority = kwargs.get("mode") in _PRIORITY_MODES
+    queue = get_queue(priority=priority)
     if queue is None:
         return None
+    import rq
+
     kwargs.setdefault("trace_id", current_trace_id())
+    retries = _retries()
     job = queue.enqueue(
         "core.jobs.run_analysis_job",
         kwargs=kwargs,
@@ -109,8 +158,10 @@ def enqueue_analysis(owner: str | None = None, **kwargs) -> str | None:
         result_ttl=_JOB_RESULT_TTL_SECONDS,
         failure_ttl=_JOB_RESULT_TTL_SECONDS,
         meta={"owner": owner, "stage": "na_fila"},
+        # Sem intervalo: volta direto para a fila (não depende do scheduler do RQ).
+        retry=rq.Retry(max=retries) if retries else None,
     )
-    logger.info("Análise enfileirada (job_id=%s, mode=%s)", job.id, kwargs.get("mode"))
+    logger.info("Análise enfileirada (job_id=%s, mode=%s, fila=%s)", job.id, kwargs.get("mode"), queue.name)
     return job.id
 
 
@@ -212,6 +263,17 @@ def _set_meta(key: str, value) -> None:
         logger.debug("Não foi possível atualizar job.meta[%s]", key, exc_info=True)
 
 
+def _disable_retry() -> None:
+    try:
+        import rq
+
+        job = rq.get_current_job()
+        if job is not None:
+            job.retries_left = None
+    except Exception:
+        logger.debug("Sem job atual para desligar a retentativa.", exc_info=True)
+
+
 def _set_stage(stage: str) -> None:
     """Publica a etapa atual em job.meta (lida pela página de espera via get_job_status)."""
     _set_meta("stage", stage)
@@ -235,6 +297,11 @@ def _run_analysis(
 
         if isinstance(exc, ExamReadError):
             _set_meta("user_error", str(exc))  # mensagem para o usuário (ver get_job_status)
+            _disable_retry()  # o mesmo arquivo falharia de novo
+        else:
+            from core import ai_monitor
+
+            ai_monitor.registrar("erro_provedor", type(exc).__name__)
         raise
     return _finish_analysis(
         result, mode=mode, images=images, image_meta=image_meta, persist=persist, cost_scopes=cost_scopes,

@@ -89,6 +89,23 @@
             </table>
         </div>
         <p class="note">Alerta (log de erro, enviado ao Sentry) quando o consenso rápido passa de {{ '%.0f' | format(alert_ratio * 100) }}% com pelo menos {{ alert_minimum }} análises no dia — ajuste em CONSENSUS_FALLBACK_ALERT_RATIO e CONSENSUS_FALLBACK_ALERT_MIN_ANALYSES. Custo estimado pela tabela de preços do .env.</p>
+
+        <h2>Falhas de IA hoje</h2>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Tipo</th><th>Hoje</th><th>Alerta</th></tr></thead>
+                <tbody>
+                    {% for f in falhas_ia %}
+                    <tr>
+                        <td>{{ f.descricao }}</td>
+                        <td class="{{ 'rate-bad' if f.total >= ai_alert_threshold }}">{{ f.total }}</td>
+                        <td>{{ 'disparado' if f.alertado else '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="note">Alerta (log de erro para o Sentry e e-mail para AI_ALERT_EMAIL) a partir de {{ ai_alert_threshold }} falhas do mesmo tipo no dia — AI_ALERT_THRESHOLD. "Lenta" = acima de {{ ai_slow_seconds }}s (AI_SLOW_ANALYSIS_SECONDS).</p>
     </main>
 
     {{ layout.site_footer() }}

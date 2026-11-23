@@ -21,6 +21,7 @@ Falha de rede, timeout ou PubMed fora do ar → lista vazia, e o laudo sai sem
 a seção. Resultados ficam em cache por 7 dias (as lesões se repetem muito).
 """
 
+import hashlib
 import logging
 import os
 import re
@@ -30,6 +31,7 @@ from datetime import date
 
 import requests
 
+from core import shared_cache
 from core.ttl_cache import TTLCache
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,7 @@ _MAX_TOPICS = int(os.environ.get("PUBMED_MAX_TOPICS", "3"))
 _YEARS = int(os.environ.get("PUBMED_YEARS", "15"))
 _CANDIDATES = int(os.environ.get("PUBMED_CANDIDATES_PER_QUERY", "6"))
 _cache = TTLCache(maxsize=1024, ttl_seconds=7 * 24 * 3600)
+_SHARED_TTL_SECONDS = 30 * 24 * 3600  # artigos não mudam; buscas, quase nunca
 
 SECTION_TITLE = "## 7. REFERÊNCIAS CIENTÍFICAS (PubMed)"
 
@@ -270,21 +273,33 @@ def _get(endpoint: str, params: dict, deadline: float) -> dict:
 
 def _esearch(query: str, deadline: float) -> list[str]:
     cached = _cache.get(("s", query))
+    if cached is None:
+        cached = shared_cache.get("pubmed-s", hashlib.sha256(query.encode("utf-8")).hexdigest())
+        if isinstance(cached, list):
+            _cache.set(("s", query), cached)
     if cached is not None:
         return cached
     data = _get("esearch.fcgi", {"term": query, "retmax": _CANDIDATES, "sort": "relevance"}, deadline)
     ids = data.get("esearchresult", {}).get("idlist", [])
     _cache.set(("s", query), ids)
+    shared_cache.set("pubmed-s", hashlib.sha256(query.encode("utf-8")).hexdigest(), ids, _SHARED_TTL_SECONDS)
     return ids
 
 
 def _esummary(pmids: list[str], deadline: float) -> dict:
+    for pmid in pmids:
+        if _cache.get(("a", pmid)) is None:
+            shared = shared_cache.get("pubmed-a", pmid)
+            if isinstance(shared, dict):
+                _cache.set(("a", pmid), shared)
     missing = [p for p in pmids if _cache.get(("a", p)) is None]
     if missing:
         result = _get("esummary.fcgi", {"id": ",".join(missing)}, deadline).get("result", {})
         for pmid in missing:
             if isinstance(result.get(pmid), dict) and result[pmid].get("title"):
-                _cache.set(("a", pmid), _article_from_summary(pmid, result[pmid]))
+                article = _article_from_summary(pmid, result[pmid])
+                _cache.set(("a", pmid), article)
+                shared_cache.set("pubmed-a", pmid, article, _SHARED_TTL_SECONDS)
     return {p: _cache.get(("a", p)) for p in pmids if _cache.get(("a", p))}
 
 
