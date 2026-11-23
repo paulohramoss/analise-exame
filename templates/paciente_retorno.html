@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>O que mudou — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <link rel="stylesheet" href="{{ static_url('prontuario.css') }}">
+    <script src="{{ static_url('laudo-ui.js') }}"></script>
+</head>
+<body>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("pacientes") }}
+    {% endcall %}
+
+    {% set rotulos = {"melhorou": "Melhorou", "piorou": "Piorou", "estavel": "Estável", "neutra": "Mudou (na faixa)",
+                      "nova": "Novo", "ausente": "Não repetido", "unidade_diferente": "Unidade diferente"} %}
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">O que mudou — {{ paciente.nome or 'Paciente' }}</h1>
+                <p class="page-subtitle">
+                    {{ tipo|exam_label }}: {{ antes.created_at|datetime_br }} → {{ depois.created_at|datetime_br }}
+                </p>
+            </div>
+            <div class="pt-actions">
+                <a class="btn-secondary" href="{{ url_for('pacientes.detalhe', paciente_id=paciente.id) }}">Voltar ao prontuário</a>
+            </div>
+        </div>
+
+        <form method="GET" class="card pt-form cmp-picker" action="{{ url_for('pacientes.retorno', paciente_id=paciente.id) }}">
+            {% if tipos|length > 1 %}
+            <div class="pt-field">
+                <label for="cmp-tipo">Tipo de exame</label>
+                <select id="cmp-tipo" name="tipo" onchange="this.form.antes.value='';this.form.depois.value='';this.form.submit()">
+                    {% for t in tipos %}<option value="{{ t }}" {% if t == tipo %}selected{% endif %}>{{ t|exam_label }}</option>{% endfor %}
+                </select>
+            </div>
+            {% else %}<input type="hidden" name="tipo" value="{{ tipo }}">{% endif %}
+            <div class="pt-field">
+                <label for="cmp-antes">Exame anterior</label>
+                <select id="cmp-antes" name="antes">
+                    {% for l in laudos %}<option value="{{ l.id }}" {% if l.id == antes.id %}selected{% endif %}>{{ l.created_at|datetime_br }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="pt-field">
+                <label for="cmp-depois">Exame novo</label>
+                <select id="cmp-depois" name="depois">
+                    {% for l in laudos %}<option value="{{ l.id }}" {% if l.id == depois.id %}selected{% endif %}>{{ l.created_at|datetime_br }}</option>{% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn-secondary btn-small">Comparar</button>
+        </form>
+
+        {% if comparacao.linhas %}
+        {% set r = comparacao.resumo %}
+        <section class="cmp-summary" aria-label="Resumo">
+            <div class="cmp-pill cmp-piorou"><strong>{{ r.piorou }}</strong> piorou</div>
+            <div class="cmp-pill cmp-melhorou"><strong>{{ r.melhorou }}</strong> melhorou</div>
+            <div class="cmp-pill"><strong>{{ r.estavel + r.neutra }}</strong> estável ou na faixa</div>
+            {% if r.nova or r.ausente %}<div class="cmp-pill"><strong>{{ r.nova }}</strong> novo · <strong>{{ r.ausente }}</strong> não repetido</div>{% endif %}
+        </section>
+
+        {% if comparacao.destaques %}
+        <section class="card">
+            <h2 class="pt-section-title">{{ layout.icon("alert-triangle", 20) }} Destaques</h2>
+            <ul class="cmp-highlights">
+                {% for l in comparacao.destaques %}
+                <li class="cmp-{{ l.direcao }}">
+                    <strong>{{ l.item }}</strong>: {{ l.antes_fmt }} → {{ l.depois_fmt }}
+                    <span class="cmp-badge cmp-{{ l.direcao }}">{{ rotulos[l.direcao] }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+
+        <section class="card">
+            <div class="cmp-table-head">
+                <h2 class="pt-section-title">Item a item</h2>
+                <label class="cmp-filter"><input type="checkbox" id="cmp-only-changed"> Só o que mudou</label>
+            </div>
+            <div class="table-scroll">
+                <table class="cmp-table">
+                    <thead><tr><th>Item</th><th>Antes</th><th>Agora</th><th>Variação</th><th>Situação</th></tr></thead>
+                    <tbody>
+                    {% for l in comparacao.linhas %}
+                    <tr class="cmp-row cmp-{{ l.direcao }}" data-direcao="{{ l.direcao }}">
+                        <td>{{ l.item }}{% if l.grupo %}<small class="cmp-group">{{ l.grupo }}</small>{% endif %}</td>
+                        <td>{{ l.antes_fmt }}</td>
+                        <td><strong>{{ l.depois_fmt }}</strong>{% if l.criterio_retorno %} <span class="cmp-badge cmp-melhorou" title="LSI ≥ 90%">critério de retorno</span>{% endif %}</td>
+                        <td>{{ l.delta_fmt }}{% if l.delta_pct is not none and l.delta %} <small>({{ '%+.0f'|format(l.delta_pct) }}%)</small>{% endif %}</td>
+                        <td><span class="cmp-badge cmp-{{ l.direcao }}">{{ rotulos[l.direcao] }}</span></td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="card-description cmp-note">
+                Laboratoriais: "melhorou" = voltou para a faixa de referência do laudo ou se aproximou dela; "piorou" = saiu da faixa ou se afastou.
+                Dinamometria: LSI do pico de torque (maior é melhor, ≥ 90% é o critério de retorno) e assimetria na plataforma (menor é melhor).
+                Variações abaixo de 3% contam como estáveis.
+            </p>
+        </section>
+        {% elif comparacao.texto %}
+        <section class="card">
+            <h2 class="pt-section-title">Laudos lado a lado</h2>
+            <p class="card-description">Exames de imagem não têm valores numéricos: compare as seções dos dois laudos.</p>
+            {% for bloco in comparacao.texto %}
+            <h3 class="cmp-section-title">{{ bloco.secao }}{% if bloco.igual %} <span class="cmp-badge cmp-estavel">sem mudança no texto</span>{% endif %}</h3>
+            <div class="cmp-side">
+                <div><span class="meta-label">Antes</span><div class="report-content cmp-md">{{ bloco.antes or '—' }}</div></div>
+                <div><span class="meta-label">Agora</span><div class="report-content cmp-md">{{ bloco.depois or '—' }}</div></div>
+            </div>
+            {% endfor %}
+        </section>
+        {% else %}
+        <section class="card"><p class="card-description">Os dois laudos não têm valores nem seções comparáveis (laudos antigos podem não ter os valores estruturados gravados).</p></section>
+        {% endif %}
+
+        <div class="pt-actions">
+            <a class="btn-secondary" href="{{ url_for('laudos.laudo_detalhe', analise_id=antes.id) }}">Abrir laudo anterior</a>
+            <a class="btn-secondary" href="{{ url_for('laudos.laudo_detalhe', analise_id=depois.id) }}">Abrir laudo novo</a>
+        </div>
+    </main>
+
+    {{ layout.site_footer() }}
+    <script>
+        document.querySelectorAll('.cmp-md').forEach(el => { if (window.renderLaudoInto) renderLaudoInto(el, el.textContent); });
+        const onlyChanged = document.getElementById('cmp-only-changed');
+        if (onlyChanged) {
+            onlyChanged.addEventListener('change', () => {
+                document.querySelectorAll('.cmp-row').forEach(row => {
+                    row.hidden = onlyChanged.checked && ['estavel', 'neutra'].includes(row.dataset.direcao);
+                });
+            });
+        }
+    </script>
+</body>
+</html>

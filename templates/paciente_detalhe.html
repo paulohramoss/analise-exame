@@ -36,6 +36,9 @@
             </div>
             <div class="pt-actions">
                 <a class="btn-primary" href="{{ url_for('analysis.index', paciente=paciente.id) }}">{{ layout.icon("scan", 18, "btn-icon") }} Nova análise</a>
+                {% if pode_comparar %}
+                <a class="btn-secondary" href="{{ url_for('pacientes.retorno', paciente_id=paciente.id) }}">{{ layout.icon("git-compare", 18, "btn-icon") }} O que mudou</a>
+                {% endif %}
                 <a class="btn-secondary" href="{{ url_for('pacientes.editar', paciente_id=paciente.id) }}">Editar cadastro</a>
             </div>
         </div>

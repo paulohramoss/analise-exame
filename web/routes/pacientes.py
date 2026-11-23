@@ -10,7 +10,7 @@ import logging
 
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from core import analyzer, db, patient_crypto, privacy
+from core import analyzer, comparacao, db, patient_crypto, privacy
 from web import config, costs, posthog, prontuario
 from web.extensions import rate_limit
 from web.security import premium_required
@@ -145,6 +145,57 @@ def detalhe(paciente_id: str):
         exames_correlacionaveis=sum(1 for a in analises if a.get("tipo_exame") != "correlacao"),
         plano=plano,
         laudos_com_plano=[a for a in analises if a.get("tipo_exame") not in _SEM_PLANO],
+        pode_comparar=bool(comparacao.pares_disponiveis(analises)),
+    )
+
+
+@bp.route("/pacientes/<paciente_id>/retorno")
+@premium_required
+def retorno(paciente_id: str):
+    """O que mudou desde a última vez: exame novo × anterior do mesmo tipo, lado a lado."""
+    g.modo = "premium"
+    cliente_id, paciente = _own_patient_or_404(paciente_id)
+    pares = comparacao.pares_disponiveis(db.listar_analises_paciente(paciente_id, cliente_id))
+    if not pares:
+        flash("Para comparar, o paciente precisa de dois exames do mesmo tipo vinculados ao prontuário.", "info")
+        return redirect(url_for("pacientes.detalhe", paciente_id=paciente_id))
+
+    tipo = request.args.get("tipo") or ""
+    if tipo not in pares:
+        # Tipo com o exame mais recente: é o retorno que o profissional está atendendo agora.
+        tipo = max(pares, key=lambda t: pares[t][0].get("created_at") or "")
+    laudos = pares[tipo]
+    ids = [a["id"] for a in laudos]
+    depois_id = request.args.get("depois") if request.args.get("depois") in ids else ids[0]
+    antes_padrao = next(i for i in ids if i != depois_id)
+    antes_id = request.args.get("antes") if request.args.get("antes") in ids else antes_padrao
+    if antes_id == depois_id:
+        antes_id = antes_padrao
+
+    def _carregar(analise_id: str) -> dict:
+        row = db.buscar_analise(analise_id, cliente_id) or {}
+        return {
+            "id": analise_id,
+            "created_at": row.get("created_at"),
+            "texto": row.get("analise_completa") or "",
+            "dados": db.buscar_dados_estruturados(analise_id, cliente_id),
+        }
+
+    antes, depois = _carregar(antes_id), _carregar(depois_id)
+    if (antes["created_at"] or "") > (depois["created_at"] or ""):
+        antes, depois = depois, antes
+    resultado = comparacao.comparar(tipo, antes, depois)
+    db.registrar_acesso_prontuario(cliente_id, paciente_id, "comparar")
+    _capture("patient_followup_compared")
+    return render_template(
+        "paciente_retorno.html",
+        paciente=paciente,
+        tipo=tipo,
+        tipos=list(pares),
+        laudos=laudos,
+        antes=antes,
+        depois=depois,
+        comparacao=resultado,
     )
 
 
