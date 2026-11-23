@@ -65,9 +65,26 @@ def admin_custos():
         alert_minimum=minimum,
         persistent=cost_tracking.has_persistent_storage(),
         falhas_ia=ai_monitor.resumo_do_dia(),
+        prontuario_chave=_estado_chave_prontuario(),
         ai_alert_threshold=ai_monitor.limite_alerta(),
         ai_slow_seconds=ai_monitor.limite_lenta_segundos(),
     )
+
+
+def _estado_chave_prontuario() -> dict:
+    """Impressão digital da chave do prontuário (não revela a chave) e se bate com a esperada."""
+    import os
+
+    from core import patient_crypto
+
+    esperada = os.environ.get("PRONTUARIO_KEY_FINGERPRINT", "").strip().lower()
+    return {
+        "configurada": patient_crypto.is_configured() or patient_crypto.fingerprint_mismatch(),
+        "impressao": patient_crypto.fingerprint() if os.environ.get("PRONTUARIO_ENCRYPTION_KEY", "").strip() else "",
+        "esperada": esperada,
+        "confere": bool(esperada) and not patient_crypto.fingerprint_mismatch(),
+        "antigas": len([k for k in os.environ.get("PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS", "").split(",") if k.strip()]),
+    }
 
 
 @bp.route("/admin/sair")

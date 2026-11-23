@@ -90,6 +90,21 @@
         </div>
         <p class="note">Alerta (log de erro, enviado ao Sentry) quando o consenso rápido passa de {{ '%.0f' | format(alert_ratio * 100) }}% com pelo menos {{ alert_minimum }} análises no dia — ajuste em CONSENSUS_FALLBACK_ALERT_RATIO e CONSENSUS_FALLBACK_ALERT_MIN_ANALYSES. Custo estimado pela tabela de preços do .env.</p>
 
+        <h2>Chave do prontuário</h2>
+        {% set ch = prontuario_chave %}
+        {% if not ch.impressao %}
+        <p class="note">PRONTUARIO_ENCRYPTION_KEY não está configurada neste ambiente: o prontuário fica desligado.</p>
+        {% else %}
+        <p>Impressão digital da chave em uso: <code>{{ ch.impressao }}</code></p>
+        {% if not ch.esperada %}
+        <p class="note">PRONTUARIO_KEY_FINGERPRINT ainda não definida. Copie o valor acima para essa variável na Vercel (Production e Preview) e faça um novo deploy: a partir daí, uma chave trocada por engano desliga o prontuário em vez de misturar cifras. Guarde a chave em si num cofre de senhas, junto com esta impressão digital.</p>
+        {% elif ch.confere %}
+        <p class="note">Confere com PRONTUARIO_KEY_FINGERPRINT.{% if ch.antigas %} {{ ch.antigas }} chave(s) antiga(s) em rotação — rode <code>python -m scripts.prontuario_chaves rotacionar --aplicar</code> e depois remova PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS.{% endif %}</p>
+        {% else %}
+        <p class="note rate-bad">NÃO confere com PRONTUARIO_KEY_FINGERPRINT ({{ ch.esperada }}): o prontuário está bloqueado. Restaure a chave correta.</p>
+        {% endif %}
+        {% endif %}
+
         <h2>Falhas de IA hoje</h2>
         <div class="table-wrap">
             <table>

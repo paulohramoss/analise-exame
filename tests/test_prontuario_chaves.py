@@ -158,3 +158,18 @@ def test_chave_errada_com_impressao_digital_bloqueia_prontuario(monkeypatch, cha
     monkeypatch.setenv("PRONTUARIO_ENCRYPTION_KEY", nova)
     assert not patient_crypto.is_configured()
     assert db.criar_paciente("c1", "Maria", CPF) == (None, db.PACIENTE_INDISPONIVEL)
+
+
+def test_painel_admin_mostra_impressao_digital(client, monkeypatch, chaves):
+    from web import config
+
+    antiga, nova = chaves
+    client.get(f"/admin/entrar?key={config.get_admin_key()}")
+    html = client.get("/admin/custos").get_data(as_text=True)
+    assert patient_crypto.fingerprint(antiga) in html and antiga not in html
+    assert "PRONTUARIO_KEY_FINGERPRINT ainda não definida" in html
+
+    monkeypatch.setenv("PRONTUARIO_KEY_FINGERPRINT", patient_crypto.fingerprint(antiga))
+    assert "Confere com PRONTUARIO_KEY_FINGERPRINT" in client.get("/admin/custos").get_data(as_text=True)
+    monkeypatch.setenv("PRONTUARIO_ENCRYPTION_KEY", nova)
+    assert "NÃO confere" in client.get("/admin/custos").get_data(as_text=True)
