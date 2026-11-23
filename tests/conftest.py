@@ -45,6 +45,10 @@ os.environ.setdefault("PUBMED_REFERENCES_ENABLED", "0")
 # que simulam o modelo não a esperam; test_exam_screening.py liga e testa.
 os.environ.setdefault("EXAM_SCREENING_ENABLED", "0")
 
+# Chave do prontuário fixada no banco: uma consulta a mais antes de gravar
+# paciente, que os clientes falsos dos testes não esperam. test_prontuario_pin.py liga.
+os.environ.setdefault("PRONTUARIO_PIN_ENABLED", "0")
+
 import fakeredis
 import pytest
 

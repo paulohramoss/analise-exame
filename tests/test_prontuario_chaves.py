@@ -167,7 +167,7 @@ def test_painel_admin_mostra_impressao_digital(client, monkeypatch, chaves):
     client.get(f"/admin/entrar?key={config.get_admin_key()}")
     html = client.get("/admin/custos").get_data(as_text=True)
     assert patient_crypto.fingerprint(antiga) in html and antiga not in html
-    assert "PRONTUARIO_KEY_FINGERPRINT ainda não definida" in html
+    assert "PRONTUARIO_KEY_FINGERPRINT na Vercel é opcional" in html
 
     monkeypatch.setenv("PRONTUARIO_KEY_FINGERPRINT", patient_crypto.fingerprint(antiga))
     assert "Confere com PRONTUARIO_KEY_FINGERPRINT" in client.get("/admin/custos").get_data(as_text=True)

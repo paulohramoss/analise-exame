@@ -96,8 +96,18 @@
         <p class="note">PRONTUARIO_ENCRYPTION_KEY não está configurada neste ambiente: o prontuário fica desligado.</p>
         {% else %}
         <p>Impressão digital da chave em uso: <code>{{ ch.impressao }}</code></p>
+        {% set banco = ch.banco or {} %}
+        {% if banco.estado in ['ok', 'fixada_agora', 'atualizada'] %}
+        <p class="note">Fixada no banco{% if banco.estado == 'fixada_agora' %} agora{% elif banco.estado == 'atualizada' %} (atualizada pela rotação de chave){% endif %}: uma chave diferente bloqueia a gravação de pacientes em vez de misturar cifras.</p>
+        {% elif banco.estado == 'divergente' %}
+        <p class="note rate-bad">A chave em uso NÃO é a fixada no banco ({{ banco.fixada }}): gravação de pacientes bloqueada. Restaure a chave correta na Vercel; para trocar de chave, use o roteiro de <code>scripts/prontuario_chaves.py</code>.</p>
+        {% elif banco.estado == 'dados_ilegiveis' %}
+        <p class="note rate-bad">A chave em uso não abre os pacientes já gravados: não foi fixada. Confira PRONTUARIO_ENCRYPTION_KEY.</p>
+        {% elif banco.estado == 'indisponivel' %}
+        <p class="note">Não foi possível conferir no banco (tabela config_seguranca ausente ou banco fora do ar).</p>
+        {% endif %}
         {% if not ch.esperada %}
-        <p class="note">PRONTUARIO_KEY_FINGERPRINT ainda não definida. Copie o valor acima para essa variável na Vercel (Production e Preview) e faça um novo deploy: a partir daí, uma chave trocada por engano desliga o prontuário em vez de misturar cifras. Guarde a chave em si num cofre de senhas, junto com esta impressão digital.</p>
+        <p class="note">Guarde a chave num cofre de senhas, junto com esta impressão digital. (PRONTUARIO_KEY_FINGERPRINT na Vercel é opcional: a trava pelo banco já protege.)</p>
         {% elif ch.confere %}
         <p class="note">Confere com PRONTUARIO_KEY_FINGERPRINT.{% if ch.antigas %} {{ ch.antigas }} chave(s) antiga(s) em rotação — rode <code>python -m scripts.prontuario_chaves rotacionar --aplicar</code> e depois remova PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS.{% endif %}</p>
         {% else %}

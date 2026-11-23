@@ -84,6 +84,8 @@ def _estado_chave_prontuario() -> dict:
         "esperada": esperada,
         "confere": bool(esperada) and not patient_crypto.fingerprint_mismatch(),
         "antigas": len([k for k in os.environ.get("PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS", "").split(",") if k.strip()]),
+        # Abrir o painel também fixa a impressão digital no banco, se ainda não estiver.
+        "banco": db.estado_chave_fixada() if os.environ.get("PRONTUARIO_ENCRYPTION_KEY", "").strip() else {},
     }
 
 

@@ -152,7 +152,11 @@ Migration `2026-11-14-perfil-profissional-termo-erros-ia.sql`.
   torna esses campos ilegíveis. Trocar é possível sem perda: chaves antigas em
   `PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS` (MultiFernet) e `scripts/prontuario_chaves.py`
   (`verificar`, `rotacionar --aplicar`, `impressao`). `PRONTUARIO_KEY_FINGERPRINT`
-  trava o prontuário se a chave configurada não for a esperada. Como o nome só existe decifrado, a busca
+  trava o prontuário se a chave configurada não for a esperada. Sem ela, a
+  impressão digital é fixada no 1º uso em `config_seguranca` (só se a chave abre
+  os pacientes já gravados); chave diferente bloqueia a gravação de pacientes, e
+  uma rotação com a chave antiga em `PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS` atualiza
+  a impressão digital sozinha. Como o nome só existe decifrado, a busca
   e a ordenação por nome são feitas na aplicação.
 - Nome e CPF nunca vão para os provedores de IA. Ao escolher o paciente na nova
   análise, só idade, sexo e o resumo dos tratamentos pré-preenchem o contexto clínico.

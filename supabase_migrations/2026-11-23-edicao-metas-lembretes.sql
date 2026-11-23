@@ -77,3 +77,25 @@ begin
         end if;
     end loop;
 end $$;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- config_seguranca: impressão digital da chave do prontuário, fixada no 1º uso
+-- (core/db.estado_chave_fixada). Nunca guarda a chave, só um hash curto dela.
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.config_seguranca (
+    chave       text primary key,
+    valor       text not null,
+    created_at  timestamptz not null default now(),
+    updated_at  timestamptz not null default now()
+);
+
+alter table public.config_seguranca enable row level security;
+do $$
+begin
+    if not exists (
+        select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = 'config_seguranca' and p.policyname = 'service_role_all'
+    ) then
+        create policy service_role_all on public.config_seguranca for all using (auth.role() = 'service_role');
+    end if;
+end $$;

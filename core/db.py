@@ -12,6 +12,7 @@ import hashlib
 import importlib
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from functools import lru_cache
 
@@ -1050,6 +1051,82 @@ PACIENTE_DUPLICADO = "duplicado"
 PACIENTE_INDISPONIVEL = "indisponivel"
 
 
+# ── Chave do prontuário fixada no banco ───────────────────────────────────────
+# Na primeira gravação, a impressão digital da chave em uso vai para
+# config_seguranca. Depois disso, uma chave diferente (colada errada na Vercel)
+# bloqueia a gravação de pacientes em vez de misturar cifras: metade do
+# prontuário ficaria ilegível. Uma troca legítima (chave antiga ainda em
+# PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS) atualiza a impressão digital sozinha.
+
+_PIN_KEY = "prontuario_fingerprint"
+_pin_cache: dict = {}
+_PIN_CACHE_SECONDS = 300
+
+
+def _pin_enabled() -> bool:
+    return os.environ.get("PRONTUARIO_PIN_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
+
+
+def _dados_existentes_abrem(db) -> bool:
+    """Antes de fixar a 1ª impressão digital: os pacientes já gravados abrem com a chave atual?"""
+    rows = db.table("pacientes").select("nome_cifrado").limit(3).execute().data or []
+    return all(patient_crypto.decrypt(r.get("nome_cifrado")) for r in rows if r.get("nome_cifrado"))
+
+
+def estado_chave_fixada() -> dict:
+    """{'estado': 'ok'|'fixada_agora'|'atualizada'|'divergente'|'dados_ilegiveis'|'indisponivel', 'fixada': fp}."""
+    db = _get_client()
+    atual = patient_crypto.fingerprint()
+    if not db or not atual:
+        return {"estado": "indisponivel", "fixada": ""}
+    try:
+        rows = db.table("config_seguranca").select("valor").eq("chave", _PIN_KEY).limit(1).execute().data or []
+        fixada = (rows[0].get("valor") or "").strip().lower() if rows else ""
+        agora = datetime.now(timezone.utc).isoformat()
+        if not fixada:
+            if not _dados_existentes_abrem(db):
+                logger.error("Chave do prontuário não abre os pacientes já gravados: não será fixada.")
+                return {"estado": "dados_ilegiveis", "fixada": ""}
+            db.table("config_seguranca").upsert(
+                {"chave": _PIN_KEY, "valor": atual, "updated_at": agora}, on_conflict="chave"
+            ).execute()
+            logger.info("Impressão digital da chave do prontuário fixada no banco (%s).", atual)
+            return {"estado": "fixada_agora", "fixada": atual}
+        if fixada == atual:
+            return {"estado": "ok", "fixada": fixada}
+        if fixada in {patient_crypto.fingerprint(k) for k in patient_crypto._old_keys()}:
+            # Rotação: a chave fixada continua configurada como antiga, nada fica ilegível.
+            db.table("config_seguranca").update({"valor": atual, "updated_at": agora}).eq("chave", _PIN_KEY).execute()
+            logger.warning("Chave do prontuário trocada com a antiga em rotação: impressão digital atualizada.")
+            return {"estado": "atualizada", "fixada": atual}
+        logger.error(
+            "PRONTUARIO_ENCRYPTION_KEY (%s) diferente da fixada no banco (%s): gravação de pacientes bloqueada.",
+            atual, fixada,
+        )
+        return {"estado": "divergente", "fixada": fixada}
+    except Exception:
+        # Sem a tabela (migration pendente) ou banco fora: não trava o app por isso.
+        logger.warning("config_seguranca indisponível: chave do prontuário não conferida.", exc_info=True)
+        return {"estado": "indisponivel", "fixada": ""}
+
+
+def _chave_confere() -> bool:
+    if not _pin_enabled():
+        return True
+    atual = patient_crypto.fingerprint()
+    cached = _pin_cache.get(atual)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+    ok = estado_chave_fixada()["estado"] in {"ok", "fixada_agora", "atualizada", "indisponivel"}
+    _pin_cache.clear()
+    _pin_cache[atual] = (time.monotonic() + _PIN_CACHE_SECONDS, ok)
+    return ok
+
+
+def _prontuario_gravavel() -> bool:
+    return patient_crypto.is_configured() and _chave_confere()
+
+
 def _paciente_from_row(row: dict) -> dict:
     """Linha do banco → paciente com nome/CPF em claro (as colunas cifradas saem)."""
     cpf = patient_crypto.decrypt(row.get("cpf_cifrado"))
@@ -1082,7 +1159,7 @@ def criar_paciente(
 ) -> tuple[str | None, str | None]:
     """Cadastra o paciente. Retorna (id, None) ou (None, PACIENTE_DUPLICADO | PACIENTE_INDISPONIVEL)."""
     db = _get_client()
-    if not db or not cliente_id or not patient_crypto.is_configured():
+    if not db or not cliente_id or not _prontuario_gravavel():
         return None, PACIENTE_INDISPONIVEL
     try:
         cpf_hash = patient_crypto.cpf_hash(cpf)
@@ -1116,7 +1193,7 @@ def atualizar_paciente(
 ) -> str | None:
     """Atualiza o cadastro. Retorna None se deu certo, ou o código do erro."""
     db = _get_client()
-    if not db or not cliente_id or not patient_crypto.is_configured():
+    if not db or not cliente_id or not _prontuario_gravavel():
         return PACIENTE_INDISPONIVEL
     try:
         cpf_hash = patient_crypto.cpf_hash(cpf)
