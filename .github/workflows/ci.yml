@@ -40,3 +40,33 @@ jobs:
         #   pip-compile --strip-extras --upgrade-package <pacote> requirements.in
         #   pip-compile --strip-extras --upgrade-package <pacote> requirements-dev.in
         run: pip-audit -r requirements.txt
+
+  e2e:
+    # Fluxos principais no navegador (e2e/): cadastro, exame, edição do laudo,
+    # metas/lembretes, "O que mudou" e tela Hoje. Supabase em memória e IA
+    # simulada: nenhum segredo nem custo. Capturas de tela ficam como artefato.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Instalar dependências e Chromium
+        run: |
+          pip install -r requirements-dev.txt "playwright==1.58.0"
+          python -m playwright install --with-deps chromium
+
+      - name: Testes de ponta a ponta
+        run: pytest -q e2e
+
+      - name: Capturas de tela
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-e2e
+          path: e2e/capturas/
+          if-no-files-found: ignore

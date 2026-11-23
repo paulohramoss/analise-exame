@@ -26,3 +26,6 @@ build/
 evals/images/
 evals/results/
 evals/cases/rascunhos/
+
+# Capturas dos testes de ponta a ponta
+e2e/capturas/

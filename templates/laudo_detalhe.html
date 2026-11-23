@@ -382,7 +382,7 @@
             {% if edicao %}
             <div class="edit-banner" role="note">
                 <strong>Laudo revisado pelo profissional</strong> em {{ edicao.editado_em|datetime_br }}
-                {% if edicao.edicao_resumo %} · {{ edicao.edicao_resumo.percentual_mantido }}% do texto da IA mantido{% endif %}.
+                {% if edicao.edicao_resumo %}{% set r = edicao.edicao_resumo %} · {{ r.percentual_mantido }}% do texto da IA mantido{% if r.linhas_adicionadas %}, {{ r.linhas_adicionadas }} linha{{ 's' if r.linhas_adicionadas != 1 }} acrescentada{{ 's' if r.linhas_adicionadas != 1 }}{% endif %}{% if r.linhas_removidas %}, {{ r.linhas_removidas }} removida{{ 's' if r.linhas_removidas != 1 }}{% endif %}{% endif %}.
                 {% if edicao.analise_ia %}
                 <details class="ia-version">
                     <summary>Ver a versão original da IA</summary>
