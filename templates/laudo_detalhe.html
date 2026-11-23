@@ -452,7 +452,7 @@
 
         const reportContent = document.getElementById('report-content');
         renderLaudoInto(reportContent, reportContent.textContent);
-        if (location.hash === '#edit-laudo') {
+        if (typeof location !== 'undefined' && location.hash === '#edit-laudo') {
             const editor = document.getElementById('edit-laudo');
             if (editor) { editor.open = true; editor.scrollIntoView({ block: 'start' }); }
         }
