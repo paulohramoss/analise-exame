@@ -522,6 +522,69 @@ def salvar_relatorio_paciente(analise_id: str, cliente_id: str, texto: str) -> b
         return False
 
 
+# ── Edição do laudo pelo profissional (core/laudo_edicao) ─────────────────────
+# Consultas próprias, como o relatório: sem a migration 2026-11-23, o laudo
+# continua abrindo e só a edição fica indisponível.
+
+def buscar_edicao_laudo(analise_id: str, cliente_id: str | None, include_all: bool = False) -> dict | None:
+    """{analise_ia, editado_em, edicao_resumo} do laudo, ou None (sem edição / sem coluna)."""
+    db = _get_client()
+    if not db or not analise_id or (not cliente_id and not include_all):
+        return None
+    try:
+        query = db.table("analises").select("analise_ia, editado_em, edicao_resumo").eq("id", analise_id)
+        if cliente_id and not include_all:
+            query = query.eq("cliente_id", cliente_id)
+        res = query.limit(1).execute()
+        row = res.data[0] if res.data else None
+        return row if row and row.get("editado_em") else None
+    except Exception:
+        logger.exception("Erro em buscar_edicao_laudo")
+        return None
+
+
+def salvar_edicao_laudo(analise_id: str, cliente_id: str, texto: str, texto_ia: str, resumo: dict) -> bool:
+    """Grava a versão do profissional; a da IA só é escrita se ainda não existe."""
+    db = _get_client()
+    if not db or not analise_id or not cliente_id:
+        return False
+    try:
+        atual = (
+            db.table("analises").select("analise_ia")
+            .eq("id", analise_id).eq("cliente_id", cliente_id).limit(1).execute()
+        )
+        if not atual.data:
+            return False
+        update = {
+            "analise_completa": texto,
+            "editado_em": datetime.now(timezone.utc).isoformat(),
+            "edicao_resumo": resumo,
+        }
+        if not atual.data[0].get("analise_ia"):
+            update["analise_ia"] = texto_ia
+        res = db.table("analises").update(update).eq("id", analise_id).eq("cliente_id", cliente_id).execute()
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em salvar_edicao_laudo")
+        return False
+
+
+def listar_resumos_edicao(cliente_id: str | None, include_all: bool = False, limit: int = 500) -> list[dict]:
+    """Resumos das edições (sem texto clínico) para as métricas do painel."""
+    db = _get_client()
+    if not db or (not cliente_id and not include_all):
+        return []
+    try:
+        query = db.table("analises").select("edicao_resumo").not_.is_("editado_em", "null")
+        if cliente_id and not include_all:
+            query = query.eq("cliente_id", cliente_id)
+        res = query.order("editado_em", desc=True).limit(limit).execute()
+        return [row.get("edicao_resumo") for row in res.data or [] if row.get("edicao_resumo")]
+    except Exception:
+        logger.exception("Erro em listar_resumos_edicao")
+        return []
+
+
 def buscar_marca_clinica(cliente_id: str) -> dict:
     """Nome, contato e logo da clínica do cliente ({} se não houver ou se falhar)."""
     db = _get_client()

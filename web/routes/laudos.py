@@ -2,7 +2,7 @@
 
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
-from core import annotations, cost_tracking, db, lab_tests, patient_report
+from core import annotations, cost_tracking, db, lab_tests, laudo_edicao, patient_report
 from core import professional_register as registro
 from web import costs, posthog, presentation
 from web.extensions import rate_limit
@@ -58,8 +58,57 @@ def laudo_detalhe(analise_id: str):
         annotations=annotations.sanitize_stored(row.get("marcacoes"), row.get("num_imagens")),
         lab_dashboard=_lab_dashboard(row),
         can_patient_report=bool(g.get("cliente_id")) and row.get("cliente_id") == g.get("cliente_id"),
+        can_edit=_is_owner(row),
+        edicao=db.buscar_edicao_laudo(row["id"], g.get("cliente_id"), include_all=bool(g.get("is_admin"))),
         **_patient_link_context(row),
     )
+
+
+def _is_owner(row: dict) -> bool:
+    """Só o dono edita o laudo — nem o admin assina embaixo do laudo de outro profissional."""
+    return bool(g.get("cliente_id")) and row.get("cliente_id") == g.get("cliente_id")
+
+
+@bp.route("/laudos/<analise_id>/editar", methods=["POST"])
+@premium_required
+@rate_limit("LAUDO_EDIT_RATE_LIMIT", "120 per hour")
+def editar_laudo(analise_id: str):
+    """O profissional corrige, apaga ou acrescenta achados; a versão da IA fica guardada."""
+    g.modo = "premium"
+    cliente_id = g.get("cliente_id")
+    row = db.buscar_analise(analise_id, cliente_id=cliente_id) if cliente_id else None
+    if not row:
+        flash("Laudo não encontrado no histórico deste acesso.", "error")
+        return redirect(url_for("laudos.laudos"))
+    voltar = redirect(url_for("laudos.laudo_detalhe", analise_id=analise_id))
+
+    restaurar = request.form.get("acao") == "restaurar_ia"
+    edicao = db.buscar_edicao_laudo(analise_id, cliente_id)
+    texto_ia = (edicao or {}).get("analise_ia") or row.get("analise_completa") or ""
+    texto = laudo_edicao.normalizar(texto_ia if restaurar else request.form.get("analise", ""))
+
+    if not texto:
+        flash("O laudo não pode ficar vazio. Para descartar, exclua o laudo do histórico.", "error")
+        return voltar
+    if len(texto) > laudo_edicao.MAX_CHARS:
+        flash("O laudo ficou longo demais para salvar.", "error")
+        return voltar
+    if texto == laudo_edicao.normalizar(row.get("analise_completa") or ""):
+        flash("Nada mudou no laudo.", "info")
+        return voltar
+
+    resumo = laudo_edicao.resumir(texto_ia, texto)
+    if not db.salvar_edicao_laudo(analise_id, cliente_id, texto, texto_ia, resumo):
+        flash("Não foi possível salvar a edição agora. Tente novamente.", "error")
+        return voltar
+    posthog.track(
+        "laudo_restaurado_ia" if restaurar else "laudo_editado",
+        exam_type=row.get("tipo_exame") or "",
+        percentual_mantido=resumo["percentual_mantido"],
+        secoes_alteradas=len(resumo["secoes"]),
+    )
+    flash("Versão da IA restaurada." if restaurar else "Laudo atualizado. A versão da IA continua guardada.", "success")
+    return voltar
 
 
 def _lab_dashboard(row: dict) -> dict | None:
@@ -162,6 +211,9 @@ def dashboard_clinica():
     validations = db.listar_validacoes_clinicas(analysis_ids)
     feedbacks = db.listar_feedbacks_por_analises(analysis_ids)
     metrics = db.montar_metricas_dashboard(analyses, validations, feedbacks)
+    edicoes = laudo_edicao.agregar(
+        db.listar_resumos_edicao(g.get("cliente_id"), include_all=include_all), len(analyses)
+    )
 
     validated_ids = {v.get("analise_id") for v in validations if v.get("analise_id")}
     pending = [item for item in analyses if item.get("id") not in validated_ids]
@@ -172,6 +224,7 @@ def dashboard_clinica():
         analyses=analyses[:12],
         pending=pending[:12],
         validations=validations[:12],
+        edicoes=edicoes,
         is_admin=include_all,
     )
 

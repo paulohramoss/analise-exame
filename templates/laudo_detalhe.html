@@ -124,6 +124,34 @@
             font-weight: 800;
         }
 
+        .edit-banner {
+            border: 1px solid var(--primary-border);
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            border-radius: 8px;
+            padding: 0.65rem 0.9rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .ia-version summary { cursor: pointer; margin-top: 0.4rem; font-weight: 700; }
+        .ia-version-content { margin-top: 0.75rem; opacity: 0.85; }
+
+        .edit-laudo { margin-top: 1.25rem; }
+        .edit-laudo > summary { list-style: none; display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; }
+        .edit-laudo > summary::-webkit-details-marker { display: none; }
+        .edit-laudo textarea {
+            width: 100%;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            padding: 0.75rem;
+            border: 1px solid var(--border-input);
+            border-radius: 8px;
+            margin: 0.5rem 0 0.75rem;
+            box-sizing: border-box;
+        }
+
         .report-header {
             display: flex;
             align-items: flex-start;
@@ -351,9 +379,38 @@
                     {% endif %}
                 </div>
             </div>
+            {% if edicao %}
+            <div class="edit-banner" role="note">
+                <strong>Laudo revisado pelo profissional</strong> em {{ edicao.editado_em|datetime_br }}
+                {% if edicao.edicao_resumo %} · {{ edicao.edicao_resumo.percentual_mantido }}% do texto da IA mantido{% endif %}.
+                {% if edicao.analise_ia %}
+                <details class="ia-version">
+                    <summary>Ver a versão original da IA</summary>
+                    <div class="report-content ia-version-content" id="ia-version-content">{{ edicao.analise_ia }}</div>
+                </details>
+                {% endif %}
+            </div>
+            {% endif %}
             <div class="report-content" id="report-content">
                 {{ analysis }}
             </div>
+            {% if can_edit %}
+            <details class="edit-laudo" id="edit-laudo">
+                <summary class="btn-secondary btn-small">{{ layout.icon("edit", 16) }} Editar laudo</summary>
+                <form method="POST" action="{{ url_for('laudos.editar_laudo', analise_id=analysis_id) }}" class="edit-laudo-form">
+                    <p class="card-description">Corrija, apague ou acrescente achados. Títulos de seção começam com <code>##</code>, itens com <code>-</code>. A versão da IA fica guardada e pode ser restaurada.</p>
+                    <label for="analise-edit" class="sr-only">Texto do laudo</label>
+                    <textarea id="analise-edit" name="analise" rows="24" maxlength="60000" required>{{ analysis }}</textarea>
+                    <div class="feedback-actions">
+                        <button type="submit" class="btn-primary btn-small">Salvar minha versão</button>
+                        {% if edicao and edicao.analise_ia %}
+                        <button type="submit" name="acao" value="restaurar_ia" class="btn-ghost btn-small"
+                                onclick="return confirm('Voltar ao texto original da IA? Sua versão será substituída.')">Restaurar versão da IA</button>
+                        {% endif %}
+                    </div>
+                </form>
+            </details>
+            {% endif %}
             {% if annotations %}
             {% with show_toggle=false %}{% include "_achados_marcados.html" %}{% endwith %}
             <p class="findings-note">As imagens do exame não ficam guardadas no histórico: os círculos aparecem na tela do resultado e no PDF gerado na hora da análise.</p>
@@ -395,6 +452,12 @@
 
         const reportContent = document.getElementById('report-content');
         renderLaudoInto(reportContent, reportContent.textContent);
+        if (location.hash === '#edit-laudo') {
+            const editor = document.getElementById('edit-laudo');
+            if (editor) { editor.open = true; editor.scrollIntoView({ block: 'start' }); }
+        }
+        const iaVersion = document.getElementById('ia-version-content');
+        if (iaVersion) renderLaudoInto(iaVersion, iaVersion.textContent);
         const findings = JSON.parse(document.getElementById('data-annotations').textContent || '[]');
         initExamFindings([], findings,
             JSON.parse(document.getElementById('data-exam-meta').textContent || '{}').num_images || 1);

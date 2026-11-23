@@ -214,7 +214,30 @@
                 <strong class="metric-value">{{ metrics.consenso_percentual }}%</strong>
                 <p class="metric-note">{{ metrics.consenso_dual }} laudo{% if metrics.consenso_dual != 1 %}s{% endif %} com Gemini + Claude.</p>
             </div>
+            {% if edicoes and edicoes.laudos %}
+            <div class="metric-card">
+                <span class="metric-label">Texto da IA confirmado</span>
+                <strong class="metric-value">{{ edicoes.percentual_confirmado }}%</strong>
+                <p class="metric-note">{{ edicoes.editados }} de {{ edicoes.laudos }} laudo{% if edicoes.laudos != 1 %}s{% endif %} revisado{% if edicoes.editados != 1 %}s{% endif %} pelo profissional{% if edicoes.editados %}; {{ edicoes.percentual_mantido_nos_editados }}% mantido nos revisados{% endif %}.</p>
+            </div>
+            {% endif %}
         </section>
+
+        {% if edicoes and edicoes.secoes_mais_corrigidas %}
+        <section class="card">
+            <h2>Onde a IA mais é corrigida</h2>
+            <p class="card-description">Seções que os profissionais mais alteram ao revisar o laudo. Alimenta o ajuste do prompt e dos padrões.</p>
+            <div class="bar-list">
+                {% for item in edicoes.secoes_mais_corrigidas %}
+                <div class="bar-row">
+                    <span>{{ item.secao|title }}</span>
+                    <div class="bar-track"><div class="bar-fill" style="width: {{ (item.laudos / edicoes.editados * 100) if edicoes.editados else 0 }}%"></div></div>
+                    <strong title="{{ item.removidos }} achado(s) removido(s), {{ item.adicionados }} acrescentado(s)">{{ item.laudos }}</strong>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
 
         <section class="dashboard-grid">
             <div class="card">
