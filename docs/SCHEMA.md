@@ -148,8 +148,11 @@ Migration `2026-11-14-perfil-profissional-termo-erros-ia.sql`.
   `cliente_id` (`core/db.py`). O admin tem conta própria (`accounts.admin_cliente_id`)
   e vê só os pacientes que ele cadastrou, nunca os dos profissionais.
 - Nome e CPF são cifrados com Fernet em `core/patient_crypto.py`, com a chave
-  `PRONTUARIO_ENCRYPTION_KEY` (separada do `FLASK_SECRET_KEY`). Perder ou trocar
-  a chave torna esses campos ilegíveis. Como o nome só existe decifrado, a busca
+  `PRONTUARIO_ENCRYPTION_KEY` (separada do `FLASK_SECRET_KEY`). Perder a chave
+  torna esses campos ilegíveis. Trocar é possível sem perda: chaves antigas em
+  `PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS` (MultiFernet) e `scripts/prontuario_chaves.py`
+  (`verificar`, `rotacionar --aplicar`, `impressao`). `PRONTUARIO_KEY_FINGERPRINT`
+  trava o prontuário se a chave configurada não for a esperada. Como o nome só existe decifrado, a busca
   e a ordenação por nome são feitas na aplicação.
 - Nome e CPF nunca vão para os provedores de IA. Ao escolher o paciente na nova
   análise, só idade, sexo e o resumo dos tratamentos pré-preenchem o contexto clínico.

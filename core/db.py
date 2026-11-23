@@ -980,8 +980,11 @@ def _paciente_from_row(row: dict) -> dict:
     return paciente
 
 
-def _cpf_ja_cadastrado(db, cliente_id: str, cpf_hash: str, exceto_id: str | None = None) -> bool:
-    query = db.table("pacientes").select("id").eq("cliente_id", cliente_id).eq("cpf_hash", cpf_hash)
+def _cpf_ja_cadastrado(db, cliente_id: str, cpf: str, exceto_id: str | None = None) -> bool:
+    """Duplicado com a chave atual ou com uma antiga (linhas ainda não recifradas na rotação)."""
+    hashes = patient_crypto.cpf_hash_candidates(cpf)
+    query = db.table("pacientes").select("id").eq("cliente_id", cliente_id)
+    query = query.eq("cpf_hash", hashes[0]) if len(hashes) == 1 else query.in_("cpf_hash", hashes)
     if exceto_id:
         query = query.neq("id", exceto_id)
     return bool(query.limit(1).execute().data)
@@ -1001,7 +1004,7 @@ def criar_paciente(
         return None, PACIENTE_INDISPONIVEL
     try:
         cpf_hash = patient_crypto.cpf_hash(cpf)
-        if _cpf_ja_cadastrado(db, cliente_id, cpf_hash):
+        if _cpf_ja_cadastrado(db, cliente_id, cpf):
             return None, PACIENTE_DUPLICADO
         res = db.table("pacientes").insert({
             "cliente_id": cliente_id,
@@ -1035,7 +1038,7 @@ def atualizar_paciente(
         return PACIENTE_INDISPONIVEL
     try:
         cpf_hash = patient_crypto.cpf_hash(cpf)
-        if _cpf_ja_cadastrado(db, cliente_id, cpf_hash, exceto_id=paciente_id):
+        if _cpf_ja_cadastrado(db, cliente_id, cpf, exceto_id=paciente_id):
             return PACIENTE_DUPLICADO
         res = (
             db.table("pacientes").update({

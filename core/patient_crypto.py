@@ -12,6 +12,16 @@ Ela é separada do FLASK_SECRET_KEY de propósito: trocar a chave de sessão nã
 pode tornar ilegíveis os prontuários já gravados. Só em ambiente local/testes,
 sem a variável, derivamos uma chave do FLASK_SECRET_KEY para o app funcionar.
 
+Rotação: a chave nova entra em PRONTUARIO_ENCRYPTION_KEY e as anteriores em
+PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS (separadas por vírgula). Tudo continua
+legível (MultiFernet tenta a atual e depois as antigas), o cadastro novo já sai
+com a chave nova e `python -m scripts.prontuario_chaves rotacionar --aplicar`
+recifra as linhas antigas. Só depois disso a chave antiga pode sair do ambiente.
+Com PRONTUARIO_KEY_FINGERPRINT definida, uma chave diferente da esperada
+desliga o prontuário em vez de misturar cifras. O mesmo script verifica (`verificar`) se a chave configurada abre todos os
+prontuários — rode antes e depois de qualquer troca de variável e guarde a
+impressão digital (`impressao`) junto do backup da chave.
+
 Nome e CPF nunca vão para os provedores de IA nem para logs/PostHog.
 """
 
@@ -22,11 +32,12 @@ import logging
 import os
 import re
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 logger = logging.getLogger(__name__)
 
 _ENV_KEY = "PRONTUARIO_ENCRYPTION_KEY"
+_ENV_OLD_KEYS = "PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS"
 
 
 def _is_production_like() -> bool:
@@ -46,7 +57,12 @@ def _key_bytes() -> bytes | None:
     return base64.urlsafe_b64encode(digest)
 
 
-def _fernet() -> Fernet | None:
+def _old_keys() -> list[bytes]:
+    raw = os.environ.get(_ENV_OLD_KEYS, "")
+    return [k.strip().encode("ascii") for k in raw.split(",") if k.strip()]
+
+
+def _primary_fernet() -> Fernet | None:
     key = _key_bytes()
     if key is None:
         return None
@@ -57,9 +73,54 @@ def _fernet() -> Fernet | None:
         return None
 
 
+def _old_fernets() -> list[Fernet]:
+    fernets = []
+    for key in _old_keys():
+        try:
+            fernets.append(Fernet(key))
+        except ValueError:
+            logger.error("Chave inválida em %s: ignorada.", _ENV_OLD_KEYS)
+    return fernets
+
+
+def _fernet() -> MultiFernet | None:
+    """Cifra com a chave atual; decifra com a atual ou qualquer antiga."""
+    primary = _primary_fernet()
+    if primary is None:
+        return None
+    return MultiFernet([primary, *_old_fernets()])
+
+
+def fingerprint(key: bytes | str | None = None) -> str:
+    """Impressão digital curta da chave (não revela a chave): confere o backup sem expô-lo."""
+    if key is None:
+        key = _key_bytes()
+    if not key:
+        return ""
+    if isinstance(key, str):
+        key = key.encode("ascii")
+    return hashlib.sha256(b"prontuario-fingerprint:" + key.strip()).hexdigest()[:16]
+
+
+def fingerprint_mismatch() -> bool:
+    """True se PRONTUARIO_KEY_FINGERPRINT foi definida e não bate com a chave atual.
+
+    Protege contra colar a chave errada no ambiente: sem esta trava, o app
+    gravaria pacientes novos com uma chave e não abriria os antigos — dois
+    prontuários misturados, metade ilegível.
+    """
+    expected = os.environ.get("PRONTUARIO_KEY_FINGERPRINT", "").strip().lower()
+    return bool(expected) and expected != fingerprint()
+
+
 def is_configured() -> bool:
-    """True se há chave para cifrar os dados do paciente."""
-    return _fernet() is not None
+    """True se há chave para cifrar os dados do paciente (e ela é a esperada)."""
+    if _fernet() is None:
+        return False
+    if fingerprint_mismatch():
+        logger.error("PRONTUARIO_ENCRYPTION_KEY não confere com PRONTUARIO_KEY_FINGERPRINT: prontuário bloqueado.")
+        return False
+    return True
 
 
 def encrypt(value: str) -> str:
@@ -113,9 +174,46 @@ def mask_cpf(value: str | None) -> str:
     return f"***.{digits[3:6]}.{digits[6:9]}-**"
 
 
+def _cpf_hash_with(key: bytes, value: str) -> str:
+    return hmac.new(key, f"cpf:{cpf_digits(value)}".encode("utf-8"), hashlib.sha256).hexdigest()
+
+
 def cpf_hash(value: str) -> str:
-    """HMAC do CPF (só dígitos) — busca e unicidade sem o número em claro."""
+    """HMAC do CPF (só dígitos) com a chave atual — busca e unicidade sem o número em claro."""
     key = _key_bytes()
     if key is None:
         raise RuntimeError(f"{_ENV_KEY} não configurada.")
-    return hmac.new(key, f"cpf:{cpf_digits(value)}".encode("utf-8"), hashlib.sha256).hexdigest()
+    return _cpf_hash_with(key, value)
+
+
+def cpf_hash_candidates(value: str) -> list[str]:
+    """HMACs do CPF com a chave atual e as antigas: acha duplicado durante uma rotação."""
+    key = _key_bytes()
+    if key is None:
+        raise RuntimeError(f"{_ENV_KEY} não configurada.")
+    hashes = [_cpf_hash_with(key, value)]
+    for old in _old_keys():
+        h = _cpf_hash_with(old, value)
+        if h not in hashes:
+            hashes.append(h)
+    return hashes
+
+
+def opens_with_primary(token: str | None) -> bool:
+    """True se o token abre com a chave atual (não precisa ser recifrado)."""
+    primary = _primary_fernet()
+    if not token or primary is None:
+        return False
+    try:
+        primary.decrypt(token.encode("ascii"))
+        return True
+    except (InvalidToken, ValueError):
+        return False
+
+
+def rotate(token: str) -> str:
+    """Recifra o token com a chave atual (aceita token de chave antiga). Erro se nenhuma abre."""
+    fernet = _fernet()
+    if fernet is None:
+        raise RuntimeError(f"{_ENV_KEY} não configurada.")
+    return fernet.rotate(token.encode("ascii")).decode("ascii")
