@@ -19,10 +19,6 @@ anyio==4.14.2
     #   google-genai
     #   httpx
     #   httpx2
-backoff==2.2.1
-    # via
-    #   -c requirements.txt
-    #   posthog
 blinker==1.9.0
     # via
     #   -c requirements.txt
@@ -283,7 +279,7 @@ postgrest==2.34.1
     # via
     #   -c requirements.txt
     #   supabase
-posthog==7.91.0
+posthog==8.0.2
     # via
     #   -c requirements.txt
     #   -r requirements.in
