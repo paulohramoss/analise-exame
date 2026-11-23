@@ -7,10 +7,12 @@ pacientes que ele mesmo cadastrou.
 """
 
 import logging
+import os
+from datetime import date, datetime, timedelta, timezone
 
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from core import analyzer, comparacao, db, patient_crypto, privacy
+from core import acompanhamento, analyzer, comparacao, db, patient_crypto, privacy
 from web import config, costs, posthog, prontuario
 from web.extensions import rate_limit
 from web.security import premium_required
@@ -131,8 +133,16 @@ def detalhe(paciente_id: str):
             flash("Este laudo não traz um plano de reabilitação (laudos anteriores a essa função, "
                   "dinamometria e exames laboratoriais não têm). Preencha o tratamento à mão.", "error")
 
+    metas = acompanhamento.avaliar_todas(
+        db.listar_metas(cliente_id, paciente_id), db.listar_dados_estruturados_pacientes(cliente_id, paciente_id)
+    )
     return render_template(
         "paciente_detalhe.html",
+        metas=metas,
+        operadores=acompanhamento.OPERADORES,
+        itens_meta=acompanhamento.itens_sugeridos(db.listar_dados_estruturados_pacientes(cliente_id, paciente_id)),
+        lembretes=db.listar_lembretes(cliente_id, paciente_id),
+        hoje=date.today(),
         paciente=paciente,
         idade=prontuario.idade(paciente.get("data_nascimento")),
         analises=analises,
@@ -197,6 +207,170 @@ def retorno(paciente_id: str):
         depois=depois,
         comparacao=resultado,
     )
+
+
+# ── Metas e lembretes ─────────────────────────────────────────────────────────
+
+@bp.route("/pacientes/<paciente_id>/metas", methods=["POST"])
+@premium_required
+@rate_limit("PATIENT_WRITE_RATE_LIMIT", "120 per hour")
+def nova_meta(paciente_id: str):
+    g.modo = "premium"
+    cliente_id, _paciente = _own_patient_or_404(paciente_id)
+    voltar = redirect(url_for("pacientes.detalhe", paciente_id=paciente_id) + "#metas")
+    campos, errors = prontuario.meta_from_form(request.form)
+    if errors:
+        for message in errors:
+            flash(message, "error")
+        return voltar
+    if not db.salvar_meta(paciente_id, cliente_id, campos):
+        flash("Não foi possível salvar a meta (o banco de dados foi atualizado?).", "error")
+        return voltar
+    db.registrar_acesso_prontuario(cliente_id, paciente_id, "meta")
+    _capture("patient_goal_created")
+    flash("Meta registrada. O progresso é conferido a cada exame novo.", "success")
+    return voltar
+
+
+@bp.route("/pacientes/<paciente_id>/metas/<meta_id>/<acao>", methods=["POST"])
+@premium_required
+def alterar_meta(paciente_id: str, meta_id: str, acao: str):
+    g.modo = "premium"
+    cliente_id, _paciente = _own_patient_or_404(paciente_id)
+    if acao == "excluir":
+        ok = db.excluir_meta(meta_id, paciente_id, cliente_id)
+    elif acao in {"concluir", "reabrir"}:
+        valor = datetime.now(timezone.utc).isoformat() if acao == "concluir" else None
+        ok = db.atualizar_meta(meta_id, paciente_id, cliente_id, {"concluida_em": valor})
+    else:
+        abort(404)
+    if not ok:
+        flash("Não foi possível alterar a meta.", "error")
+    return redirect(url_for("pacientes.detalhe", paciente_id=paciente_id) + "#metas")
+
+
+@bp.route("/pacientes/<paciente_id>/lembretes", methods=["POST"])
+@premium_required
+@rate_limit("PATIENT_WRITE_RATE_LIMIT", "120 per hour")
+def novo_lembrete(paciente_id: str):
+    g.modo = "premium"
+    cliente_id, _paciente = _own_patient_or_404(paciente_id)
+    voltar = redirect(url_for("pacientes.detalhe", paciente_id=paciente_id) + "#lembretes")
+    texto = " ".join((request.form.get("texto") or "").split())[:300]
+    data = acompanhamento.data_do_lembrete(request.form)
+    if len(texto) < 3:
+        flash("Descreva o lembrete (ex.: repetir CK).", "error")
+        return voltar
+    if data is None:
+        flash("Escolha a data ou em quantos dias/semanas/meses.", "error")
+        return voltar
+    if not db.salvar_lembrete(cliente_id, paciente_id, texto, data.isoformat()):
+        flash("Não foi possível salvar o lembrete (o banco de dados foi atualizado?).", "error")
+        return voltar
+    _capture("reminder_created")
+    flash(f"Lembrete marcado para {data.strftime('%d/%m/%Y')}.", "success")
+    return voltar
+
+
+@bp.route("/lembretes/<lembrete_id>/concluir", methods=["POST"])
+@premium_required
+def concluir_lembrete(lembrete_id: str):
+    g.modo = "premium"
+    cliente_id, redirect_resp = _require_professional()
+    if redirect_resp:
+        return redirect_resp
+    concluido = request.form.get("desfazer") != "1"
+    if not db.concluir_lembrete(lembrete_id, cliente_id, concluido=concluido):
+        flash("Não foi possível atualizar o lembrete.", "error")
+    destino = request.form.get("voltar") or ""
+    # Só caminhos internos: nada de redirecionar para outro site.
+    if not destino.startswith("/") or destino.startswith("//"):
+        destino = url_for("pacientes.hoje")
+    return redirect(destino)
+
+
+@bp.route("/hoje")
+@premium_required
+def hoje():
+    """Tela do dia: lembretes vencendo, metas que o último exame moveu e laudos a revisar."""
+    g.modo = "premium"
+    cliente_id = _professional_id()
+    if not cliente_id:
+        return redirect(url_for("pacientes.lista"))
+    pacientes = {p["id"]: p for p in db.listar_pacientes(cliente_id)}
+    lembretes = acompanhamento.separar_lembretes(db.listar_lembretes(cliente_id))
+    for grupo in lembretes.values():
+        for item in grupo:
+            item["paciente"] = pacientes.get(item.get("paciente_id"))
+
+    dados_por_paciente: dict[str, list[dict]] = {}
+    for analise in db.listar_dados_estruturados_pacientes(cliente_id):
+        dados_por_paciente.setdefault(analise["paciente_id"], []).append(analise)
+    metas_por_paciente: dict[str, list[dict]] = {}
+    for meta in db.listar_metas(cliente_id):
+        metas_por_paciente.setdefault(meta["paciente_id"], []).append(meta)
+    alertas = []
+    for pid, metas in metas_por_paciente.items():
+        for meta in acompanhamento.alertas_das_metas(
+            acompanhamento.avaliar_todas(metas, dados_por_paciente.get(pid, []))
+        ):
+            alertas.append({**meta, "paciente": pacientes.get(pid)})
+
+    desde = (date.today() - timedelta(days=7)).isoformat()
+    recentes = [a for a in db.listar_analises(cliente_id=cliente_id, limit=30) if (a.get("created_at") or "")[:10] >= desde]
+    validados = {v.get("analise_id") for v in db.listar_validacoes_clinicas([a["id"] for a in recentes])}
+    for a in recentes:
+        a["paciente"] = pacientes.get(a.get("paciente_id"))
+    return render_template(
+        "hoje.html",
+        lembretes=lembretes,
+        alertas=alertas,
+        a_revisar=[a for a in recentes if a["id"] not in validados][:10],
+        total_pacientes=len(pacientes),
+        operadores=acompanhamento.OPERADORES,
+    )
+
+
+@bp.route("/cron/lembretes")
+def cron_lembretes():
+    """E-mail diário: "você tem N reavaliações". Sem nome de paciente nem texto do lembrete.
+
+    Chamado pelo cron da Vercel com `Authorization: Bearer <CRON_SECRET>`.
+    """
+    import hmac
+
+    from core import mailer
+
+    segredo = os.environ.get("CRON_SECRET", "").strip()
+    if not segredo:
+        return jsonify({"error": "CRON_SECRET não configurado."}), 503
+    recebido = request.headers.get("Authorization", "")
+    if not hmac.compare_digest(recebido.encode("utf-8"), f"Bearer {segredo}".encode("utf-8")):
+        return jsonify({"error": "Unauthorized"}), 401
+    if not mailer.is_configured():
+        return jsonify({"enviados": 0, "motivo": "smtp_desligado"})
+
+    por_cliente: dict[str, dict] = {}
+    for item in db.listar_lembretes_para_email(date.today().isoformat()):
+        grupo = por_cliente.setdefault(item["cliente_id"], {"email": item["email"], "nome": item["nome"], "ids": []})
+        grupo["ids"].append(item["id"])
+
+    base_url = (os.environ.get("APP_BASE_URL") or request.host_url).rstrip("/")
+    enviados = 0
+    for grupo in por_cliente.values():
+        n = len(grupo["ids"])
+        primeiro_nome = (grupo["nome"] or "").split(" ")[0]
+        assunto = f"{n} reavaliaç{'ão' if n == 1 else 'ões'} para hoje — Three Health"
+        corpo = (
+            f"Olá{', ' + primeiro_nome if primeiro_nome else ''}!\n\n"
+            f"Você tem {n} lembrete{'s' if n != 1 else ''} de reavaliação vencendo hoje ou atrasado{'s' if n != 1 else ''}.\n"
+            f"Veja quais são em {base_url}/hoje\n\n"
+            "Por segurança, este e-mail não traz o nome dos pacientes."
+        )
+        if mailer.send_email(grupo["email"], assunto, corpo):
+            db.marcar_lembretes_email(grupo["ids"])
+            enviados += 1
+    return jsonify({"enviados": enviados, "profissionais": len(por_cliente)})
 
 
 @bp.route("/pacientes/<paciente_id>/contexto")

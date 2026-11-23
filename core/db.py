@@ -1323,6 +1323,196 @@ def listar_evolucoes(paciente_id: str, cliente_id: str) -> list[dict]:
         return []
 
 
+# ── Metas e lembretes (core/acompanhamento) ──────────────────────────────────
+# Tabelas da migration 2026-11-23: sem ela, as listas vêm vazias e o resto do
+# prontuário segue funcionando.
+
+_META_COLUMNS = "id, paciente_id, item, operador, valor, unidade, prazo, concluida_em, created_at"
+_LEMBRETE_COLUMNS = "id, paciente_id, texto, data, concluido_em, created_at"
+
+
+def listar_metas(cliente_id: str | None, paciente_id: str | None = None) -> list[dict]:
+    """Metas do profissional (de um paciente, ou de todos para a tela "Hoje")."""
+    db = _get_client()
+    if not db or not cliente_id:
+        return []
+    try:
+        query = db.table("metas_paciente").select(_META_COLUMNS).eq("cliente_id", cliente_id)
+        if paciente_id:
+            query = query.eq("paciente_id", paciente_id)
+        return query.order("created_at").limit(1000).execute().data or []
+    except Exception:
+        logger.warning("metas_paciente indisponível (migration 2026-11-23 aplicada?)", exc_info=True)
+        return []
+
+
+def salvar_meta(paciente_id: str, cliente_id: str, campos: dict) -> str | None:
+    db = _get_client()
+    if not db or not paciente_id or not cliente_id:
+        return None
+    try:
+        res = db.table("metas_paciente").insert({
+            "paciente_id": paciente_id, "cliente_id": cliente_id,
+            "item": campos["item"], "operador": campos.get("operador"), "valor": campos.get("valor"),
+            "unidade": campos.get("unidade") or None, "prazo": campos.get("prazo") or None,
+        }).execute()
+        return res.data[0]["id"] if res.data else None
+    except Exception:
+        logger.exception("Erro em salvar_meta")
+        return None
+
+
+def atualizar_meta(meta_id: str, paciente_id: str, cliente_id: str, campos: dict) -> bool:
+    """Só concluida_em (meta livre cumprida/reaberta)."""
+    db = _get_client()
+    if not db or not meta_id or not cliente_id:
+        return False
+    try:
+        permitidos = {k: v for k, v in campos.items() if k in {"concluida_em"}}
+        res = (
+            db.table("metas_paciente").update(permitidos)
+            .eq("id", meta_id).eq("paciente_id", paciente_id).eq("cliente_id", cliente_id).execute()
+        )
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em atualizar_meta")
+        return False
+
+
+def excluir_meta(meta_id: str, paciente_id: str, cliente_id: str) -> bool:
+    db = _get_client()
+    if not db or not meta_id or not cliente_id:
+        return False
+    try:
+        res = (
+            db.table("metas_paciente").delete()
+            .eq("id", meta_id).eq("paciente_id", paciente_id).eq("cliente_id", cliente_id).execute()
+        )
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em excluir_meta")
+        return False
+
+
+def listar_dados_estruturados_pacientes(cliente_id: str | None, paciente_id: str | None = None,
+                                        limit: int = 400) -> list[dict]:
+    """Laboratoriais e dinamometrias ligados a pacientes: [{id, paciente_id, created_at, tipo_exame, dados}]."""
+    db = _get_client()
+    if not db or not cliente_id:
+        return []
+    try:
+        query = (
+            db.table("analises").select("id, paciente_id, created_at, tipo_exame, dados_estruturados")
+            .eq("cliente_id", cliente_id).in_("tipo_exame", ["laboratorial", "dinamometria"])
+        )
+        query = query.eq("paciente_id", paciente_id) if paciente_id else query.not_.is_("paciente_id", "null")
+        rows = query.order("created_at", desc=True).limit(limit).execute().data or []
+        return [
+            {k: v for k, v in {**row, "dados": row.get("dados_estruturados")}.items() if k != "dados_estruturados"}
+            for row in rows
+        ]
+    except Exception:
+        logger.warning("dados_estruturados indisponível para as metas", exc_info=True)
+        return []
+
+
+def listar_lembretes(cliente_id: str | None, paciente_id: str | None = None,
+                     incluir_concluidos: bool = False, limit: int = 500) -> list[dict]:
+    db = _get_client()
+    if not db or not cliente_id:
+        return []
+    try:
+        query = db.table("lembretes").select(_LEMBRETE_COLUMNS).eq("cliente_id", cliente_id)
+        if paciente_id:
+            query = query.eq("paciente_id", paciente_id)
+        if not incluir_concluidos:
+            query = query.is_("concluido_em", "null")
+        return query.order("data").limit(limit).execute().data or []
+    except Exception:
+        logger.warning("lembretes indisponível (migration 2026-11-23 aplicada?)", exc_info=True)
+        return []
+
+
+def salvar_lembrete(cliente_id: str, paciente_id: str | None, texto: str, data: str) -> str | None:
+    db = _get_client()
+    if not db or not cliente_id:
+        return None
+    try:
+        res = db.table("lembretes").insert({
+            "cliente_id": cliente_id, "paciente_id": paciente_id or None, "texto": texto, "data": data,
+        }).execute()
+        return res.data[0]["id"] if res.data else None
+    except Exception:
+        logger.exception("Erro em salvar_lembrete")
+        return None
+
+
+def concluir_lembrete(lembrete_id: str, cliente_id: str, concluido: bool = True) -> bool:
+    db = _get_client()
+    if not db or not lembrete_id or not cliente_id:
+        return False
+    try:
+        valor = datetime.now(timezone.utc).isoformat() if concluido else None
+        res = (
+            db.table("lembretes").update({"concluido_em": valor})
+            .eq("id", lembrete_id).eq("cliente_id", cliente_id).execute()
+        )
+        return bool(res.data)
+    except Exception:
+        logger.exception("Erro em concluir_lembrete")
+        return False
+
+
+def listar_lembretes_para_email(ate_dia: str, limit: int = 2000) -> list[dict]:
+    """Lembretes vencidos ainda sem e-mail, com o e-mail do profissional: [{id, cliente_id, email, nome}]."""
+    db = _get_client()
+    if not db:
+        return []
+    try:
+        rows = (
+            db.table("lembretes").select("id, cliente_id, clientes(email, nome)")
+            .is_("concluido_em", "null").is_("email_enviado_em", "null").lte("data", ate_dia)
+            .limit(limit).execute().data or []
+        )
+        saida = []
+        for row in rows:
+            cliente = row.get("clientes") or {}
+            if isinstance(cliente, list):
+                cliente = cliente[0] if cliente else {}
+            if cliente.get("email"):
+                saida.append({"id": row["id"], "cliente_id": row["cliente_id"],
+                              "email": cliente["email"], "nome": cliente.get("nome") or ""})
+        return saida
+    except Exception:
+        logger.exception("Erro em listar_lembretes_para_email")
+        return []
+
+
+def marcar_lembretes_email(ids: list[str]) -> bool:
+    db = _get_client()
+    if not db or not ids:
+        return False
+    try:
+        db.table("lembretes").update({"email_enviado_em": datetime.now(timezone.utc).isoformat()}) \
+            .in_("id", ids).execute()
+        return True
+    except Exception:
+        logger.exception("Erro em marcar_lembretes_email")
+        return False
+
+
+def _exportar_acompanhamento(db, cliente_id: str) -> dict:
+    """Metas e lembretes (vazio se a migration ainda não rodou)."""
+    try:
+        return {
+            "metas": db.table("metas_paciente").select(_META_COLUMNS).eq("cliente_id", cliente_id).execute().data or [],
+            "lembretes": db.table("lembretes").select(_LEMBRETE_COLUMNS).eq("cliente_id", cliente_id).execute().data or [],
+        }
+    except Exception:
+        logger.warning("Exportação sem metas/lembretes (migration 2026-11-23 aplicada?)", exc_info=True)
+        return {"metas": [], "lembretes": []}
+
+
 def registrar_acesso_prontuario(cliente_id: str | None, paciente_id: str | None, acao: str) -> None:
     """Trilha de auditoria: quem abriu ou alterou qual prontuário, e quando."""
     db = _get_client()
@@ -1397,6 +1587,7 @@ def exportar_dados_cliente(cliente_id: str) -> dict | None:
             "pacientes": _exportar_prontuarios(db, cliente_id),
             "clinica": buscar_marca_clinica(cliente_id),
             "relatorios_paciente": _exportar_relatorios_paciente(db, cliente_id),
+            **_exportar_acompanhamento(db, cliente_id),
         }
     except Exception:
         logger.exception("Erro em exportar_dados_cliente")

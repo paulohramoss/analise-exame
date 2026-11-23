@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hoje — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <link rel="stylesheet" href="{{ static_url('prontuario.css') }}">
+</head>
+<body>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("hoje") }}
+    {% endcall %}
+
+    {% set tendencia_rotulo = {"atingiu": "atingiu a meta no último exame", "perdeu": "deixou de atingir a meta",
+                               "aproximando": "aproximando-se da meta", "afastando": "afastando-se da meta", "estavel": "estável"} %}
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">Hoje</h1>
+                <p class="page-subtitle">Reavaliações, metas que mudaram e laudos da semana ainda sem validação.</p>
+            </div>
+            <div class="pt-actions">
+                <a class="btn-primary" href="{{ url_for('analysis.index') }}">{{ layout.icon("scan", 18, "btn-icon") }} Nova análise</a>
+            </div>
+        </div>
+
+        {% if not total_pacientes %}
+        <section class="card onboarding-card">
+            <h2 class="pt-section-title">{{ layout.icon("users", 20) }} Comece pelo primeiro paciente</h2>
+            <ol class="onboarding-steps">
+                <li><strong>Cadastre o paciente</strong> (nome e CPF ficam cifrados).</li>
+                <li><strong>Envie um exame</strong> já vinculado a ele: imagem, dinamometria ou laboratorial.</li>
+                <li><strong>Defina uma meta</strong> ("LSI quadríceps ≥ 90") e um lembrete de reavaliação.</li>
+            </ol>
+            <p class="card-description">A partir do segundo exame, o botão "O que mudou" mostra a evolução lado a lado, e esta tela avisa quando uma meta é atingida ou o paciente se afasta dela.</p>
+            <a class="btn-primary" href="{{ url_for('pacientes.novo') }}">{{ layout.icon("plus", 18, "btn-icon") }} Cadastrar paciente</a>
+        </section>
+        {% endif %}
+
+        <div class="today-grid">
+            <section class="card">
+                <h2 class="pt-section-title">{{ layout.icon("bell", 20) }} Reavaliações</h2>
+                {% set pendentes = lembretes.atrasados + lembretes.hoje %}
+                {% if pendentes %}
+                <ul class="today-list">
+                    {% for l in pendentes %}
+                    <li class="reminder-item{{ ' reminder-late' if l.dias < 0 }}">
+                        <div>
+                            <strong>{{ l.texto }}</strong>
+                            <div class="patient-meta">
+                                {% if l.paciente %}<a href="{{ url_for('pacientes.detalhe', paciente_id=l.paciente.id) }}">{{ l.paciente.nome }}</a>{% endif %}
+                                <span>{% if l.dias < 0 %}atrasado {{ -l.dias }} dia{{ 's' if l.dias != -1 }}{% else %}hoje{% endif %}</span>
+                            </div>
+                        </div>
+                        <form method="POST" action="{{ url_for('pacientes.concluir_lembrete', lembrete_id=l.id) }}">
+                            <input type="hidden" name="voltar" value="{{ url_for('pacientes.hoje') }}">
+                            <button type="submit" class="btn-ghost btn-small">{{ layout.icon("check", 14) }} Feito</button>
+                        </form>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="today-empty">Nenhuma reavaliação para hoje.</p>
+                {% endif %}
+                {% if lembretes.proximos %}
+                <details class="today-next">
+                    <summary>Próximos {{ lembretes.proximos|length }}</summary>
+                    <ul class="today-list">
+                        {% for l in lembretes.proximos[:20] %}
+                        <li>{{ l.data_obj.strftime('%d/%m') }} — {{ l.texto }}{% if l.paciente %} · <a href="{{ url_for('pacientes.detalhe', paciente_id=l.paciente.id) }}">{{ l.paciente.nome }}</a>{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                </details>
+                {% endif %}
+            </section>
+
+            <section class="card">
+                <h2 class="pt-section-title">{{ layout.icon("target", 20) }} Metas que pedem atenção</h2>
+                {% if alertas %}
+                <ul class="today-list">
+                    {% for m in alertas %}
+                    <li class="goal-item goal-{{ m.status }}">
+                        <strong>{{ m.descricao }}</strong>
+                        <div class="patient-meta">
+                            {% if m.paciente %}<a href="{{ url_for('pacientes.detalhe', paciente_id=m.paciente.id) }}#metas">{{ m.paciente.nome }}</a>{% endif %}
+                            {% if m.ultimo %}<span>último: {{ m.ultimo.valor_fmt }}</span>{% endif %}
+                            {% if m.tendencia %}<span class="goal-trend goal-trend-{{ m.tendencia }}">{{ tendencia_rotulo[m.tendencia] }}</span>
+                            {% elif m.status == 'vencida' %}<span class="goal-trend goal-trend-perdeu">prazo vencido</span>
+                            {% elif m.dias_para_prazo is defined %}<span>prazo em {{ m.dias_para_prazo }} dia{{ 's' if m.dias_para_prazo != 1 }}</span>{% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="today-empty">Nenhuma meta mudou nas últimas semanas.</p>
+                {% endif %}
+            </section>
+
+            <section class="card">
+                <h2 class="pt-section-title">{{ layout.icon("file-text", 20) }} Laudos da semana sem validação</h2>
+                {% if a_revisar %}
+                <ul class="today-list">
+                    {% for a in a_revisar %}
+                    <li>
+                        <a href="{{ url_for('laudos.laudo_detalhe', analise_id=a.id) }}">{{ (a.tipo_exame or 'exame')|exam_label }}</a>
+                        <span class="patient-meta">{{ a.created_at|datetime_br }}{% if a.paciente %} · {{ a.paciente.nome }}{% endif %}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="today-empty">Tudo revisado.</p>
+                {% endif %}
+            </section>
+        </div>
+    </main>
+
+    {{ layout.site_footer() }}
+</body>
+</html>

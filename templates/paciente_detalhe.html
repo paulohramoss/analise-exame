@@ -106,6 +106,114 @@
             </div>
 
             <div>
+                <section class="card" id="metas">
+                    <h2 class="pt-section-title">{{ layout.icon("target", 20) }} Metas</h2>
+                    {% set status_rotulo = {"atingida": "Atingida", "nao_atingida": "Ainda não", "vencida": "Prazo vencido",
+                                            "sem_dado": "Sem exame com esse item", "em_andamento": "Em andamento"} %}
+                    {% set tendencia_rotulo = {"atingiu": "atingiu no último exame", "perdeu": "deixou de atingir no último exame",
+                                               "aproximando": "aproximando-se", "afastando": "afastando-se", "estavel": "estável"} %}
+                    {% for m in metas %}
+                    <div class="goal-item goal-{{ m.status }}">
+                        <div class="goal-head">
+                            <strong>{{ m.descricao }}</strong>
+                            <span class="goal-status">{{ status_rotulo[m.status] }}</span>
+                        </div>
+                        <div class="patient-meta">
+                            {% if m.ultimo %}<span>Último: {{ m.ultimo.valor_fmt }}{% if m.ultimo.data %} ({{ m.ultimo.data.strftime('%d/%m/%Y') }}){% endif %}</span>{% endif %}
+                            {% if m.anterior %}<span>antes: {{ m.anterior.valor_fmt }}</span>{% endif %}
+                            {% if m.tendencia %}<span class="goal-trend goal-trend-{{ m.tendencia }}">{{ tendencia_rotulo[m.tendencia] }}</span>{% endif %}
+                            {% if m.prazo_data %}<span>Prazo {{ m.prazo_data.strftime('%d/%m/%Y') }}{% if m.dias_para_prazo is defined and m.dias_para_prazo >= 0 and m.status != 'atingida' %} · faltam {{ m.dias_para_prazo }} dia{{ 's' if m.dias_para_prazo != 1 }}{% endif %}</span>{% endif %}
+                        </div>
+                        {% if m.progresso_pct is not none and m.status != 'atingida' %}
+                        <div class="goal-bar" role="progressbar" aria-valuenow="{{ m.progresso_pct }}" aria-valuemin="0" aria-valuemax="100" aria-label="Progresso desde o exame anterior"><span style="width: {{ m.progresso_pct }}%"></span></div>
+                        {% endif %}
+                        <div class="goal-actions">
+                            {% if not m.operador %}
+                            <form method="POST" action="{{ url_for('pacientes.alterar_meta', paciente_id=paciente.id, meta_id=m.id, acao='reabrir' if m.concluida_em else 'concluir') }}">
+                                <button type="submit" class="btn-ghost btn-small">{{ 'Reabrir' if m.concluida_em else 'Marcar como cumprida' }}</button>
+                            </form>
+                            {% endif %}
+                            <form method="POST" action="{{ url_for('pacientes.alterar_meta', paciente_id=paciente.id, meta_id=m.id, acao='excluir') }}" onsubmit="return confirm('Excluir esta meta?')">
+                                <button type="submit" class="btn-ghost btn-small">Excluir</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="card-description">Defina o alvo do tratamento — "LSI quadríceps ≥ 90", "Ferritina > 50" — e o app confere a cada exame novo se o paciente chegou lá. Metas sem número ("retorno ao esporte") ficam só com o prazo.</p>
+                    {% endfor %}
+                    <form class="pt-form goal-form" method="POST" action="{{ url_for('pacientes.nova_meta', paciente_id=paciente.id) }}">
+                        <div class="pt-field">
+                            <label for="meta-item">Exame, medida ou meta</label>
+                            <input type="text" id="meta-item" name="item" list="meta-itens" maxlength="120" required placeholder="Ex: LSI quadríceps, Ferritina, retorno ao esporte">
+                            <datalist id="meta-itens">{% for i in itens_meta %}<option value="{{ i }}">{% endfor %}</datalist>
+                        </div>
+                        <div class="pt-grid goal-grid">
+                            <div>
+                                <label for="meta-op">Comparação</label>
+                                <select id="meta-op" name="operador">
+                                    <option value="">— meta livre —</option>
+                                    {% for op, simbolo in operadores.items() %}<option value="{{ op }}">{{ simbolo }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="meta-valor">Valor</label>
+                                <input type="text" id="meta-valor" name="valor" inputmode="decimal" maxlength="12" placeholder="90">
+                            </div>
+                            <div>
+                                <label for="meta-unidade">Unidade</label>
+                                <input type="text" id="meta-unidade" name="unidade" maxlength="20" placeholder="%">
+                            </div>
+                            <div>
+                                <label for="meta-prazo">Prazo</label>
+                                <input type="date" id="meta-prazo" name="prazo">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-secondary">Adicionar meta</button>
+                    </form>
+                </section>
+
+                <section class="card" id="lembretes">
+                    <h2 class="pt-section-title">{{ layout.icon("bell", 20) }} Lembretes de reavaliação</h2>
+                    {% for l in lembretes %}
+                    {% set atrasado = l.data < hoje.isoformat() %}
+                    <div class="reminder-item{{ ' reminder-late' if atrasado }}">
+                        <div>
+                            <strong>{{ l.texto }}</strong>
+                            <div class="patient-meta"><span>{{ l.data|date_br }}{% if atrasado %} · atrasado{% elif l.data == hoje.isoformat() %} · hoje{% endif %}</span></div>
+                        </div>
+                        <form method="POST" action="{{ url_for('pacientes.concluir_lembrete', lembrete_id=l.id) }}">
+                            <input type="hidden" name="voltar" value="{{ url_for('pacientes.detalhe', paciente_id=paciente.id) }}#lembretes">
+                            <button type="submit" class="btn-ghost btn-small">{{ layout.icon("check", 14) }} Feito</button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                    <form class="pt-form" method="POST" action="{{ url_for('pacientes.novo_lembrete', paciente_id=paciente.id) }}">
+                        <div class="pt-field">
+                            <label for="lb-texto">O que fazer</label>
+                            <input type="text" id="lb-texto" name="texto" maxlength="300" required placeholder="Ex: repetir CK, nova dinamometria">
+                        </div>
+                        <div class="pt-grid goal-grid">
+                            <div>
+                                <label for="lb-qtd">Em</label>
+                                <input type="number" id="lb-qtd" name="em_quantidade" min="1" max="120" placeholder="2">
+                            </div>
+                            <div>
+                                <label for="lb-un">&nbsp;</label>
+                                <select id="lb-un" name="em_unidade" aria-label="Unidade do prazo">
+                                    <option value="semanas">semanas</option>
+                                    <option value="dias">dias</option>
+                                    <option value="meses">meses</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="lb-data">ou na data</label>
+                                <input type="date" id="lb-data" name="data">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-secondary">Criar lembrete</button>
+                    </form>
+                </section>
+
                 <section class="card correlation-card" id="correlacao">
                     <h2 class="pt-section-title">{{ layout.icon("zap", 20) }} Correlacionar exames</h2>
                     <p class="card-description">Gera um parecer que cruza os exames deste paciente — imagem, dinamometria e

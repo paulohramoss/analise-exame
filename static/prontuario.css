@@ -272,3 +272,30 @@
 .cmp-section-title { font-size: 1rem; margin: 1.25rem 0 0.5rem; }
 .cmp-side { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 @media (max-width: 720px) { .cmp-side { grid-template-columns: 1fr; } }
+
+/* ── Metas e lembretes ──────────────────────────────────────────────────── */
+.goal-item, .reminder-item { border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: var(--radius-sm); padding: 0.6rem 0.8rem; margin-bottom: 0.6rem; }
+.goal-atingida { border-left-color: var(--success); }
+.goal-vencida { border-left-color: var(--danger); }
+.goal-nao_atingida { border-left-color: var(--warning); }
+.goal-head { display: flex; justify-content: space-between; gap: 0.5rem; align-items: baseline; }
+.goal-status { font-size: 0.75rem; font-weight: 800; color: var(--text-muted); white-space: nowrap; }
+.goal-atingida .goal-status { color: var(--success-dark); }
+.goal-vencida .goal-status { color: var(--danger-dark); }
+.goal-trend-atingiu, .goal-trend-aproximando { color: var(--success-dark); font-weight: 700; }
+.goal-trend-perdeu, .goal-trend-afastando { color: var(--danger-dark); font-weight: 700; }
+.goal-bar { height: 6px; background: var(--surface-muted); border-radius: 999px; overflow: hidden; margin-top: 0.4rem; }
+.goal-bar span { display: block; height: 100%; background: var(--primary); }
+.goal-actions { display: flex; gap: 0.4rem; margin-top: 0.3rem; }
+.goal-actions form { margin: 0; }
+.goal-form { margin-top: 0.75rem; }
+.goal-grid { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.reminder-item { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
+.reminder-item form { margin: 0; }
+.reminder-late { border-left-color: var(--danger); }
+.today-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+.today-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+.today-empty { color: var(--text-muted); font-size: 0.9rem; }
+.onboarding-card { margin-bottom: 1rem; border-color: var(--primary-border); }
+.onboarding-steps { margin: 0.5rem 0 0.75rem 1.2rem; display: grid; gap: 0.35rem; }
+.today-next summary { cursor: pointer; margin-top: 0.75rem; font-weight: 700; font-size: 0.9rem; }

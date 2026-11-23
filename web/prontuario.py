@@ -112,6 +112,41 @@ def evolucao_from_form(form) -> tuple[dict, list[str]]:
     }, errors
 
 
+def meta_from_form(form) -> tuple[dict, list[str]]:
+    """Meta numérica (item + operador + valor) ou livre (só item e prazo)."""
+    errors = []
+    item = " ".join((form.get("item") or "").split())[:120]
+    operador = (form.get("operador") or "").strip() or None
+    valor_raw = (form.get("valor") or "").strip().replace(",", ".")
+    unidade = (form.get("unidade") or "").strip()[:20]
+    prazo_raw = (form.get("prazo") or "").strip()
+    prazo = parse_date(prazo_raw)
+
+    valor = None
+    if valor_raw:
+        try:
+            valor = float(valor_raw)
+        except ValueError:
+            errors.append("Valor da meta inválido.")
+    if len(item) < 2:
+        errors.append("Informe o exame, a medida ou a meta (ex.: LSI quadríceps, Ferritina, retorno ao esporte).")
+    if operador and operador not in {">=", "<=", ">", "<"}:
+        errors.append("Comparação da meta inválida.")
+    if (operador is None) != (valor is None) and not (valor_raw and valor is None):
+        errors.append("Para uma meta numérica, escolha a comparação e o valor; para uma meta livre, deixe os dois em branco.")
+    if prazo_raw and prazo is None:
+        errors.append("Prazo inválido.")
+    if operador is None and valor is None and prazo is None and not errors:
+        errors.append("Meta livre precisa de prazo (ex.: retorno ao esporte em 12 semanas).")
+    return {
+        "item": item,
+        "operador": operador,
+        "valor": valor,
+        "unidade": unidade,
+        "prazo": prazo.isoformat() if prazo else None,
+    }, errors
+
+
 def idade(data_nascimento: str | None, hoje: date | None = None) -> int | None:
     nascimento = parse_date(data_nascimento)
     if nascimento is None:
