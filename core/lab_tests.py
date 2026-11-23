@@ -59,7 +59,8 @@ Formato (responda APENAS com o JSON):
       "referencia_min": número ou null,
       "referencia_max": número ou null,
       "referencia_texto": "a faixa de referência como escrita no laudo",
-      "anteriores": [{"data": "AAAA-MM-DD", "valor": número}]
+      "anteriores": [{"data": "AAAA-MM-DD", "valor": número}],
+      "duvida": "motivo, se a leitura deste item é incerta; senão null"
     }
   ],
   "paciente": {"idade_anos": número ou null, "sexo": "M" | "F" | null}
@@ -78,6 +79,9 @@ Regras:
 - Se o laudo trouxer resultados anteriores do mesmo exame (ex.: "Resultados anteriores: 31/01/2024 = 8,4"),
   registre em "anteriores"; senão, lista vazia.
 - Inclua TODOS os resultados do laudo, inclusive os das últimas páginas.
+- "duvida": preencha SEMPRE que não tiver certeza da leitura — número borrado, cortado ou
+  ilegível, vírgula decimal ambígua, unidade estranha ou faixa que não se aplica claramente.
+  Ex.: "dígito final ilegível", "unidade não aparece". Não invente: na dúvida, diga.
 - Ignore nome, documento, médico solicitante e qualquer dado que identifique o paciente."""
 
 
@@ -102,6 +106,7 @@ def parse_extraction(text: str) -> dict:
             if isinstance(ant, dict) and _number(ant.get("valor")) is not None:
                 anteriores.append({"data": _text(ant.get("data"), 10) or None, "valor": _number(ant.get("valor"))})
         resultados.append({
+            "duvida": _text(item.get("duvida"), 120) or None,
             "anteriores": anteriores[:5],
             "exame": exame,
             "valor": valor,
@@ -399,10 +404,36 @@ def derive_patterns(resultados: list[dict], indices: list[dict]) -> list[dict]:
     return sorted(padroes, key=lambda p: p["nivel"] != "atencao")
 
 
+def conferir_leitura(r: dict) -> str | None:
+    """Motivo para o profissional conferir o valor no laudo original, ou None.
+
+    Junta a dúvida declarada pela IA na extração com checagens determinísticas
+    de leitura improvável (vírgula decimal perdida, faixa invertida…).
+    """
+    motivos = []
+    if r.get("duvida"):
+        motivos.append(str(r["duvida"]))
+    valor, minimo, maximo = r.get("valor"), r.get("referencia_min"), r.get("referencia_max")
+    if valor is not None and valor < 0:
+        motivos.append("valor negativo")
+    if minimo is not None and maximo is not None and minimo > maximo:
+        motivos.append("faixa de referência invertida")
+    # Limites largos de propósito: CK pode passar de 100× o limite numa rabdomiólise,
+    # e PCR muito baixa é normal. Só pega erro grosseiro de vírgula ou unidade.
+    alto = valor is not None and maximo and maximo > 0 and valor > 1000 * maximo
+    baixo = valor is not None and minimo and minimo > 0 and 0 <= valor < minimo / 50
+    if alto or baixo:
+        motivos.append("valor muito distante da faixa — vírgula decimal ou unidade lida errado?")
+    if valor is not None and not (r.get("unidade") or "").strip() and (minimo is not None or maximo is not None):
+        motivos.append("sem unidade")
+    return "; ".join(dict.fromkeys(motivos)) or None
+
+
 def compute(dados: dict) -> dict:
     resultados = []
     for r in dados["resultados"]:
         calc = dict(r, situacao=situacao(r), painel=painel(r["exame"]))
+        calc["conferir"] = conferir_leitura(calc)
         # Quanto o valor se afasta do limite violado (ex.: CK 3× o limite superior).
         if calc["situacao"] == "acima" and r["referencia_max"]:
             calc["vezes_o_limite"] = round(r["valor"] / r["referencia_max"], 1)
@@ -412,6 +443,7 @@ def compute(dados: dict) -> dict:
     alterados = [r for r in resultados if r["situacao"] in {"abaixo", "acima"}]
     indices = derive_indices(resultados)
     return {**dados, "resultados": resultados, "total": len(resultados), "alterados": len(alterados),
+            "conferir": sum(1 for r in resultados if r.get("conferir")),
             "indices": indices, "padroes": derive_patterns(resultados, indices)}
 
 
@@ -471,6 +503,8 @@ def format_results(calc: dict) -> str:
             sit += f" ({_fmt(r['vezes_o_limite'], 1)}× o limite)"
         if r["situacao"] in {"abaixo", "acima"}:
             sit = f"**{sit}**"
+        if r.get("conferir"):
+            sit += " · ⚠ conferir no laudo original"
         partes.append(f"| {r['painel']} | {_cell(r['exame'])} | {_cell(valor)} | {_cell(ref)} | {sit} |")
     if calc.get("indices"):
         partes += ["", "### Índices calculados pelo sistema", "",
@@ -614,12 +648,14 @@ def dashboard(calc: dict | None, hoje: date | None = None) -> dict | None:
             "vezes_o_limite": r.get("vezes_o_limite"),
             "barra": _bar(r),
             "anterior": _previous(r, un),
+            "conferir": r.get("conferir"),
         })
         if r["situacao"] in {"abaixo", "acima"}:
             painel_["alterados"] += 1
     return {
         "total": calc.get("total", 0),
         "alterados": calc.get("alterados", 0),
+        "conferir": calc.get("conferir") or sum(1 for r in calc["resultados"] if r.get("conferir")),
         "paineis": list(paineis.values()),
         "indices": [{**i, "valor_fmt": f"{_num(i['valor'])}{' ' + i['unidade'] if i['unidade'] else ''}"}
                     for i in calc.get("indices") or []],

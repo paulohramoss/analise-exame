@@ -12,8 +12,12 @@
             <div class="lab-stat"><strong>{{ d.total }}</strong><span>exames lidos</span></div>
             <div class="lab-stat {{ 'is-alert' if d.alterados else 'is-ok' }}"><strong>{{ d.alterados }}</strong><span>fora da faixa</span></div>
             <div class="lab-stat {{ 'is-alert' if d.padroes else 'is-ok' }}"><strong>{{ d.padroes|length }}</strong><span>{{ 'padrão' if d.padroes|length == 1 else 'padrões' }} a investigar</span></div>
+            {% if d.conferir %}<div class="lab-stat is-check"><strong>{{ d.conferir }}</strong><span>para conferir</span></div>{% endif %}
         </div>
     </div>
+    {% if d.conferir %}
+    <p class="lab-check-note" role="note">{{ d.conferir }} {{ 'valor teve' if d.conferir == 1 else 'valores tiveram' }} leitura incerta (marcado{{ 's' if d.conferir != 1 }} em amarelo). Confira no laudo original antes de usar.</p>
+    {% endif %}
 
     {% if d.meses_desde_coleta and d.meses_desde_coleta >= 6 %}
     <p class="lab-old" role="note">⏱ Coleta há {{ d.meses_desde_coleta // 12 ~ (' ano' if d.meses_desde_coleta // 12 == 1 else ' anos') if d.meses_desde_coleta >= 12 else d.meses_desde_coleta ~ ' meses' }}{% if d.meses_desde_coleta >= 12 and d.meses_desde_coleta % 12 %} e {{ d.meses_desde_coleta % 12 }} {{ 'mês' if d.meses_desde_coleta % 12 == 1 else 'meses' }}{% endif %}: os valores podem não refletir o estado atual. Considere repetir antes de decidir a conduta.</p>
@@ -55,13 +59,17 @@
     </div>
     {% endif %}
 
-    <h3 class="lab-dash-title">Resultados por painel</h3>
+    <div class="lab-results-head">
+        <h3 class="lab-dash-title">Resultados por painel</h3>
+        <label class="lab-filter"><input type="checkbox" class="lab-only-altered" onchange="this.closest('.lab-dash').classList.toggle('only-altered', this.checked)"> Só alterados e a conferir</label>
+    </div>
     <div class="lab-legend"><span><i class="sw-ok"></i> dentro da faixa</span><span><i class="sw-low"></i> abaixo</span><span><i class="sw-high"></i> acima</span><span><i class="sw-band"></i> faixa de referência do laudo</span></div>
     {% for p in d.paineis %}
-    <div class="lab-panel" id="painel-{{ loop.index }}">
-        <h4>{{ p.nome }}</h4>
+    {% set tem_conferir = p.itens|selectattr('conferir')|list %}
+    <details class="lab-panel{{ ' is-normal' if not p.alterados and not tem_conferir }}" id="painel-{{ loop.index }}"{% if p.alterados or tem_conferir or d.paineis|length <= 3 %} open{% endif %}>
+        <summary><h4>{{ p.nome }}</h4><span class="lab-panel-count">{{ p.itens|length }} exame{{ 's' if p.itens|length != 1 }}{% if p.alterados %} · {{ p.alterados }} alterado{{ 's' if p.alterados != 1 }}{% else %} · todos na faixa{% endif %}</span></summary>
         {% for it in p.itens %}
-        <div class="lab-row lab-{{ it.situacao }}">
+        <div class="lab-row lab-{{ it.situacao }}{{ ' lab-check' if it.conferir }}">
             <div class="lab-row-name">{{ it.exame }}</div>
             <div class="lab-row-bar">
                 {% if it.barra %}
@@ -75,9 +83,24 @@
             </div>
             <div class="lab-row-value"><strong>{{ it.valor }}</strong><span>{{ it.referencia }}</span>
                 {% if it.anterior %}<span class="lab-prev">{{ it.anterior.direcao }} antes: {{ it.anterior.texto|replace(' em ', ' em ') }}</span>{% endif %}</div>
-            <div class="lab-row-status">{{ it.rotulo }}{% if it.vezes_o_limite and it.vezes_o_limite >= 1.5 %} · {{ it.vezes_o_limite }}×{% endif %}</div>
+            <div class="lab-row-status">{{ it.rotulo }}{% if it.vezes_o_limite and it.vezes_o_limite >= 1.5 %} · {{ it.vezes_o_limite }}×{% endif %}
+                {% if it.conferir %}<span class="lab-check-why" title="{{ it.conferir }}">⚠ conferir: {{ it.conferir }}</span>{% endif %}</div>
         </div>
         {% endfor %}
-    </div>
+    </details>
     {% endfor %}
 </section>
+<script>
+    (function () {
+        // Painéis recolhidos abrem ao clicar no chip e na impressão (o PDF leva tudo).
+        document.querySelectorAll('.lab-chip[href^="#painel-"]').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                var alvo = document.querySelector(chip.getAttribute('href'));
+                if (alvo) alvo.open = true;
+            });
+        });
+        window.addEventListener('beforeprint', function () {
+            document.querySelectorAll('.lab-panel').forEach(function (p) { p.open = true; });
+        });
+    })();
+</script>

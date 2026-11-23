@@ -761,7 +761,25 @@
 .lab-legend .sw-ok { background: var(--ok); } .lab-legend .sw-low { background: var(--low); } .lab-legend .sw-high { background: var(--high); }
 .lab-legend .sw-band { background: #dcfce7; border: 1px solid #86efac; border-radius: 3px; width: 18px; height: 10px; }
 .lab-panel { margin-top: 0.9rem; }
-.lab-panel h4 { margin: 0 0 0.35rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.lab-panel h4 { margin: 0 0 0.35rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: inline; }
+.lab-panel > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 0.6rem; padding: 0.2rem 0; }
+.lab-panel > summary::-webkit-details-marker { display: none; }
+.lab-panel > summary::before { content: '▸'; color: var(--text-subtle); font-size: 0.8rem; }
+.lab-panel[open] > summary::before { content: '▾'; }
+.lab-panel-count { font-size: 0.75rem; color: var(--text-subtle); }
+.lab-results-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.lab-filter { font-size: 0.82rem; display: inline-flex; gap: 0.4rem; align-items: center; cursor: pointer; }
+.lab-dash.only-altered .lab-row.lab-normal:not(.lab-check),
+.lab-dash.only-altered .lab-row.lab-sem_referencia:not(.lab-check),
+.lab-dash.only-altered .lab-panel.is-normal { display: none; }
+.lab-row.lab-check { background: var(--warning-light); box-shadow: inset 3px 0 0 var(--warning); padding-left: 0.4rem; }
+.lab-check-why { display: block; font-size: 0.7rem; font-weight: 700; color: var(--warning-dark); }
+.lab-stat.is-check strong { color: var(--warning-dark); }
+.lab-check-note { background: var(--warning-light); border: 1px solid var(--warning-border); color: var(--warning-dark); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; font-size: 0.85rem; }
+@media print {
+  .lab-panel:not([open]) > *:not(summary) { display: block; }
+  .lab-filter { display: none; }
+}
 .lab-row { display: grid; grid-template-columns: minmax(130px, 1.3fr) minmax(140px, 2fr) minmax(110px, 1fr) 120px; gap: 0.8rem; align-items: center; padding: 0.45rem 0; border-top: 1px solid var(--border); font-size: 0.85rem; }
 .lab-row-name { font-weight: 700; color: #0f172a; }
 .lab-track { position: relative; height: 10px; border-radius: 999px; background: #f1f5f9; }

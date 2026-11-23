@@ -79,7 +79,8 @@ Formato (responda APENAS com o JSON):
       "potencia_direito": número ou null,
       "potencia_esquerdo": número ou null,
       "fadiga_direito_pct": número ou null,
-      "fadiga_esquerdo_pct": número ou null
+      "fadiga_esquerdo_pct": número ou null,
+      "duvida": "motivo, se a leitura desta medida é incerta; senão null"
     }
   ],
   "plataforma": [
@@ -93,6 +94,8 @@ Regras:
 - Uma entrada em "medidas" por grupo muscular + ação + velocidade (ou ângulo).
 - Se o relatório trouxer só déficit/percentual sem os valores de cada lado, deixe os picos null
   e registre o percentual em "observacoes".
+- "duvida": preencha SEMPRE que não tiver certeza de um número desta medida (borrado, cortado,
+  lado D/E ambíguo, unidade não aparece). Não invente: na dúvida, diga.
 - Ignore nome, documento e qualquer dado que identifique o paciente."""
 
 
@@ -160,6 +163,7 @@ def parse_extraction(text: str) -> dict:
                 medida[f"{campo}_{lado}"] = _number(item.get(f"{campo}_{lado}"))
         for lado in ("direito", "esquerdo"):
             medida[f"fadiga_{lado}_pct"] = _number(item.get(f"fadiga_{lado}_pct"))
+        medida["duvida"] = _text(item.get("duvida"), 120) or None
         if medida["grupo_muscular"] and (medida["pico_direito"] is not None or medida["pico_esquerdo"] is not None):
             medidas.append(medida)
 
@@ -233,6 +237,17 @@ def bilateral(direito: float | None, esquerdo: float | None, lado_acometido: str
     }
 
 
+def conferir_leitura(medida: dict) -> str | None:
+    """Motivo para conferir a medida no relatório original (dúvida da IA ou leitura improvável)."""
+    motivos = [str(medida["duvida"])] if medida.get("duvida") else []
+    d, e = medida.get("pico_direito"), medida.get("pico_esquerdo")
+    if d and e and d > 0 and e > 0 and max(d, e) / min(d, e) > 3:
+        motivos.append("um lado mais de 3× o outro — lado ou vírgula lido errado?")
+    if any(v is not None and v < 0 for v in (d, e)):
+        motivos.append("valor negativo")
+    return "; ".join(motivos) or None
+
+
 def _speed_key(medida: dict) -> tuple:
     return (medida.get("velocidade_graus_s"), medida.get("angulo_graus"))
 
@@ -247,6 +262,7 @@ def compute(dados: dict) -> dict:
         calc["pico"] = bilateral(medida["pico_direito"], medida["pico_esquerdo"], lado)
         calc["trabalho"] = bilateral(medida.get("trabalho_direito"), medida.get("trabalho_esquerdo"), lado)
         calc["potencia"] = bilateral(medida.get("potencia_direito"), medida.get("potencia_esquerdo"), lado)
+        calc["conferir"] = conferir_leitura(medida)
         if massa and medida["unidade"].lower() in {"nm", "n.m", "n·m", "n"}:
             unidade = "Nm/kg" if medida["unidade"].lower() != "n" else "N/kg"
             calc["normalizado"] = {
@@ -352,7 +368,7 @@ def format_results(calc: dict) -> str:
                 f"| {_fmt(m['pico_esquerdo'], 1, ' ' + m['unidade'])} | {por_peso} "
                 f"| {_fmt(pico['lsi_pct'], 1, '%') if pico else '—'} "
                 f"| {_fmt(pico['deficit_pct'], 1, '%') + mais_fraco if pico else '—'} "
-                f"| {pico['classificacao'] if pico else '—'} |"
+                f"| {pico['classificacao'] if pico else '—'}{' · ⚠ conferir no relatório original' if m.get('conferir') else ''} |"
             )
         extras = [m for m in calc["medidas"] if m.get("trabalho") or m.get("potencia")
                   or m.get("fadiga_direito_pct") is not None or m.get("fadiga_esquerdo_pct") is not None]
