@@ -8,7 +8,7 @@ annotated-types==0.8.0
     # via
     #   -c requirements.txt
     #   pydantic
-anthropic==2.8.0
+anthropic==2.11.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -110,7 +110,7 @@ google-auth==2.56.2
     # via
     #   -c requirements.txt
     #   google-genai
-google-genai==3.3.0
+google-genai==3.6.1
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -203,7 +203,7 @@ multidict==7.1.0
     # via
     #   -c requirements.txt
     #   yarl
-numpy==2.5.4
+numpy==2.5.5
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -273,7 +273,7 @@ pip-audit==2.10.1
     # via -r requirements-dev.in
 pip-requirements-parser==32.0.1
     # via pip-audit
-pip-tools==7.6.2
+pip-tools==7.7.0
     # via -r requirements-dev.in
 platformdirs==4.13.0
     # via pip-audit
@@ -382,7 +382,7 @@ rq==3.0.0
     # via
     #   -c requirements.txt
     #   -r requirements.in
-ruff==0.17.5
+ruff==0.17.6
     # via -r requirements-dev.in
 sentry-sdk==2.75.0
     # via
