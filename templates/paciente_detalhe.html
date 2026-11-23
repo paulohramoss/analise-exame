@@ -40,6 +40,7 @@
                 <a class="btn-secondary" href="{{ url_for('pacientes.retorno', paciente_id=paciente.id) }}">{{ layout.icon("git-compare", 18, "btn-icon") }} O que mudou</a>
                 {% endif %}
                 <a class="btn-secondary" href="{{ url_for('pacientes.editar', paciente_id=paciente.id) }}">Editar cadastro</a>
+                <a class="btn-ghost" href="{{ url_for('pacientes.exportar_csv', paciente_id=paciente.id) }}">{{ layout.icon("download", 18, "btn-icon") }} CSV</a>
             </div>
         </div>
 

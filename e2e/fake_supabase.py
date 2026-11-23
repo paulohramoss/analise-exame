@@ -73,6 +73,9 @@ class _Query:
     def is_(self, column, value):
         return self._filter(column, "is", value)
 
+    def ilike(self, column, pattern):
+        return self._filter(column, "ilike", pattern)
+
     def lte(self, column, value):
         return self._filter(column, "lte", value)
 
@@ -107,6 +110,9 @@ class _Query:
                 ok = current in value or str(current) in {str(v) for v in value}
             elif op == "is":
                 ok = current is None if value in (None, "null") else current == value
+            elif op == "ilike":
+                regex = "^" + ".*".join(re.escape(p) for p in str(value).lower().split("%")) + "$"
+                ok = current is not None and re.match(regex, str(current).lower(), re.S) is not None
             elif op == "lte":
                 ok = current is not None and str(current) <= str(value)
             elif op == "gte":

@@ -37,6 +37,13 @@ O **MedAI Analyzer** (plataforma Three Health) analisa imagens de exames ortopé
 - Fila assíncrona opcional (Redis + RQ) e orçamento de custo diário por escopo
 - LGPD: identificadores removidos do texto clínico, exportação e exclusão de conta pelo titular, retenção automática
 - Painel interno de custos e qualidade (`/admin/custos`) e avaliação de laudos (`evals/`)
+- **Edição do laudo pelo profissional**: corrige, apaga ou acrescenta achados; a versão da IA fica guardada (e pode ser restaurada) e o painel mostra quanto do texto da IA é confirmado e quais seções mais são corrigidas (`core/laudo_edicao.py`)
+- **"O que mudou"** (`/pacientes/<id>/retorno`): exame novo × anterior do mesmo tipo, item a item — laboratoriais pela faixa de referência, dinamometria pelo LSI (critério de retorno ≥ 90%), imagem com achados e impressão lado a lado (`core/comparacao.py`)
+- **Metas por paciente** ("LSI quadríceps ≥ 90", "Ferritina > 50" ou livres com prazo), conferidas a cada exame novo com tendência e progresso, e **lembretes de reavaliação** com e-mail diário sem nome de paciente (`core/acompanhamento.py`, `/cron/lembretes`)
+- **Tela Hoje** (`/hoje`): reavaliações do dia, metas que o último exame moveu e laudos da semana sem validação; **busca única** (`/busca`) por paciente, CPF, exame ou achado; prontuário do paciente em **CSV**
+- **Leitura incerta em amarelo**: a extração declara dúvida por item e checagens pegam vírgula/unidade/lado improváveis; painel laboratorial com filtro "só alterados" e painéis normais recolhidos
+- **Chave do prontuário**: rotação sem perda (`PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS`), verificação e impressão digital (`python -m scripts.prontuario_chaves`)
+- **Operação**: cache compartilhado no Redis (análises e PubMed), alerta de erros de IA (`core/ai_monitor.py`), fila prioritária para plano pago com retentativa (`python -m scripts.reprocessar_fila`) e testes de ponta a ponta no navegador (`e2e/`, `pytest e2e`)
 
 ---
 

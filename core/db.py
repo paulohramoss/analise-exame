@@ -485,6 +485,25 @@ def buscar_analise(
         return None
 
 
+def buscar_laudos_por_texto(cliente_id: str | None, termo: str, limit: int = 30) -> list[dict]:
+    """Laudos do profissional cujo texto contém o termo (achado, exame, região)."""
+    db = _get_client()
+    termo = (termo or "").strip()
+    if not db or not cliente_id or len(termo) < 3:
+        return []
+    padrao = "%" + termo.replace("%", "").replace("_", " ") + "%"
+    try:
+        res = (
+            db.table("analises").select("id, created_at, tipo_exame, paciente_id, analise_completa")
+            .eq("cliente_id", cliente_id).ilike("analise_completa", padrao)
+            .order("created_at", desc=True).limit(limit).execute()
+        )
+        return res.data or []
+    except Exception:
+        logger.exception("Erro em buscar_laudos_por_texto")
+        return []
+
+
 # ── Relatório para o paciente e marca da clínica ──────────────────────────────
 # Consultas próprias (e não colunas a mais em buscar_analise): se a migration
 # 2026-10-27-relatorio-paciente.sql ainda não rodou, só o relatório fica

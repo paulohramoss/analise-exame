@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Busca — Three Health</title>
+    {% import "_layout.html" as layout %}
+    {{ layout.head_assets() }}
+    <link rel="stylesheet" href="{{ static_url('style.css') }}">
+    <link rel="stylesheet" href="{{ static_url('prontuario.css') }}">
+</head>
+<body>
+    {% call layout.site_header() %}
+        {{ layout.app_nav("busca") }}
+    {% endcall %}
+    <main class="container">
+        <form method="GET" action="{{ url_for('pacientes.busca') }}" class="card pt-form search-box" role="search">
+            <label for="busca-q" class="sr-only">Buscar</label>
+            <input type="search" id="busca-q" name="q" value="{{ termo }}" autofocus maxlength="80"
+                   placeholder="Paciente, CPF, exame ou achado — ex.: menisco, LDL, Maria">
+            <button type="submit" class="btn-primary">{{ layout.icon("search", 18, "btn-icon") }} Buscar</button>
+        </form>
+
+        {% if termo|length >= 2 %}
+        <section class="card">
+            <h2 class="pt-section-title">{{ layout.icon("users", 20) }} Pacientes ({{ pacientes|length }})</h2>
+            {% for p in pacientes %}
+            <p><a href="{{ url_for('pacientes.detalhe', paciente_id=p.id) }}"><strong>{{ p.nome }}</strong></a> <span class="patient-meta">CPF {{ p.cpf_mascarado }}</span></p>
+            {% else %}<p class="today-empty">Nenhum paciente com "{{ termo }}".</p>{% endfor %}
+        </section>
+        <section class="card">
+            <h2 class="pt-section-title">{{ layout.icon("file-text", 20) }} Laudos ({{ laudos|length }})</h2>
+            {% for l in laudos %}
+            <div class="search-hit">
+                <a href="{{ url_for('laudos.laudo_detalhe', analise_id=l.id) }}"><strong>{{ (l.tipo_exame or 'exame')|exam_label }}</strong></a>
+                <span class="patient-meta">{{ l.created_at|datetime_br }}{% if l.paciente %} · {{ l.paciente.nome }}{% endif %}</span>
+                {% for t in l.trechos %}<p class="search-snippet">{{ t }}</p>{% endfor %}
+            </div>
+            {% else %}<p class="today-empty">{{ 'Digite pelo menos 3 letras para buscar nos laudos.' if termo|length < 3 else 'Nenhum laudo menciona "' ~ termo ~ '".' }}</p>{% endfor %}
+        </section>
+        {% elif not has_account %}
+        <p class="card-description">A busca está disponível para contas de profissional.</p>
+        {% endif %}
+    </main>
+    {{ layout.site_footer() }}
+</body>
+</html>

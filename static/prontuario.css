@@ -299,3 +299,7 @@
 .onboarding-card { margin-bottom: 1rem; border-color: var(--primary-border); }
 .onboarding-steps { margin: 0.5rem 0 0.75rem 1.2rem; display: grid; gap: 0.35rem; }
 .today-next summary { cursor: pointer; margin-top: 0.75rem; font-weight: 700; font-size: 0.9rem; }
+.search-box { display: flex; gap: 0.6rem; align-items: center; margin-bottom: 1rem; }
+.search-box input[type="search"] { flex: 1; }
+.search-hit { padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+.search-snippet { margin: 0.3rem 0 0; font-size: 0.85rem; color: var(--text-muted); }

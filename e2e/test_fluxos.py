@@ -112,6 +112,12 @@ def test_fluxo_completo_do_profissional(pagina, servidor, capturar):
         page.get_by_role("button", name="Feito").first.click()
     expect(page.get_by_text("Nenhuma reavaliação para hoje.")).to_be_visible()
 
+    # 8. Busca única: acha o paciente e o laudo pelo que está escrito nele.
+    page.goto(f"{page.base}/busca?q=lipidograma")
+    expect(page.locator(".search-snippet").first).to_contain_text("Repetir lipidograma")
+    page.goto(f"{page.base}/busca?q=Maria")
+    expect(page.get_by_role("link", name="Maria da Silva")).to_be_visible()
+
     assert servidor["ia"].chamadas == 2
 
 

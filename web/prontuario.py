@@ -147,6 +147,23 @@ def meta_from_form(form) -> tuple[dict, list[str]]:
     }, errors
 
 
+def trechos(texto: str, termo: str, raio: int = 70, maximo: int = 2) -> list[str]:
+    """Trechos do laudo em volta do termo buscado (sem marcação de markdown)."""
+    limpo = re.sub(r"[#*>|]+", " ", texto or "")
+    limpo = " ".join(limpo.split())
+    saida, inicio = [], 0
+    chave = termo.casefold()
+    alvo = limpo.casefold()
+    while len(saida) < maximo:
+        pos = alvo.find(chave, inicio)
+        if pos < 0:
+            break
+        a, b = max(0, pos - raio), min(len(limpo), pos + len(termo) + raio)
+        saida.append(("…" if a else "") + limpo[a:b] + ("…" if b < len(limpo) else ""))
+        inicio = b
+    return saida
+
+
 def idade(data_nascimento: str | None, hoje: date | None = None) -> int | None:
     nascimento = parse_date(data_nascimento)
     if nascimento is None:

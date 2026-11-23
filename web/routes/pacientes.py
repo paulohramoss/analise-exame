@@ -331,6 +331,85 @@ def hoje():
     )
 
 
+@bp.route("/busca")
+@premium_required
+def busca():
+    """Um campo só: acha paciente (nome/CPF), laudo e achado ("menisco", "LDL") em tudo."""
+    g.modo = "premium"
+    cliente_id = _professional_id()
+    termo = " ".join((request.args.get("q") or "").split())[:80]
+    pacientes, laudos = [], []
+    if cliente_id and len(termo) >= 2:
+        todos = db.listar_pacientes(cliente_id)
+        por_id = {p["id"]: p for p in todos}
+        chave, digitos = termo.casefold(), patient_crypto.cpf_digits(termo)
+        pacientes = [
+            p for p in todos
+            if chave in p["nome"].casefold() or (len(digitos) >= 3 and digitos in patient_crypto.cpf_digits(p["cpf"]))
+        ][:20]
+        for row in db.buscar_laudos_por_texto(cliente_id, termo):
+            row["paciente"] = por_id.get(row.get("paciente_id"))
+            row["trechos"] = prontuario.trechos(row.pop("analise_completa", "") or "", termo)
+            laudos.append(row)
+        _capture("search_used")
+    return render_template("busca.html", termo=termo, pacientes=pacientes, laudos=laudos,
+                           has_account=cliente_id is not None)
+
+
+@bp.route("/pacientes/<paciente_id>/exportar.csv")
+@premium_required
+def exportar_csv(paciente_id: str):
+    """Prontuário do paciente em CSV (LGPD, troca de clínica): cadastro, exames, valores, tratamentos, evolução, metas."""
+    import csv
+    import io
+
+    from flask import Response
+
+    cliente_id, paciente = _own_patient_or_404(paciente_id)
+    analises = db.listar_analises_paciente(paciente_id, cliente_id)
+    dados = db.listar_dados_estruturados_pacientes(cliente_id, paciente_id)
+    linhas = [("categoria", "data", "item", "valor", "unidade", "detalhe")]
+    linhas.append(("paciente", "", "nome", paciente.get("nome", ""), "", ""))
+    linhas.append(("paciente", "", "cpf", paciente.get("cpf", ""), "", ""))
+    linhas.append(("paciente", paciente.get("data_nascimento") or "", "nascimento", "", "", paciente.get("sexo") or ""))
+    for a in analises:
+        linhas.append(("laudo", (a.get("created_at") or "")[:10], a.get("tipo_exame") or "", "", "", a.get("id")))
+    for v in acompanhamento.medicoes(dados):
+        linhas.append(("valor", v["data"].isoformat() if v.get("data") else "", v["item"], v["valor"], v["unidade"], v["analise_id"]))
+    for t in db.listar_tratamentos(paciente_id, cliente_id):
+        linhas.append(("tratamento", t.get("data_inicio") or "", t.get("tipo") or "", "", "",
+                       f"{t.get('regiao') or ''} {t.get('descricao') or ''} até {t.get('data_fim') or 'em andamento'}".strip()))
+    for e in db.listar_evolucoes(paciente_id, cliente_id):
+        linhas.append(("evolucao", e.get("data") or "", "dor (EVA)", e.get("dor_eva") if e.get("dor_eva") is not None else "", "0-10", e.get("nota") or ""))
+        if e.get("funcao") is not None:
+            linhas.append(("evolucao", e.get("data") or "", "função", e["funcao"], "0-100", ""))
+    for m in acompanhamento.avaliar_todas(db.listar_metas(cliente_id, paciente_id), dados):
+        linhas.append(("meta", m.get("prazo") or "", m["descricao"], (m.get("ultimo") or {}).get("valor", ""), "", m["status"]))
+
+    buf = io.StringIO()
+    # ; e BOM: o Excel em português abre direto, com acentos.
+    writer = csv.writer(buf, delimiter=";")
+    for linha in linhas:
+        writer.writerow(["'" + str(c) if str(c)[:1] in {"=", "+", "-", "@"} and not _numero(c) else c for c in linha])
+    db.registrar_acesso_prontuario(cliente_id, paciente_id, "exportar")
+    _capture("patient_exported")
+    return Response(
+        "\ufeff" + buf.getvalue(), mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=prontuario-{paciente_id[:8]}.csv",
+                 "Cache-Control": "no-store"},
+    )
+
+
+def _numero(valor) -> bool:
+    if isinstance(valor, (int, float)):
+        return True
+    try:
+        float(str(valor).replace(",", "."))
+        return True
+    except ValueError:
+        return False
+
+
 @bp.route("/cron/lembretes")
 def cron_lembretes():
     """E-mail diário: "você tem N reavaliações". Sem nome de paciente nem texto do lembrete.

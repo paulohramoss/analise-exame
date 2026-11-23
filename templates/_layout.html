@@ -37,6 +37,7 @@
    current: "analise" | "pacientes" | "historico" | "dashboard" | "conta" | "" #}
 {% macro app_nav(current="") -%}
 <a href="/hoje" class="btn-secondary{{ ' is-current' if current == 'hoje' }}"{% if current == 'hoje' %} aria-current="page"{% endif %}>Hoje</a>
+<a href="/busca" class="btn-ghost{{ ' is-current' if current == 'busca' }}" aria-label="Buscar"{% if current == 'busca' %} aria-current="page"{% endif %}>{{ icon("search", 18) }}</a>
 <a href="/pacientes" class="btn-secondary{{ ' is-current' if current == 'pacientes' }}"{% if current == 'pacientes' %} aria-current="page"{% endif %}>Pacientes</a>
 <a href="/laudos" class="btn-secondary{{ ' is-current' if current == 'historico' }}"{% if current == 'historico' %} aria-current="page"{% endif %}>Histórico</a>
 <a href="/clinica/dashboard" class="btn-secondary{{ ' is-current' if current == 'dashboard' }}"{% if current == 'dashboard' %} aria-current="page"{% endif %}>Dashboard</a>
