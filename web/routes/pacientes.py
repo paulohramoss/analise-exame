@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from core import acompanhamento, analyzer, comparacao, db, patient_crypto, privacy
+from core import acompanhamento, analyzer, comparacao, db, idioma, patient_crypto, privacy
 from web import config, costs, posthog, prontuario
 from web.extensions import rate_limit
 from web.security import premium_required
@@ -593,12 +593,13 @@ def correlacionar(paciente_id: str):
     evolucoes = [{**e, "nota": _sem_identificacao(e.get("nota"))}
                  for e in db.listar_evolucoes(paciente_id, cliente_id)]
     perfil = {"idade": prontuario.idade(paciente.get("data_nascimento")), "sexo": paciente.get("sexo")}
+    laudo_idioma = idioma.normalizar(request.form.get("laudo_idioma"))
     try:
         resultado = analyzer.correlate_patient_exams(
             exames, tratamentos, evolucoes, perfil,
             api_key=config.get_api_key(), anthropic_api_key=config.get_anthropic_api_key(),
             model_name=config.get_model_name(), posthog_client=posthog.init_posthog(),
-            posthog_distinct_id=str(cliente_id),
+            posthog_distinct_id=str(cliente_id), laudo_idioma=laudo_idioma,
         )
     except Exception:
         logger.exception("Falha na correlação de exames")
@@ -617,6 +618,7 @@ def correlacionar(paciente_id: str):
         modalidade="Correlação",
         cliente_id=cliente_id,
         paciente_id=paciente_id,
+        idioma=resultado.get("idioma"),
     )
     if not analise_id:
         flash("A correlação foi gerada, mas não pôde ser salva. Tente novamente.", "error")

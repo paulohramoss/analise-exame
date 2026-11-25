@@ -87,27 +87,35 @@
             {% if not marca %}<a href="{{ url_for('account.conta') }}#clinica">Coloque o nome e o logo da sua clínica</a> no relatório.{% endif %}
         </p>
 
-        <article class="sheet">
+        {% set en = laudo_idioma == 'en' %}
+        <article class="sheet"{% if en %} lang="en"{% endif %}>
             <div class="sheet-head">
                 {% if marca.clinica_logo %}<img src="{{ marca.clinica_logo }}" alt="">{% endif %}
                 <div>
-                    <p class="clinic-name">{{ marca.clinica_nome or responsible.name or "Relatório do seu exame" }}</p>
+                    <p class="clinic-name">{{ marca.clinica_nome or responsible.name or ("Your exam report" if en else "Relatório do seu exame") }}</p>
                     {% if marca.clinica_contato %}<p class="clinic-contact">{{ marca.clinica_contato }}</p>{% endif %}
                 </div>
             </div>
 
-            <h1>Seu exame explicado</h1>
+            <h1>{{ 'Your exam explained' if en else 'Seu exame explicado' }}</h1>
             <p class="sheet-meta">
-                {% if paciente_nome %}<strong>{{ paciente_nome }}</strong> · {% endif %}{{ exam_type }}{% if exam_date %} · laudo de {{ exam_date|date_br }}{% endif %}
+                {% if paciente_nome %}<strong>{{ paciente_nome }}</strong> · {% endif %}{{ exam_type }}{% if exam_date %} · {{ ('report of ' ~ (exam_date|string)[:10]) if en else ('laudo de ' ~ exam_date|date_br) }}{% endif %}
             </p>
 
             <div class="sheet-body">{{ relatorio }}</div>
 
             <div class="sheet-foot">
+                {% if en %}
+                This text explains your exam report in plain language. It does not replace your appointment:
+                diagnosis and treatment are decided by the professional who looks after you{% if responsible.name %} ({{ responsible.name }}){% endif %}.
+                Bring your questions to your next visit.
+                <div class="powered">Explanation prepared with the support of artificial intelligence · Three Health</div>
+                {% else %}
                 Este texto explica o laudo do seu exame em linguagem simples. Ele não substitui a consulta:
                 o diagnóstico e o tratamento são definidos pelo profissional que acompanha você{% if responsible.name %} ({{ responsible.name }}){% endif %}.
                 Leve suas dúvidas para a próxima consulta.
                 <div class="powered">Explicação preparada com apoio de inteligência artificial · Three Health</div>
+                {% endif %}
             </div>
         </article>
         {% else %}

@@ -46,17 +46,20 @@ def laudo_detalhe(analise_id: str):
         flash("Laudo não encontrado no histórico deste acesso.", "error")
         return redirect(url_for("laudos.laudos"))
 
+    laudo_idioma = db.buscar_idioma_analise(row["id"])
     return render_template(
         "laudo_detalhe.html",
         laudo=row,
+        laudo_idioma=laudo_idioma,
         analysis=row.get("analise_completa") or "",
         analysis_id=row.get("id"),
-        exam_type=presentation.format_exam_label(row.get("tipo_exame")),
+        exam_type=(presentation.exam_type_label(row.get("tipo_exame"), laudo_idioma) if laudo_idioma == "en"
+                   else presentation.format_exam_label(row.get("tipo_exame"))),
         user_description=row.get("descricao_usuario") or "",
         responsible=presentation.responsible_info_from_row(row),
         consensus=presentation.build_consensus_info(row.get("modelo_ia") or "", row.get("analise_completa") or ""),
         annotations=annotations.sanitize_stored(row.get("marcacoes"), row.get("num_imagens")),
-        lab_dashboard=_lab_dashboard(row),
+        lab_dashboard=_lab_dashboard(row, laudo_idioma),
         can_patient_report=bool(g.get("cliente_id")) and row.get("cliente_id") == g.get("cliente_id"),
         can_edit=_is_owner(row),
         edicao=db.buscar_edicao_laudo(row["id"], g.get("cliente_id"), include_all=bool(g.get("is_admin"))),
@@ -111,13 +114,13 @@ def editar_laudo(analise_id: str):
     return voltar
 
 
-def _lab_dashboard(row: dict) -> dict | None:
+def _lab_dashboard(row: dict, laudo_idioma: str | None = None) -> dict | None:
     """Painel visual de um laudo laboratorial salvo (só com os dados estruturados gravados)."""
     if row.get("tipo_exame") != "laboratorial":
         return None
     # O acesso ao laudo já foi conferido em _find_own_analysis: aqui basta o id.
     dados = db.buscar_dados_estruturados(row["id"], include_all=True)
-    return lab_tests.dashboard(dados)
+    return lab_tests.dashboard(dados, idioma=laudo_idioma if laudo_idioma == "en" else None)
 
 
 def _patient_link_context(row: dict) -> dict:
@@ -155,13 +158,16 @@ def relatorio_paciente(analise_id: str):
 
     texto = db.buscar_relatorio_paciente(analise_id, cliente_id)
     paciente = db.buscar_paciente(row["paciente_id"], cliente_id) if row.get("paciente_id") else None
+    laudo_idioma = db.buscar_idioma_analise(analise_id)
     return render_template(
         "relatorio_paciente.html",
+        laudo_idioma=laudo_idioma,
         analysis_id=analise_id,
         relatorio=patient_report.to_html(texto) if texto else None,
         marca=db.buscar_marca_clinica(cliente_id),
         paciente_nome=(paciente or {}).get("nome") or "",
-        exam_type=presentation.format_exam_label(row.get("tipo_exame")),
+        exam_type=(presentation.exam_type_label(row.get("tipo_exame"), laudo_idioma) if laudo_idioma == "en"
+                   else presentation.format_exam_label(row.get("tipo_exame"))),
         exam_date=row.get("created_at"),
         responsible=presentation.responsible_info_from_row(row),
     )
@@ -182,7 +188,7 @@ def gerar_relatorio_paciente(analise_id: str):
     if costs.blocked_by_cost_budget("premium"):
         flash("Limite de gasto diário atingido. Tente novamente mais tarde.", "error")
         return voltar
-    gerado = patient_report.gerar_texto(row.get("analise_completa") or "")
+    gerado = patient_report.gerar_texto(row.get("analise_completa") or "", db.buscar_idioma_analise(analise_id))
     if gerado is None:
         flash("Não foi possível gerar o relatório agora. Tente novamente em instantes.", "error")
         return voltar

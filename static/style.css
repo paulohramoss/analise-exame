@@ -818,3 +818,9 @@
 }
 .ai-error-consent { font-size: .85rem; }
 @media (max-width: 720px) { .ai-error-chip { width: 100%; text-align: left; border-radius: 10px; } }
+
+/* Idioma do laudo */
+.label-en { font-weight: 400; color: var(--text-muted, #64748b); font-size: 0.85em; }
+.translation-note { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: #fff7e6; color: #8a5300; font-size: 0.85rem; }
+.inline-select { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; font-size: 0.85rem; color: var(--text-muted, #64748b); }
+.inline-select select { width: auto; padding: 6px 8px; }

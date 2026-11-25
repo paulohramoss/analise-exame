@@ -362,7 +362,10 @@
                     </div>
                 </div>
 
-                <div class="report-content" id="report-content">
+                {% if translation_failed %}
+                <p class="translation-note" role="note">Não foi possível traduzir o laudo para o inglês desta vez: ele está em português. Envie o exame de novo para tentar outra vez. · The report could not be translated this time and is shown in Portuguese.</p>
+                {% endif %}
+                <div class="report-content" id="report-content" data-lang="{{ laudo_idioma|default('pt-BR') }}"{% if laudo_idioma == 'en' %} lang="en"{% endif %}>
                     {{ analysis }}
                 </div>
             </div>
@@ -433,15 +436,16 @@
             const analysisId = examMeta.analysis_id;
             const consensus = JSON.parse(document.getElementById('data-consensus').textContent || 'null');
             const images = Array.from(document.querySelectorAll('.exam-images-gallery img'))
-                .map((img, i) => ({ src: img.src, label: `Imagem ${i + 1}` }));
+                .map((img, i) => ({ src: img.src, label: `${reportContent.dataset.lang === 'en' ? 'Image' : 'Imagem'} ${i + 1}` }));
             const findings = JSON.parse(document.getElementById('data-annotations').textContent || '[]');
 
             openLaudoPdf({
                 reportHTML: reportContent.innerHTML,
-                generatedAt: laudoNowBR(),
+                generatedAt: laudoNowBR(reportContent.dataset.lang),
                 documentId: analysisId ? String(analysisId).slice(0, 8).toUpperCase() : '',
                 responsible,
-                meta: laudoPdfMeta({ ...examMeta, num_images: images.length }, consensus),
+                meta: laudoPdfMeta({ ...examMeta, num_images: images.length }, consensus, reportContent.dataset.lang),
+                lang: reportContent.dataset.lang,
                 clinicalInfo: userDesc,
                 images,
                 findings,

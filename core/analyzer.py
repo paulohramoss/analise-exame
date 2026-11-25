@@ -22,7 +22,7 @@ from google import genai
 from google.genai import types
 from PIL import Image, ImageOps
 
-from core import annotations, dynamometry, lab_tests, pubmed
+from core import annotations, dynamometry, idioma, lab_tests, pubmed
 from core.env import configured
 from core import ai_monitor, shared_cache
 from core.ttl_cache import TTLCache
@@ -77,6 +77,9 @@ _ANNOTATION_MODEL = os.environ.get("ANNOTATION_MODEL", "").strip()
 # Segunda passada: cada achado é recortado, ampliado e localizado de novo.
 _ANNOTATION_REFINE = os.environ.get("ANNOTATION_REFINE", "true").strip().lower() in {"1", "true", "yes", "on"}
 _REFINE_MIN_EDGE_PX = 768
+# Laudo em inglês (core/idioma.py): tradução do resultado pronto, com prazo
+# próprio — como a marcação, fica fora do ANALYSIS_BUDGET_SECONDS.
+_TRANSLATION_TIMEOUT_SECONDS = float(os.environ.get("TRANSLATION_TIMEOUT_SECONDS", "60"))
 _INCLUDE_REFERENCE_PDF = os.environ.get("INCLUDE_REFERENCE_PDF", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 # Reserva de tempo exigida antes de gastar uma chamada extra na detecção visual
@@ -1933,15 +1936,21 @@ def correlate_patient_exams(
     model_name: str = "gemini-2.5-flash",
     posthog_client=None,
     posthog_distinct_id: str | None = None,
+    laudo_idioma: str = idioma.PADRAO,
 ) -> dict:
-    """Parecer integrado dos exames de um paciente (Claude; Gemini como reserva)."""
+    """Parecer integrado dos exames de um paciente (Claude; Gemini como reserva).
+
+    laudo_idioma "en": o parecer é escrito direto em inglês (os laudos de origem
+    podem estar em qualquer um dos dois idiomas).
+    """
     use_gemini = bool(api_key) and not (anthropic_api_key and _gemini_circuit_is_open())
     if not use_gemini and not anthropic_api_key:
         raise RuntimeError("Nenhum provedor de IA configurado.")
     gemini_client = _make_gemini_client(api_key, posthog_client) if use_gemini else None
     deadline = time.monotonic() + _ANALYSIS_BUDGET_SECONDS
     text, item, model = _generate_structured_text(
-        gemini_client, model_name, anthropic_api_key, [], build_correlation_prompt(exams, treatments, progress, profile),
+        gemini_client, model_name, anthropic_api_key, [],
+        build_correlation_prompt(exams, treatments, progress, profile) + idioma.instrucao_escrita(laudo_idioma),
         deadline, prefer_claude=True, json_mode=False, posthog_client=posthog_client,
         posthog_distinct_id=posthog_distinct_id,
     )
@@ -1951,7 +1960,34 @@ def correlate_patient_exams(
         "analysis": (text[inicio:] if inicio >= 0 else text).strip(),
         "model_used": model,
         "usage": [item] if item else [],
+        "idioma": idioma.normalizar(laudo_idioma),
     }
+
+
+def _translate_result(
+    result: dict,
+    gemini_client,
+    model_name: str,
+    anthropic_api_key: str,
+    on_progress: Callable[[str], None] | None,
+    posthog_client=None,
+    ai_session_id: str | None = None,
+    ai_trace_id: str | None = None,
+    posthog_distinct_id: str | None = None,
+) -> dict:
+    """Laudo pronto (em português) → inglês. Se falhar, fica em português (ver core/idioma.py)."""
+    _notify(on_progress, "traduzindo")
+    deadline = time.monotonic() + _TRANSLATION_TIMEOUT_SECONDS
+
+    def gerar(prompt: str, json_mode: bool) -> tuple[str, dict | None]:
+        text, item, _model = _generate_structured_text(
+            gemini_client, model_name, anthropic_api_key, [], prompt, deadline,
+            prefer_claude=True, json_mode=json_mode, ai_session_id=ai_session_id, ai_trace_id=ai_trace_id,
+            posthog_distinct_id=posthog_distinct_id, posthog_client=posthog_client,
+        )
+        return text, item
+
+    return idioma.traduzir_resultado(result, gerar)
 
 
 def analyze_exam_from_bytes(
@@ -1967,6 +2003,7 @@ def analyze_exam_from_bytes(
     on_late_usage: Callable[[dict], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
     exam_category: str = "imagem",
+    laudo_idioma: str = idioma.PADRAO,
 ) -> dict:
     """
     Analisa exames médicos diretamente dos bytes das imagens.
@@ -1988,6 +2025,8 @@ def analyze_exam_from_bytes(
             "analisando", "consenso") — usado pela página de espera
         exam_category: "imagem" (laudo radiológico), "dinamometria" ou
             "laboratorial" (ver _analyze_structured_exam)
+        laudo_idioma: "pt-BR" (padrão) ou "en". A análise é sempre feita em
+            português; em inglês, o resultado pronto é traduzido no fim.
     """
     if isinstance(exam_images_data, tuple) and len(exam_images_data) == 2 and isinstance(exam_images_data[0], bytes):
         exam_images_data = [exam_images_data]
@@ -2000,8 +2039,11 @@ def analyze_exam_from_bytes(
     started = time.monotonic()
     api_key, anthropic_api_key = configured(api_key), configured(anthropic_api_key)
     exam_category = exam_category if exam_category in EXAM_CATEGORIES else "imagem"
+    laudo_idioma = idioma.normalizar(laudo_idioma)
+    # Em português a chave é a mesma de antes (o cache existente continua valendo).
+    cache_scope = f"{exam_category}|{user_description}" + ("|en" if laudo_idioma == "en" else "")
     cache_key = _analysis_cache_key(
-        [data for data, _ in exam_images], f"{exam_category}|{user_description}", model_name, bool(anthropic_api_key)
+        [data for data, _ in exam_images], cache_scope, model_name, bool(anthropic_api_key)
     )
     cached_result = _get_cached_analysis(cache_key)
     if cached_result:
@@ -2025,7 +2067,12 @@ def analyze_exam_from_bytes(
             exam_category, gemini_client, model_name, anthropic_api_key, exam_images, user_description,
             deadline, on_progress, posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id,
         )
-        _store_cached_analysis(cache_key, result)
+        result["idioma"] = idioma.PADRAO
+        if laudo_idioma == "en":
+            _translate_result(result, gemini_client, model_name, anthropic_api_key, on_progress,
+                              posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id)
+        if not result.get("traducao_falhou"):
+            _store_cached_analysis(cache_key, result)
         ai_monitor.registrar_duracao(time.monotonic() - started)
         return result
 
@@ -2131,8 +2178,13 @@ def analyze_exam_from_bytes(
         "num_images": len(exam_images),
         "usage": usage,
         "cache_hit": False,
+        "idioma": idioma.PADRAO,
     }
-    if _DEADLINE_NOTICE not in final_analysis:  # laudo resumido: reenviar deve tentar de novo
+    if laudo_idioma == "en":
+        _translate_result(result, gemini_client, model_name, anthropic_api_key, on_progress,
+                          posthog_client, ai_session_id, ai_trace_id, posthog_distinct_id)
+    # Laudo resumido por falta de tempo ou tradução que falhou: reenviar deve tentar de novo.
+    if _DEADLINE_NOTICE not in final_analysis and not result.get("traducao_falhou"):
         _store_cached_analysis(cache_key, result)
     logger.info("Análise concluída em %.1fs (modelo: %s).", time.monotonic() - started, model_used)
     ai_monitor.registrar_duracao(time.monotonic() - started)

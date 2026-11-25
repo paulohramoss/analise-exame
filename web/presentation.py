@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from flask import request
 
-from core import annotations, lab_tests
+from core import annotations, idioma, lab_tests
 from core.analyzer import pretty_model_name
 from web import config, security
 
@@ -146,8 +146,7 @@ def build_consensus_info(model_used: str = "", analysis: str = "") -> dict:
     model_text = model_used or ""
     lower_model = model_text.lower()
     dual = "claude" in lower_model and "consenso" in lower_model
-    strong_count = (analysis or "").count("[FORTE]")
-    moderate_count = (analysis or "").count("[MODERADO]")
+    strong_count, moderate_count = idioma.contar_etiquetas(analysis)
 
     if dual:
         # model_used = "<gemini> + <claude> → consenso" (ver analyzer._produce_final_analysis)
@@ -183,18 +182,33 @@ def build_consensus_info(model_used: str = "", analysis: str = "") -> dict:
     }
 
 
+def exam_type_label(exam_type: str, laudo_idioma: str | None = None) -> str:
+    """Região/tipo do exame para exibição ("pe_tornozelo" → "Pe Tornozelo" / "Foot and ankle")."""
+    exam_type = exam_type or ""
+    if idioma.em_ingles(laudo_idioma) and exam_type in idioma.REGIOES_EN:
+        return idioma.REGIOES_EN[exam_type]
+    return exam_type.replace("_", " ").title()
+
+
 def result_view(result: dict) -> dict:
     """Campos comuns de um resultado de análise para a resposta (JSON ou template)."""
+    laudo_idioma = idioma.normalizar(result.get("idioma"))
     return {
         "analysis": result["analysis"],
-        "exam_type": result["exam_type"].replace("_", " ").title(),
+        "laudo_idioma": laudo_idioma,
+        # Pediu inglês e a tradução falhou: o laudo veio em português (avisar na tela).
+        "translation_failed": bool(result.get("traducao_falhou")),
+        "exam_type": exam_type_label(result["exam_type"], laudo_idioma),
         "references_used": result["references_used"],
         "model_used": result["model_used"],
         "consensus": build_consensus_info(result["model_used"], result["analysis"]),
         "annotations": annotations.sanitize_stored(result.get("annotations"), result.get("num_images")),
         # Marcação de achados só existe no laudo de imagem (não em dinamometria/laboratoriais).
         "show_findings": result["exam_type"] not in STRUCTURED_EXAM_TYPES,
-        "lab_dashboard": lab_tests.dashboard(result.get("structured")) if result["exam_type"] == "laboratorial" else None,
+        "lab_dashboard": (
+            lab_tests.dashboard(result.get("structured"), idioma=laudo_idioma)
+            if result["exam_type"] == "laboratorial" else None
+        ),
     }
 
 

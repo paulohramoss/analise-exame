@@ -190,3 +190,13 @@ Prazos aplicados diariamente por `aplicar_retencao_dados()` (pg_cron, migration
 A descrição clínica passa por `core/privacy.py` (remove nome, CPF, CNS, RG,
 telefone, e-mail e data de nascimento) antes de ir aos modelos de IA e ao banco.
 
+## Idioma do laudo
+
+- `analises.idioma` (`pt-BR` padrão, ou `en`; migration `2026-11-25-idioma-laudo.sql`).
+- A análise é sempre feita em português; com `en`, o laudo pronto, os nomes e locais dos
+  achados marcados e os textos dos padrões laboratoriais são traduzidos no fim
+  (`core/idioma.py`, prazo próprio `TRANSLATION_TIMEOUT_SECONDS`). Se a tradução falhar,
+  o laudo é gravado em português (`idioma = 'pt-BR'`).
+- O parecer de correlação e a explicação para o paciente são escritos direto no idioma.
+- Sem a migration, laudos em inglês são gravados sem o campo e abrem com os rótulos em português.
+

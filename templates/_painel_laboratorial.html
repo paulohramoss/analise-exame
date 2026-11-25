@@ -1,37 +1,45 @@
 {#- Painel visual dos exames laboratoriais. Recebe `lab_dashboard` (core/lab_tests.dashboard). -#}
 {% set d = lab_dashboard %}
-<section class="card lab-dash" aria-label="Painel dos exames laboratoriais">
+{% set en = d.idioma == 'en' %}
+<section class="card lab-dash" aria-label="{{ 'Laboratory results dashboard' if en else 'Painel dos exames laboratoriais' }}"{% if en %} lang="en"{% endif %}>
     <div class="lab-dash-head">
         <div>
-            <h2>Painel dos exames</h2>
+            <h2>{{ 'Laboratory dashboard' if en else 'Painel dos exames' }}</h2>
             <p class="card-description">
-                {% if d.laboratorio %}{{ d.laboratorio }}{% endif %}{% if d.laboratorio and d.data_coleta %} · {% endif %}{% if d.data_coleta %}coleta em {{ d.data_coleta|date_br }}{% endif %}
+                {% if d.laboratorio %}{{ d.laboratorio }}{% endif %}{% if d.laboratorio and d.data_coleta %} · {% endif %}{% if d.data_coleta %}{{ ('collected on ' ~ d.data_coleta) if en else ('coleta em ' ~ d.data_coleta|date_br) }}{% endif %}
             </p>
         </div>
         <div class="lab-dash-stats">
-            <div class="lab-stat"><strong>{{ d.total }}</strong><span>exames lidos</span></div>
-            <div class="lab-stat {{ 'is-alert' if d.alterados else 'is-ok' }}"><strong>{{ d.alterados }}</strong><span>fora da faixa</span></div>
-            <div class="lab-stat {{ 'is-alert' if d.padroes else 'is-ok' }}"><strong>{{ d.padroes|length }}</strong><span>{{ 'padrão' if d.padroes|length == 1 else 'padrões' }} a investigar</span></div>
-            {% if d.conferir %}<div class="lab-stat is-check"><strong>{{ d.conferir }}</strong><span>para conferir</span></div>{% endif %}
+            <div class="lab-stat"><strong>{{ d.total }}</strong><span>{{ 'tests read' if en else 'exames lidos' }}</span></div>
+            <div class="lab-stat {{ 'is-alert' if d.alterados else 'is-ok' }}"><strong>{{ d.alterados }}</strong><span>{{ 'out of range' if en else 'fora da faixa' }}</span></div>
+            <div class="lab-stat {{ 'is-alert' if d.padroes else 'is-ok' }}"><strong>{{ d.padroes|length }}</strong><span>{% if en %}{{ 'pattern' if d.padroes|length == 1 else 'patterns' }} to look into{% else %}{{ 'padrão' if d.padroes|length == 1 else 'padrões' }} a investigar{% endif %}</span></div>
+            {% if d.conferir %}<div class="lab-stat is-check"><strong>{{ d.conferir }}</strong><span>{{ 'to double-check' if en else 'para conferir' }}</span></div>{% endif %}
         </div>
     </div>
     {% if d.conferir %}
+    {% if en %}
+    <p class="lab-check-note" role="note">{{ d.conferir }} {{ 'value was' if d.conferir == 1 else 'values were' }} read with uncertainty (highlighted in yellow). Check the original report before using {{ 'it' if d.conferir == 1 else 'them' }}.</p>
+    {% else %}
     <p class="lab-check-note" role="note">{{ d.conferir }} {{ 'valor teve' if d.conferir == 1 else 'valores tiveram' }} leitura incerta (marcado{{ 's' if d.conferir != 1 }} em amarelo). Confira no laudo original antes de usar.</p>
     {% endif %}
+    {% endif %}
 
-    {% if d.meses_desde_coleta and d.meses_desde_coleta >= 6 %}
+    {% if d.meses_desde_coleta and d.meses_desde_coleta >= 6 and en %}
+    {% set anos, meses = d.meses_desde_coleta // 12, d.meses_desde_coleta % 12 %}
+    <p class="lab-old" role="note">⏱ Collected {% if anos %}{{ anos }} year{{ 's' if anos != 1 }}{% if meses %} and {% endif %}{% endif %}{% if meses %}{{ meses }} month{{ 's' if meses != 1 }}{% endif %} ago: values may not reflect the current status. Consider repeating them before deciding on management.</p>
+    {% elif d.meses_desde_coleta and d.meses_desde_coleta >= 6 %}
     <p class="lab-old" role="note">⏱ Coleta há {{ d.meses_desde_coleta // 12 ~ (' ano' if d.meses_desde_coleta // 12 == 1 else ' anos') if d.meses_desde_coleta >= 12 else d.meses_desde_coleta ~ ' meses' }}{% if d.meses_desde_coleta >= 12 and d.meses_desde_coleta % 12 %} e {{ d.meses_desde_coleta % 12 }} {{ 'mês' if d.meses_desde_coleta % 12 == 1 else 'meses' }}{% endif %}: os valores podem não refletir o estado atual. Considere repetir antes de decidir a conduta.</p>
     {% endif %}
-    <div class="lab-chips" aria-label="Situação por painel">
+    <div class="lab-chips" aria-label="{{ 'Status by panel' if en else 'Situação por painel' }}">
         {% for p in d.paineis %}
         <a class="lab-chip {{ 'is-alert' if p.alterados else 'is-ok' }}" href="#painel-{{ loop.index }}">
-            {{ p.nome }} <span>{{ p.alterados ~ ' alterado' ~ ('s' if p.alterados > 1 else '') if p.alterados else 'ok' }}</span>
+            {{ p.nome }} <span>{% if p.alterados %}{{ p.alterados }} {{ ('abnormal' if en else 'alterado' ~ ('s' if p.alterados > 1 else '')) }}{% else %}ok{% endif %}</span>
         </a>
         {% endfor %}
     </div>
 
     {% if d.padroes %}
-    <h3 class="lab-dash-title">Correlações entre os exames</h3>
+    <h3 class="lab-dash-title">{{ 'Correlations between tests' if en else 'Correlações entre os exames' }}</h3>
     <div class="lab-patterns">
         {% for p in d.padroes %}
         <article class="lab-pattern lab-pattern-{{ p.nivel }}">
@@ -42,17 +50,17 @@
         </article>
         {% endfor %}
     </div>
-    <p class="findings-note">Padrões por regras fixas sobre os valores do laudo: indicam o que investigar, não são diagnóstico.</p>
+    <p class="findings-note">{{ 'Patterns from fixed rules applied to the report values: they point to what to look into and are not a diagnosis.' if en else 'Padrões por regras fixas sobre os valores do laudo: indicam o que investigar, não são diagnóstico.' }}</p>
     {% endif %}
 
     {% if d.indices %}
-    <h3 class="lab-dash-title">Índices calculados</h3>
+    <h3 class="lab-dash-title">{{ 'Calculated indices' if en else 'Índices calculados' }}</h3>
     <div class="lab-indices">
         {% for i in d.indices %}
         <div class="lab-index {{ 'is-alert' if i.alterado else 'is-ok' }}">
             <span class="lab-index-name">{{ i.nome }}</span>
             <strong>{{ i.valor_fmt }}</strong>
-            <span class="lab-index-ref">Referência: {{ i.referencia }}</span>
+            <span class="lab-index-ref">{{ 'Reference' if en else 'Referência' }}: {{ i.referencia }}</span>
             <span class="lab-index-formula">{{ i.formula }}</span>
         </div>
         {% endfor %}
@@ -60,31 +68,35 @@
     {% endif %}
 
     <div class="lab-results-head">
-        <h3 class="lab-dash-title">Resultados por painel</h3>
-        <label class="lab-filter"><input type="checkbox" class="lab-only-altered" onchange="this.closest('.lab-dash').classList.toggle('only-altered', this.checked)"> Só alterados e a conferir</label>
+        <h3 class="lab-dash-title">{{ 'Results by panel' if en else 'Resultados por painel' }}</h3>
+        <label class="lab-filter"><input type="checkbox" class="lab-only-altered" onchange="this.closest('.lab-dash').classList.toggle('only-altered', this.checked)"> {{ 'Only abnormal and to double-check' if en else 'Só alterados e a conferir' }}</label>
     </div>
+    {% if en %}
+    <div class="lab-legend"><span><i class="sw-ok"></i> within range</span><span><i class="sw-low"></i> low</span><span><i class="sw-high"></i> high</span><span><i class="sw-band"></i> report reference range</span></div>
+    {% else %}
     <div class="lab-legend"><span><i class="sw-ok"></i> dentro da faixa</span><span><i class="sw-low"></i> abaixo</span><span><i class="sw-high"></i> acima</span><span><i class="sw-band"></i> faixa de referência do laudo</span></div>
+    {% endif %}
     {% for p in d.paineis %}
     {% set tem_conferir = p.itens|selectattr('conferir')|list %}
     <details class="lab-panel{{ ' is-normal' if not p.alterados and not tem_conferir }}" id="painel-{{ loop.index }}"{% if p.alterados or tem_conferir or d.paineis|length <= 3 %} open{% endif %}>
-        <summary><h4>{{ p.nome }}</h4><span class="lab-panel-count">{{ p.itens|length }} exame{{ 's' if p.itens|length != 1 }}{% if p.alterados %} · {{ p.alterados }} alterado{{ 's' if p.alterados != 1 }}{% else %} · todos na faixa{% endif %}</span></summary>
+        <summary><h4>{{ p.nome }}</h4><span class="lab-panel-count">{% if en %}{{ p.itens|length }} test{{ 's' if p.itens|length != 1 }}{% if p.alterados %} · {{ p.alterados }} abnormal{% else %} · all within range{% endif %}{% else %}{{ p.itens|length }} exame{{ 's' if p.itens|length != 1 }}{% if p.alterados %} · {{ p.alterados }} alterado{{ 's' if p.alterados != 1 }}{% else %} · todos na faixa{% endif %}{% endif %}</span></summary>
         {% for it in p.itens %}
         <div class="lab-row lab-{{ it.situacao }}{{ ' lab-check' if it.conferir }}">
             <div class="lab-row-name">{{ it.exame }}</div>
             <div class="lab-row-bar">
                 {% if it.barra %}
-                <div class="lab-track" role="img" aria-label="{{ it.exame }}: {{ it.valor }}, {{ it.rotulo|lower }} da faixa {{ it.referencia }}">
+                <div class="lab-track" role="img" aria-label="{{ it.exame }}: {{ it.valor }}, {{ it.rotulo|lower }} {{ 'vs. range' if en else 'da faixa' }} {{ it.referencia }}">
                     <div class="lab-band" style="left: {{ it.barra.faixa_inicio }}%; width: {{ (it.barra.faixa_fim - it.barra.faixa_inicio)|round(1) }}%"></div>
                     <div class="lab-marker" style="left: {{ it.barra.valor }}%"></div>
                 </div>
                 {% else %}
-                <span class="lab-noref">{{ "resultado escrito, dentro da referência" if it.situacao == "normal" else "sem faixa numérica no laudo" }}</span>
+                <span class="lab-noref">{% if en %}{{ "written result, within reference" if it.situacao == "normal" else "no numeric range in the report" }}{% else %}{{ "resultado escrito, dentro da referência" if it.situacao == "normal" else "sem faixa numérica no laudo" }}{% endif %}</span>
                 {% endif %}
             </div>
             <div class="lab-row-value"><strong>{{ it.valor }}</strong><span>{{ it.referencia }}</span>
-                {% if it.anterior %}<span class="lab-prev">{{ it.anterior.direcao }} antes: {{ it.anterior.texto|replace(' em ', ' em ') }}</span>{% endif %}</div>
+                {% if it.anterior %}<span class="lab-prev">{{ it.anterior.direcao }} {{ 'previous' if en else 'antes' }}: {{ it.anterior.texto }}</span>{% endif %}</div>
             <div class="lab-row-status">{{ it.rotulo }}{% if it.vezes_o_limite and it.vezes_o_limite >= 1.5 %} · {{ it.vezes_o_limite }}×{% endif %}
-                {% if it.conferir %}<span class="lab-check-why" title="{{ it.conferir }}">⚠ conferir: {{ it.conferir }}</span>{% endif %}</div>
+                {% if it.conferir %}<span class="lab-check-why" title="{{ it.conferir }}">⚠ {{ 'check' if en else 'conferir' }}: {{ it.conferir }}</span>{% endif %}</div>
         </div>
         {% endfor %}
     </details>

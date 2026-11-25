@@ -55,12 +55,40 @@ assim; achados importantes devem ser mencionados com clareza, sem alarmar.
 - Entre 250 e 600 palavras no total."""
 
 
+SYSTEM_PROMPT_EN = """You write, in plain English, an explanation of a musculoskeletal imaging report \
+(MRI, X-ray or CT) for the patients themselves to read at home.
+
+The reader has no health training. Write the way a caring professional would explain it in the office:
+short sentences, everyday words, a calm and respectful tone. When a technical term is unavoidable,
+explain it in the same sentence (for example: "bone edema, which is swelling inside the bone").
+
+Use exactly these sections, with headings on lines starting with "## ":
+## What the exam showed
+## What this means
+## Next steps
+
+Rules:
+- Explain only what is in the report. Do not add findings, diagnoses, causes or prognoses.
+- Do not recommend medication, exercises, surgery or any other treatment. In "Next steps", advise the \
+patient to talk to the professional who ordered the exam about treatment, and list questions worth bringing.
+- Do not downplay or exaggerate: common or mild findings may be described as such if the report describes \
+them that way; important findings must be stated clearly, without alarming.
+- The report may be in Portuguese or English: always answer in English.
+- Ignore bibliographic references, AI model names, responsible-professional details and legal notices.
+- Use "- " lists when they help. You may use **bold** for a few words.
+- Do not use tables, emojis or headings other than the three above.
+- Between 250 and 600 words in total."""
+
+
 def is_configured() -> bool:
     return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
 
 
-def gerar_texto(laudo: str) -> tuple[str, dict] | None:
-    """(texto em linguagem simples, uso de tokens) ou None se a IA falhar ou recusar."""
+def gerar_texto(laudo: str, idioma: str = "pt-BR") -> tuple[str, dict] | None:
+    """(texto em linguagem simples, uso de tokens) ou None se a IA falhar ou recusar.
+
+    idioma "en": a explicação sai em inglês (mesmo idioma do laudo).
+    """
     laudo = (laudo or "").strip()[:_LAUDO_MAX_CHARS]
     if not laudo or not is_configured():
         return None
@@ -69,14 +97,14 @@ def gerar_texto(laudo: str) -> tuple[str, dict] | None:
         response = client.beta.messages.create(
             model=MODEL,
             max_tokens=_MAX_TOKENS,
-            system=SYSTEM_PROMPT,
+            system=SYSTEM_PROMPT_EN if idioma == "en" else SYSTEM_PROMPT,
             # Reescrita de texto: esforço baixo basta e responde mais rápido.
             output_config={"effort": "low"},
             # Se o modelo recusar por engano (classificadores de segurança), o
             # próprio servidor refaz o pedido num modelo de reserva.
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
-            messages=[{"role": "user", "content": f"Laudo do exame:\n\n{laudo}"}],
+            messages=[{"role": "user", "content": f"{'Exam report' if idioma == 'en' else 'Laudo do exame'}:\n\n{laudo}"}],
         )
     except anthropic.APIStatusError as e:
         logger.error("Relatório do paciente: erro da API (%s)", e.status_code)

@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
-from core import analyzer, cost_tracking, db, jobs, privacy
+from core import analyzer, cost_tracking, db, idioma, jobs, privacy
 from core.build_info import get_build_version
 from core.email_validation import validar_email_cadastro
 from web import config, costs, marketing, posthog, presentation, professional, prontuario, security, uploads
@@ -41,6 +41,7 @@ class _AnalysisInput:
     analysis_description: str  # descrição + contexto extraído do DICOM
     display_images: list[dict] = field(default_factory=list)
     exam_category: str = "imagem"  # imagem | dinamometria | laboratorial
+    laudo_idioma: str = "pt-BR"  # pt-BR | en (core/idioma.py)
 
     @classmethod
     def from_uploads(cls, upload_items: list[dict], user_description: str) -> "_AnalysisInput":
@@ -69,6 +70,7 @@ class _AnalysisInput:
             requested if requested in analyzer.EXAM_CATEGORIES
             else analyzer.detect_exam_category(prepared.exam_filename, prepared.analysis_description)
         )
+        prepared.laudo_idioma = idioma.normalizar(request.form.get("laudo_idioma"))
         if prepared.exam_category != "imagem":
             # Relatório com números: a leitura dos valores recebe o texto inteiro do PDF.
             prepared.analysis_description = uploads.description_with_dicom_context(
@@ -150,6 +152,7 @@ def _enqueue(mode: str, prepared: _AnalysisInput, persist: dict, display_extra: 
         persist=persist,
         display_extra=display_extra,
         exam_category=prepared.exam_category,
+        laudo_idioma=prepared.laudo_idioma,
     )
 
 
@@ -168,6 +171,7 @@ def _run_now(mode: str, prepared: _AnalysisInput, api_key: str, persist: dict) -
         ai_trace_id=g.get("trace_id"),
         on_late_usage=cost_tracking.late_usage_recorder(costs.cost_budget_scopes(mode)),
         exam_category=prepared.exam_category,
+        laudo_idioma=prepared.laudo_idioma,
     )
     costs.record_analysis_cost(mode, result)
     result["analise_id"] = db.salvar_analise_com_imagens(
@@ -581,7 +585,16 @@ def api_analyze():
         return jsonify({"error": message, "success": False}), status_code
 
     result["consensus"] = presentation.build_consensus_info(result.get("model_used", ""), result.get("analysis", ""))
-    return jsonify(result), 200
+    return jsonify(_api_language_fields(result)), 200
+
+
+def _api_language_fields(result: dict) -> dict:
+    """Idioma do laudo na resposta da API, com nomes estáveis (ver README)."""
+    return {
+        **result,
+        "laudo_idioma": idioma.normalizar(result.get("idioma")),
+        "translation_failed": bool(result.get("traducao_falhou")),
+    }
 
 
 @bp.route("/api/analyze/status/<job_id>")
@@ -596,7 +609,7 @@ def api_analyze_status(job_id: str):
     if status["status"] == "finished":
         result = dict(status["result"])
         result["consensus"] = presentation.build_consensus_info(result.get("model_used", ""), result.get("analysis", ""))
-        return jsonify({"status": "finished", **result}), 200
+        return jsonify({"status": "finished", **_api_language_fields(result)}), 200
     if status["status"] == "not_found":
         return jsonify({"status": "not_found", "error": "Job não encontrado."}), 404
     return jsonify(_public_status(status)), 200

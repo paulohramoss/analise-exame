@@ -218,6 +218,7 @@ def run_analysis_job(
     display_extra: dict | None = None,
     trace_id: str | None = None,
     exam_category: str = "imagem",
+    laudo_idioma: str = "pt-BR",
 ) -> dict:
     """
     Executado pelo worker RQ (processo separado, sem contexto Flask).
@@ -247,6 +248,7 @@ def run_analysis_job(
             user_description=user_description, model_name=model_name, api_key=api_key,
             anthropic_api_key=anthropic_api_key, exclude_gemini_cost=exclude_gemini_cost,
             cost_scopes=cost_scopes, persist=persist, display_extra=display_extra, exam_category=exam_category,
+            laudo_idioma=laudo_idioma,
         )
     finally:
         unbind_trace_id(token)
@@ -282,7 +284,7 @@ def _set_stage(stage: str) -> None:
 def _run_analysis(
     *, mode, images, image_meta, exam_filename, user_description, model_name,
     api_key, anthropic_api_key, exclude_gemini_cost, cost_scopes, persist, display_extra,
-    exam_category="imagem",
+    exam_category="imagem", laudo_idioma="pt-BR",
 ) -> dict:
     logger.info("Job de análise iniciado (mode=%s, imagens=%d)", mode, len(images))
     t0 = time.time()
@@ -290,7 +292,7 @@ def _run_analysis(
         result = _analyze(
             images=images, exam_filename=exam_filename, api_key=api_key, user_description=user_description,
             model_name=model_name, anthropic_api_key=anthropic_api_key, persist=persist,
-            cost_scopes=cost_scopes, exam_category=exam_category,
+            cost_scopes=cost_scopes, exam_category=exam_category, laudo_idioma=laudo_idioma,
         )
     except Exception as exc:
         from core.analyzer import ExamReadError
@@ -310,7 +312,7 @@ def _run_analysis(
 
 
 def _analyze(*, images, exam_filename, api_key, user_description, model_name, anthropic_api_key, persist,
-             cost_scopes, exam_category):
+             cost_scopes, exam_category, laudo_idioma="pt-BR"):
     from core import cost_tracking
     from core.analyzer import analyze_exam_from_bytes
     from web.posthog import init_posthog
@@ -328,6 +330,7 @@ def _analyze(*, images, exam_filename, api_key, user_description, model_name, an
         on_late_usage=cost_tracking.late_usage_recorder(cost_scopes),
         on_progress=_set_stage,
         exam_category=exam_category,
+        laudo_idioma=laudo_idioma,
     )
 
 

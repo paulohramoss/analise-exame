@@ -391,7 +391,7 @@
                 {% endif %}
             </div>
             {% endif %}
-            <div class="report-content" id="report-content">
+            <div class="report-content" id="report-content" data-lang="{{ laudo_idioma|default('pt-BR') }}"{% if laudo_idioma == 'en' %} lang="en"{% endif %}>
                 {{ analysis }}
             </div>
             {% if can_edit %}
@@ -477,10 +477,11 @@
         function downloadPDF() {
             openLaudoPdf({
                 reportHTML: reportContent.innerHTML,
-                generatedAt: generatedAt || laudoNowBR(),
+                generatedAt: generatedAt || laudoNowBR(reportContent.dataset.lang),
                 documentId: analysisId ? String(analysisId).slice(0, 8).toUpperCase() : '',
-                responsible: responsible || { name: 'Responsável não salvo neste histórico' },
-                meta: laudoPdfMeta(JSON.parse(document.getElementById('data-exam-meta').textContent || '{}'), consensus),
+                responsible: responsible || { name: reportContent.dataset.lang === 'en' ? 'Responsible professional not saved' : 'Responsável não salvo neste histórico' },
+                meta: laudoPdfMeta(JSON.parse(document.getElementById('data-exam-meta').textContent || '{}'), consensus, reportContent.dataset.lang),
+                lang: reportContent.dataset.lang,
                 clinicalInfo: userDesc,
                 findings,
             });

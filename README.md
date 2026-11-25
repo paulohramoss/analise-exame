@@ -43,6 +43,7 @@ O **MedAI Analyzer** (plataforma Three Health) analisa imagens de exames ortopé
 - **Tela Hoje** (`/hoje`): reavaliações do dia, metas que o último exame moveu e laudos da semana sem validação; **busca única** (`/busca`) por paciente, CPF, exame ou achado; prontuário do paciente em **CSV**
 - **Leitura incerta em amarelo**: a extração declara dúvida por item e checagens pegam vírgula/unidade/lado improváveis; painel laboratorial com filtro "só alterados" e painéis normais recolhidos
 - **Chave do prontuário**: rotação sem perda (`PRONTUARIO_ENCRYPTION_KEYS_ANTIGAS`), verificação e impressão digital (`python -m scripts.prontuario_chaves`)
+- **Laudo em inglês** para profissionais de fora do Brasil: o profissional escolhe o idioma no envio (Português (Brasil) ou English). A análise é a mesma; o laudo pronto, os achados marcados e o painel laboratorial são traduzidos no fim, com etiquetas [STRONG]/[MODERATE], PDF com rótulos e aviso legal em inglês, e a explicação para o paciente e o parecer de correlação escritos direto no idioma (`core/idioma.py`)
 - **Operação**: cache compartilhado no Redis (análises e PubMed), alerta de erros de IA (`core/ai_monitor.py`), fila prioritária para plano pago com retentativa (`python -m scripts.reprocessar_fila`) e testes de ponta a ponta no navegador (`e2e/`, `pytest e2e`)
 
 ---
@@ -306,7 +307,8 @@ custo diário.
 curl -X POST http://localhost:5000/api/analyze \
   -H "X-API-Key: sua_chave_de_acesso" \
   -F "exam_image=@/caminho/para/exame.jpg" \
-  -F "description=Ressonância magnética do joelho direito"
+  -F "description=Ressonância magnética do joelho direito" \
+  -F "laudo_idioma=en"   # opcional: pt-BR (padrão) ou en
 ```
 
 **Resposta de exemplo:**
@@ -317,9 +319,13 @@ curl -X POST http://localhost:5000/api/analyze \
   "exam_type": "joelho",
   "analysis": "## 1. IDENTIFICAÇÃO DO EXAME\n...",
   "references_used": 2,
-  "model_used": "gemini-2.5-flash"
+  "model_used": "gemini-2.5-flash",
+  "laudo_idioma": "pt-BR"
 }
 ```
+
+Com `laudo_idioma=en`, o laudo volta em inglês. Se a tradução falhar, ele vem em
+português, com `"laudo_idioma": "pt-BR"` e `"translation_failed": true`.
 
 ---
 

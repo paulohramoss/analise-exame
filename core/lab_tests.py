@@ -19,25 +19,68 @@ from datetime import date
 from core.dynamometry import _fmt, _number, _text  # mesmos leitores tolerantes de número/texto
 
 SITUACOES = {"abaixo": "↓ Abaixo", "acima": "↑ Acima", "normal": "Dentro", "sem_referencia": "Sem referência"}
+SITUACOES_EN = {"abaixo": "↓ Low", "acima": "↑ High", "normal": "Normal", "sem_referencia": "No reference"}
+
+# Painel em inglês (laudo traduzido, core/idioma.py): rótulos fixos do sistema.
+PAINEIS_EN = {
+    "Hemograma": "Complete blood count", "Inflamação": "Inflammation", "Coagulação": "Coagulation",
+    "Músculo e fígado": "Muscle and liver", "Metabolismo ósseo": "Bone metabolism", "Ferro": "Iron",
+    "Pâncreas": "Pancreas", "Rim e eletrólitos": "Kidney and electrolytes", "Metabolismo": "Metabolism",
+    "Hormônios": "Hormones", "Vitaminas": "Vitamins", "Marcadores tumorais": "Tumor markers", "Outros": "Other",
+}
+INDICES_EN = {
+    "HOMA-IR (resistência à insulina)": ("HOMA-IR (insulin resistance)", "< 2.71",
+                                         "glucose (mg/dL) × insulin (µIU/mL) ÷ 405"),
+    "Triglicerídeos / HDL": ("Triglycerides / HDL", "< 3.5", "triglycerides ÷ HDL (mg/dL)"),
+    "Colesterol não-HDL": ("Non-HDL cholesterol", "goal depends on cardiovascular risk (usually < 130)",
+                           "total cholesterol − HDL"),
+    "Saturação de transferrina (estimada)": ("Transferrin saturation (estimated)", "20 to 45%",
+                                             "iron (µg/dL) ÷ (transferrin (mg/dL) × 1.25) × 100"),
+}
+_CONFERIR_EN = {
+    "valor negativo": "negative value",
+    "faixa de referência invertida": "reference range reversed",
+    "valor muito distante da faixa — vírgula decimal ou unidade lida errado?":
+        "value far from the range: decimal separator or unit misread?",
+    "sem unidade": "no unit",
+}
 
 # Grupos para organizar a tabela (o que não casar vai para "Outros").
 PAINEIS = [
-    ("Hemograma", r"hem[aá]c|eritr|hemoglob(?!ina glicada)|hemat[oó]c|vcm|hcm|chcm|rdw|\bvpm\b|volume plaquet|leuc|neutr|linf|mon[oó]c|eosin|bas[oó]f|plaquet|segment|bast"),
-    ("Inflamação", r"\bpcr\b|prote[ií]na c|vhs|hemossedimen|interleuc|il-6"),
-    ("Coagulação", r"ttpa|tromboplastina|protrombina|\btp\b|\binr\b|d[ií]mero|fibrinog"),
-    ("Músculo e fígado", r"bilirrubina|prote[ií]nas totais|albumina|globulina(?! l)|\bggt\b|gama.?gt|\bck\b|\bcpk\b|creatin(o)?quinase|creatina quinase|\bldh\b|desidrogenase l[aá]tica|aldolase|mioglobina|\btgo\b|\bast\b|\btgp\b|\balt\b"),
-    ("Metabolismo ósseo", r"vitamina d|25.?oh|c[aá]lcio|f[oó]sforo|pth|paratorm|fosfatase alcalina|magn[eé]sio"),
-    ("Ferro", r"\bferro\b|ferritina|transferrina|satura[cç][aã]o|tibc"),
-    ("Pâncreas", r"lipase|amilase"),
-    ("Rim e eletrólitos", r"cistatina|creatinina|ur[eé]ia|\bsódio\b|\bsodio\b|pot[aá]ssio|cloro|taxa de filtra|tfg"),
-    ("Metabolismo", r"glicose|glicemia|hemoglobina glicada|hba1c|insulina|colesterol|\bhdl\b|\bldl\b|triglic|[aá]cido [uú]rico|"
-                     r"apolipoprote|\bapo ?[ab]|lipoprote[ií]na ?\(?a|\blp\(a\)|homociste"),
-    ("Hormônios", r"\btsh\b|\bt4\b|\bt3\b|testosterona|estradiol|cortisol|prolactina|\bigf\b|\bshbg\b|\bacth\b|"
-                  r"adrenocortic|\bdht\b|di-?hidrotestosterona|\bdhea|dehidroepiandrosterona|\bfsh\b|\blh\b|"
-                  r"progesterona|globulina l|androstenediona|17.?oh"),
-    ("Vitaminas", r"vitamina b12|cobalamina|[aá]cido f[oó]lico|folato"),
-    ("Marcadores tumorais", r"\bpsa\b|ant[ií]geno prost|\bca ?\d|\bcea\b|carcinoembri|alfa.?feto"),
+    # Nomes em português e em inglês: laudos de laboratórios de fora do Brasil
+    # chegam com "Ferritin", "Leukocytes", "Creatine kinase"…
+    ("Hemograma", r"hem[aá]c|eritr|erythro|red (blood )?cell|\brbc\b|\bwbc\b|hemoglob|haemoglob|hemat[oó]c|haematoc|"
+                  r"vcm|hcm|chcm|\bmcv\b|\bmch\b|\bmchc\b|rdw|\bvpm\b|\bmpv\b|volume plaquet|leuc|leuk|white (blood )?cell|"
+                  r"neutr|linf|lymph|mon[oó]c|eosin|bas[oó]f|basoph|plaquet|platelet|segment|bast|\bbands?\b"),
+    ("Inflamação", r"\bpcr\b|prote[ií]na c|c-?reactive|\bcrp\b|vhs|\besr\b|hemossedimen|sedimentation|interleu|il-6"),
+    ("Coagulação", r"ttpa|tromboplastin|\baptt\b|\bptt\b|protrombina|prothrombin|\btp\b|\bpt\b|\binr\b|"
+                   r"d[ií]mero|d-?dimer|fibrinog"),
+    ("Músculo e fígado", r"bilirrubina|bilirubin|prote[ií]nas totais|total protein|albumin|globulin|"
+                         r"\bggt\b|gama.?gt|gamma.?g|\bck\b|\bcpk\b|creatin(o)?quinase|creatina quinase|creatine (phospho)?kinase|"
+                         r"\bldh\b|desidrogenase l[aá]tica|lactate dehydrogenase|aldolase|mioglobina|myoglobin|"
+                         r"\btgo\b|\bast\b|\bsgot\b|\btgp\b|\balt\b|\bsgpt\b"),
+    ("Metabolismo ósseo", r"vitamina d|vitamin d|25.?oh|c[aá]lcio|calcium|f[oó]sforo|phosph(?!o?kinase)|pth|paratorm|parathyroid|"
+                          r"fosfatase alcalina|alkaline phosphatase|magn[eé]sio|magnesium"),
+    ("Ferro", r"\bferro\b|\biron\b|ferritin|transferrin|satura[cç][aã]o|saturation|tibc"),
+    ("Pâncreas", r"lipase|amilase|amylase"),
+    ("Rim e eletrólitos", r"cistatina|cystatin|creatinin|ur[eé]ia|\burea\b|\bbun\b|\bsódio\b|\bsodio\b|sodium|pot[aá]ssio|"
+                          r"potassium|cloro|chloride|taxa de filtra|filtration|tfg|\begfr\b|\bgfr\b"),
+    ("Metabolismo", r"glicose|glicemia|glucose|glicada|glycated|hba1c|\ba1c\b|insulin|colesterol|cholesterol|\bhdl\b|\bldl\b|"
+                    r"triglic|triglyc|[aá]cido [uú]rico|uric acid|apolipoprot|\bapo ?[ab]|lipoprote[ií]n ?\(?a|\blp\(a\)|"
+                    r"homociste|homocyst"),
+    ("Hormônios", r"\btsh\b|\bt4\b|\bt3\b|thyrox|triiodo|testosteron|estradiol|cortisol|prolactin|\bigf\b|\bshbg\b|"
+                  r"sex hormone|\bacth\b|adrenocortic|\bdht\b|di-?hidrotestosterona|dihydrotestosterone|\bdhea|"
+                  r"dehidroepiandrosterona|dehydroepiandrosterone|\bfsh\b|\blh\b|progesteron|globulina l|androstenedion|17.?oh"),
+    ("Vitaminas", r"vitamina b12|vitamin b12|cobalamin|[aá]cido f[oó]lico|folic acid|folat"),
+    ("Marcadores tumorais", r"\bpsa\b|ant[ií]geno prost|prostate.specific|\bca ?-?\d|\bcea\b|carcinoembri|alfa.?feto|alpha.?feto"),
 ]
+
+# Nomes que casariam com o painel errado: hemoglobina glicada é do metabolismo
+# da glicose; a globulina ligadora de hormônios sexuais (SHBG) é hormônio.
+_PAINEL_ANTES = (
+    (re.compile(r"glicada|glycated|hba1c|\ba1c\b", re.I), "Metabolismo"),
+    (re.compile(r"\bshbg\b|sex hormone|horm[oô]nios? sexua|globulina l", re.I), "Hormônios"),
+)
 
 
 def build_extraction_prompt() -> str:
@@ -149,6 +192,9 @@ def situacao(resultado: dict) -> str:
 
 
 def painel(exame: str) -> str:
+    for padrao, nome in _PAINEL_ANTES:
+        if padrao.search(exame):
+            return nome
     return next((nome for nome, pattern in PAINEIS if re.search(pattern, exame, re.I)), "Outros")
 
 
@@ -182,17 +228,17 @@ def _indice(nome, valor, unidade, referencia, alterado, formula, exames):
 
 def derive_indices(resultados: list[dict]) -> list[dict]:
     indices = []
-    glicose = _find(resultados, r"glicose|glicemia", r"glicada|hba1c|urina")
-    insulina = _find(resultados, r"insulina")
+    glicose = _find(resultados, r"glicose|glicemia|glucose", r"glicada|glycated|hba1c|a1c|urina|urine")
+    insulina = _find(resultados, r"insulin")
     # µUI/mL e mUI/L são numericamente iguais; outra unidade de insulina não entra na fórmula.
     if glicose and insulina and ("/ml" in _unit(insulina) or "/l" in _unit(insulina)):
         g = glicose["valor"] * (18.0 if "mmol" in _unit(glicose) else 1.0)  # mmol/L → mg/dL
         homa = g * insulina["valor"] / 405
         indices.append(_indice("HOMA-IR (resistência à insulina)", homa, "", "< 2,71", homa >= 2.71,
                                "glicose (mg/dL) × insulina (µUI/mL) ÷ 405", [glicose["exame"], insulina["exame"]]))
-    tg = _find(resultados, r"triglic")
+    tg = _find(resultados, r"triglic|triglyc")
     hdl = _find(resultados, r"\bhdl\b")
-    ct = _find(resultados, r"colesterol total|^colesterol$")
+    ct = _find(resultados, r"colesterol total|total cholesterol|^colesterol$|^cholesterol$")
     if tg and hdl and "mg" in _unit(tg) and "mg" in _unit(hdl) and hdl["valor"] > 0:
         razao = tg["valor"] / hdl["valor"]
         indices.append(_indice("Triglicerídeos / HDL", razao, "", "< 3,5", razao >= 3.5,
@@ -201,9 +247,9 @@ def derive_indices(resultados: list[dict]) -> list[dict]:
         nao_hdl = ct["valor"] - hdl["valor"]
         indices.append(_indice("Colesterol não-HDL", nao_hdl, "mg/dL", "meta conforme o risco cardiovascular (em geral < 130)",
                                nao_hdl >= 160, "colesterol total − HDL", [ct["exame"], hdl["exame"]]))
-    ferro = _find(resultados, r"\bferro\b", r"capacidade|satura")
-    transferrina = _find(resultados, r"transferrina", r"satura")
-    ja_tem_saturacao = _find(resultados, r"satura[cç][aã]o")
+    ferro = _find(resultados, r"\bferro\b|\biron\b", r"capacidade|capacity|binding|satura")
+    transferrina = _find(resultados, r"transferrin", r"satura")
+    ja_tem_saturacao = _find(resultados, r"satura[cç][aã]o|saturation")
     if ferro and transferrina and not ja_tem_saturacao and "mg/dl" in _unit(transferrina) and transferrina["valor"] > 0:
         sat = round(ferro["valor"] / (transferrina["valor"] * 1.25) * 100, 1)  # CTLF ≈ transferrina × 1,25
         indices.append(_indice("Saturação de transferrina (estimada)", sat, "%", "20 a 45%", sat < 20 or sat > 45,
@@ -218,29 +264,30 @@ def _padrao(titulo, nivel, exames, explicacao, sugestao):
 def derive_patterns(resultados: list[dict], indices: list[dict]) -> list[dict]:
     """Combinações de resultados com significado clínico conhecido (ordem: atenção primeiro)."""
     R = {
-        "hb": _find(resultados, r"hemoglobina", r"glicada|hba1c|corpuscular"),
-        "ferritina": _find(resultados, r"ferritina"),
-        "pcr": _find(resultados, r"prote[ií]na c|\bpcr\b"),
-        "ck": _find(resultados, r"creatin(o)?quinase|creatina quinase|\bck\b|\bcpk\b"),
-        "tgo": _find(resultados, r"\btgo\b|\bast\b|aspartato"),
-        "tgp": _find(resultados, r"\btgp\b|\balt\b|alanina"),
+        "hb": _find(resultados, r"hemoglobin", r"glicada|glycated|hba1c|a1c|corpuscular|mean"),
+        "ferritina": _find(resultados, r"ferritin"),
+        "pcr": _find(resultados, r"prote[ií]na c|\bpcr\b|c-?reactive|\bcrp\b"),
+        "ck": _find(resultados, r"creatin(o)?quinase|creatina quinase|creatine (phospho)?kinase|\bck\b|\bcpk\b",
+                    r"\bmb\b"),
+        "tgo": _find(resultados, r"\btgo\b|\bast\b|aspartat|\bsgot\b"),
+        "tgp": _find(resultados, r"\btgp\b|\balt\b|alanin|\bsgpt\b"),
         "tsh": _find(resultados, r"\btsh\b"),
-        "t4": _find(resultados, r"\bt4\b|tiroxina"),
-        "glicose": _find(resultados, r"glicose|glicemia", r"glicada|urina"),
-        "insulina": _find(resultados, r"insulina"),
-        "vitd": _find(resultados, r"vitamina d|25.?oh"),
-        "b12": _find(resultados, r"b12|cobalamina"),
-        "testo": _find(resultados, r"testosterona", r"livre"),
-        "ferro": _find(resultados, r"\bferro\b", r"capacidade|satura"),
+        "t4": _find(resultados, r"\bt4\b|tiroxina|thyroxine"),
+        "glicose": _find(resultados, r"glicose|glicemia|glucose", r"glicada|glycated|a1c|urina|urine"),
+        "insulina": _find(resultados, r"insulin"),
+        "vitd": _find(resultados, r"vitamina d|vitamin d|25.?oh"),
+        "b12": _find(resultados, r"b12|cobalamin"),
+        "testo": _find(resultados, r"testosteron", r"livre|free"),
+        "ferro": _find(resultados, r"\bferro\b|\biron\b", r"capacidade|capacity|binding|satura"),
         "ldl": _find(resultados, r"\bldl\b"),
-        "ct": _find(resultados, r"colesterol total"),
-        "bd": _find(resultados, r"bilirrubina direta"),
+        "ct": _find(resultados, r"colesterol total|total cholesterol"),
+        "bd": _find(resultados, r"bilirrubina direta|direct bilirubin|bilirubin,? direct"),
         "cortisol": _find(resultados, r"cortisol"),
-        "apob": _find(resultados, r"apolipoprote[ií]na b|\bapo ?b\b"),
-        "ttpa": _find(resultados, r"ttpa|tromboplastina", r"rela[cç][aã]o|\bd/n\b|ratio"),
-        "ddimero": _find(resultados, r"d[ií]mero"),
-        "andro": _find(resultados, r"androstenediona"),
-        "dhea": _find(resultados, r"\bdhea|dehidroepiandrosterona|desidroepiandrosterona"),
+        "apob": _find(resultados, r"apolipoprote[ií]na b|apolipoprotein b|\bapo ?b\b"),
+        "ttpa": _find(resultados, r"ttpa|tromboplastin|\baptt\b|\bptt\b", r"rela[cç][aã]o|\bd/n\b|ratio"),
+        "ddimero": _find(resultados, r"d[ií]mero|d-?dimer"),
+        "andro": _find(resultados, r"androstenedion"),
+        "dhea": _find(resultados, r"\bdhea|dehidroepiandrosterona|desidroepiandrosterona|dehydroepiandrosterone"),
     }
     nomes = lambda *keys: [R[k]["exame"] for k in keys if R.get(k)]  # noqa: E731
     padroes = []
@@ -466,24 +513,27 @@ def format_identification(calc: dict) -> str:
     return "\n".join(linhas)
 
 
-def _num(value) -> str:
-    """Número como no laudo: até 2 casas, sem zeros à direita, vírgula decimal."""
+def _num(value, en: bool = False) -> str:
+    """Número como no laudo: até 2 casas, sem zeros à direita, vírgula decimal (ponto em inglês)."""
     if value is None:
         return "—"
     text = f"{value:,.2f}".rstrip("0").rstrip(".")  # 245000 → 245,000.00 → 245,000
+    if en:
+        return text
     return text.replace(",", "_").replace(".", ",").replace("_", ".")  # → 245.000
 
 
-def _reference(r: dict) -> str:
-    if r.get("referencia_texto"):
-        return r["referencia_texto"]
+def _reference(r: dict, en: bool = False) -> str:
     minimo, maximo = r.get("referencia_min"), r.get("referencia_max")
+    # Em inglês, a faixa numérica vem dos números (o texto do laudo brasileiro está em português).
+    if r.get("referencia_texto") and not (en and (minimo is not None or maximo is not None)):
+        return r["referencia_texto"]
     if minimo is not None and maximo is not None:
-        return f"{_num(minimo)} a {_num(maximo)}"
+        return f"{_num(minimo, en)} {'to' if en else 'a'} {_num(maximo, en)}"
     if maximo is not None:
-        return f"até {_num(maximo)}"
+        return f"{'up to' if en else 'até'} {_num(maximo, en)}"
     if minimo is not None:
-        return f"acima de {_num(minimo)}"
+        return f"{'above' if en else 'acima de'} {_num(minimo, en)}"
     return "—"
 
 
@@ -618,7 +668,7 @@ def _date_br(data: str) -> str:
     return f"{m[3]}/{m[2]}/{m[1]}" if m else data
 
 
-def _previous(r: dict, unidade: str) -> dict | None:
+def _previous(r: dict, unidade: str, en: bool = False) -> dict | None:
     """Resultado anterior mais recente impresso no laudo, com a direção da mudança."""
     anteriores = [a for a in r.get("anteriores") or [] if a.get("valor") is not None]
     if not anteriores or r.get("valor") is None:
@@ -626,29 +676,51 @@ def _previous(r: dict, unidade: str) -> dict | None:
     ultimo = sorted(anteriores, key=lambda a: a.get("data") or "")[-1]
     variacao = r["valor"] - ultimo["valor"]
     return {
-        "texto": f"{_num(ultimo['valor'])}{unidade}" + (f" em {_date_br(ultimo['data'])}" if ultimo.get("data") else ""),
+        "texto": f"{_num(ultimo['valor'], en)}{unidade}" + (
+            (f" on {ultimo['data']}" if en else f" em {_date_br(ultimo['data'])}") if ultimo.get("data") else ""),
         "direcao": "↑" if variacao > 0 else "↓" if variacao < 0 else "=",
     }
 
 
-def dashboard(calc: dict | None, hoje: date | None = None) -> dict | None:
-    """Resumo visual dos exames laboratoriais: painéis, réguas, índices e padrões."""
+def _conferir_en(motivo: str | None) -> str | None:
+    if not motivo:
+        return motivo
+    return "; ".join(_CONFERIR_EN.get(parte, parte) for parte in motivo.split("; "))
+
+
+def _indice_view(i: dict, en: bool) -> dict:
+    view = {**i, "valor_fmt": f"{_num(i['valor'], en)}{' ' + i['unidade'] if i['unidade'] else ''}"}
+    if en and i["nome"] in INDICES_EN:
+        view["nome"], view["referencia"], view["formula"] = INDICES_EN[i["nome"]]
+    return view
+
+
+def dashboard(calc: dict | None, hoje: date | None = None, idioma: str | None = None) -> dict | None:
+    """Resumo visual dos exames laboratoriais: painéis, réguas, índices e padrões.
+
+    idioma "en" (ou calc["idioma"] == "en", gravado na tradução do laudo):
+    rótulos do sistema em inglês e números com ponto decimal. Os nomes dos
+    exames ficam como o laboratório escreveu.
+    """
     if not calc or not calc.get("resultados"):
         return None
+    en = (idioma or calc.get("idioma")) == "en"
+    situacoes = SITUACOES_EN if en else SITUACOES
     paineis: dict[str, dict] = {}
     for r in calc["resultados"]:
-        painel_ = paineis.setdefault(r["painel"], {"nome": r["painel"], "itens": [], "alterados": 0})
+        nome = PAINEIS_EN.get(r["painel"], r["painel"]) if en else r["painel"]
+        painel_ = paineis.setdefault(r["painel"], {"nome": nome, "itens": [], "alterados": 0})
         un = f" {r['unidade']}" if r.get("unidade") else ""
         painel_["itens"].append({
             "exame": r["exame"],
-            "valor": f"{_num(r['valor'])}{un}" if r.get("valor") is not None else (r.get("valor_texto") or "—"),
-            "referencia": _reference(r),
+            "valor": f"{_num(r['valor'], en)}{un}" if r.get("valor") is not None else (r.get("valor_texto") or "—"),
+            "referencia": _reference(r, en),
             "situacao": r["situacao"],
-            "rotulo": SITUACOES[r["situacao"]],
+            "rotulo": situacoes[r["situacao"]],
             "vezes_o_limite": r.get("vezes_o_limite"),
             "barra": _bar(r),
-            "anterior": _previous(r, un),
-            "conferir": r.get("conferir"),
+            "anterior": _previous(r, un, en),
+            "conferir": _conferir_en(r.get("conferir")) if en else r.get("conferir"),
         })
         if r["situacao"] in {"abaixo", "acima"}:
             painel_["alterados"] += 1
@@ -657,10 +729,10 @@ def dashboard(calc: dict | None, hoje: date | None = None) -> dict | None:
         "alterados": calc.get("alterados", 0),
         "conferir": calc.get("conferir") or sum(1 for r in calc["resultados"] if r.get("conferir")),
         "paineis": list(paineis.values()),
-        "indices": [{**i, "valor_fmt": f"{_num(i['valor'])}{' ' + i['unidade'] if i['unidade'] else ''}"}
-                    for i in calc.get("indices") or []],
+        "indices": [_indice_view(i, en) for i in calc.get("indices") or []],
         "padroes": calc.get("padroes") or [],
         "data_coleta": calc.get("data_coleta"),
         "laboratorio": calc.get("laboratorio"),
         "meses_desde_coleta": _months_since(calc.get("data_coleta"), hoje),
+        "idioma": "en" if en else "pt-BR",
     }
