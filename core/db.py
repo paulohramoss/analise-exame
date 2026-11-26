@@ -385,10 +385,12 @@ def salvar_analise(
     paciente_id: str | None = None,
     marcacoes: list[dict] | None = None,
     dados_estruturados: dict | None = None,
+    idioma: str | None = None,
 ) -> str | None:
     """Persiste resultado de análise da IA. Retorna UUID da análise ou None.
 
     paciente_id já deve ter sido conferido como do mesmo cliente_id (rota).
+    idioma: "en" para laudo traduzido; português é o padrão da coluna e não é enviado.
     """
     db = _get_client()
     if not db:
@@ -415,6 +417,8 @@ def salvar_analise(
             data["marcacoes"] = marcacoes
         if dados_estruturados:
             data["dados_estruturados"] = dados_estruturados
+        if idioma == "en":
+            data["idioma"] = "en"
         if responsavel:
             data.update({
                 "responsavel_nome": responsavel.get("name") or None,
@@ -422,7 +426,16 @@ def salvar_analise(
                 "responsavel_registro": responsavel.get("register") or None,
                 "responsavel_instituicao": responsavel.get("organization") or None,
             })
-        res = db.table("analises").insert(data).execute()
+        try:
+            res = db.table("analises").insert(data).execute()
+        except Exception as exc:
+            # Migration 2026-11-25-idioma-laudo.sql ainda não aplicada: o laudo
+            # em inglês é gravado sem o campo, em vez de se perder.
+            if "idioma" not in data or "idioma" not in str(exc):
+                raise
+            logger.warning("Coluna analises.idioma ausente; laudo gravado sem o idioma.")
+            data.pop("idioma")
+            res = db.table("analises").insert(data).execute()
         return res.data[0]["id"] if res.data else None
     except Exception:
         logger.exception("Erro em salvar_analise")
@@ -484,6 +497,22 @@ def buscar_analise(
     except Exception:
         logger.exception("Erro em buscar_analise")
         return None
+
+
+def buscar_idioma_analise(analise_id: str) -> str:
+    """Idioma do laudo ('pt-BR' ou 'en'). Consulta à parte: sem a migration
+    2026-11-25-idioma-laudo.sql (ou em qualquer erro) o laudo abre em português.
+    O acesso ao laudo já deve ter sido conferido pela rota."""
+    db = _get_client()
+    if not db or not analise_id:
+        return "pt-BR"
+    try:
+        res = db.table("analises").select("idioma").eq("id", analise_id).limit(1).execute()
+        valor = (res.data[0] or {}).get("idioma") if res.data else None
+    except Exception:
+        logger.debug("Idioma do laudo indisponível (migration pendente?)", exc_info=True)
+        return "pt-BR"
+    return "en" if valor == "en" else "pt-BR"
 
 
 def buscar_laudos_por_texto(cliente_id: str | None, termo: str, limit: int = 30) -> list[dict]:
@@ -759,6 +788,7 @@ def salvar_analise_com_imagens(
         tempo_ms=tempo_ms,
         marcacoes=result.get("annotations") or None,
         dados_estruturados=result.get("structured") or None,
+        idioma=result.get("idioma"),
         **persist,
     )
     if not analise_id:

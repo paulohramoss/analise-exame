@@ -115,6 +115,14 @@ create index if not exists analises_cliente_created_idx
 alter table public.analises
     add column if not exists dados_estruturados jsonb;
 
+-- Idioma do laudo: pt-BR ou en (2026-11-25-idioma-laudo.sql).
+alter table public.analises
+    add column if not exists idioma text not null default 'pt-BR';
+alter table public.analises
+    drop constraint if exists analises_idioma_check;
+alter table public.analises
+    add constraint analises_idioma_check check (idioma in ('pt-BR', 'en'));
+
 -- Achados localizados nas imagens (2026-10-23-marcacoes-laudo.sql).
 alter table public.analises
     add column if not exists marcacoes jsonb;

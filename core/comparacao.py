@@ -189,7 +189,7 @@ _SECOES_TEXTO = (
     ("Sinais de alerta", r"^##\s*0\."),
     ("Achados", r"^##\s*3\."),
     ("Impressão", r"^##\s*4\."),
-    ("Síntese", r"^##\s*5\.\s*S[IÍ]NTESE"),
+    ("Síntese", r"^##\s*5\.\s*(S[IÍ]NTESE|(CLINICAL\s+)?(SYNTHESIS|SUMMARY))"),  # laudo em inglês: core/idioma.py
 )
 
 

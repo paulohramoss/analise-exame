@@ -75,6 +75,26 @@
         });
     }
 
+    /** <select data-remember="chave">: lembra a última escolha neste navegador (ex.: idioma do laudo). */
+    function rememberChoices() {
+        document.querySelectorAll('select[data-remember]').forEach(select => {
+            const key = `th:${select.dataset.remember}`;
+            try {
+                const saved = localStorage.getItem(key);
+                if (saved && Array.from(select.options).some(o => o.value === saved)) select.value = saved;
+            } catch (e) { /* armazenamento indisponível: fica o padrão */ }
+            select.addEventListener('change', () => {
+                try { localStorage.setItem(key, select.value); } catch (e) { /* ignora */ }
+            });
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', rememberChoices);
+    } else {
+        rememberChoices();
+    }
+
     window.showToast = showToast;
     window.copyToClipboard = copyToClipboard;
 })();

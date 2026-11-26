@@ -11,6 +11,7 @@
  *     clinicalInfo: 'Paciente: 38 anos | Lateralidade: Direito',  // opcional
  *     images: [{ src, label }],         // opcional (já com os achados marcados)
  *     findings: [{ numero, imagem, estrutura, local, certeza }],  // opcional
+ *     lang: 'pt-BR' | 'en',             // opcional — idioma do laudo (rótulos e aviso legal)
  *   });
  *
  * Todo texto vindo do usuário é escapado; apenas reportHTML entra como HTML.
@@ -132,46 +133,102 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
         return `<ul class="clinical-list">${items.join('')}</ul>`;
     }
 
-    const FINDING_LEVELS = {
-        forte: { color: '#16a34a', label: 'Forte grau de certeza' },
-        moderado: { color: '#eab308', label: 'Moderado grau de certeza' },
-        baixo: { color: '#dc2626', label: 'Baixo grau de certeza' },
+    const FINDING_COLORS = { forte: '#16a34a', moderado: '#eab308', baixo: '#dc2626' };
+
+    // Textos fixos do documento. O laudo em inglês (core/idioma.py) leva rótulos
+    // e aviso legal em inglês, sem as normas brasileiras (CFM, COFFITO, LGPD).
+    const TEXT = {
+        'pt-BR': {
+            htmlLang: 'pt-BR',
+            levels: { forte: 'Forte grau de certeza', moderado: 'Moderado grau de certeza', baixo: 'Baixo grau de certeza' },
+            noResponsible: 'Responsável não informado',
+            responsible: 'Responsável pela análise',
+            issued: 'Data de emissão',
+            reportNo: 'Nº do laudo',
+            clinicalInfo: 'Informações clínicas fornecidas',
+            image: 'Imagem',
+            imageAlt: i => `Imagem ${i} do exame`,
+            examImage: 'Imagem do exame',
+            examImages: 'Imagens do exame',
+            findings: 'Achados marcados nas imagens',
+            findingsNote: 'Verde: forte grau de certeza · Amarelo: moderado · Vermelho: baixo. A posição das marcações é estimada pela IA e aproximada.',
+            analysis: 'Análise de apoio por inteligência artificial',
+            docTitle: 'Laudo Three Health',
+            subtitle: 'Ortopedia · Sistema musculoesquelético',
+            banner: '<strong>Documento de apoio gerado por IA — não é laudo radiológico nem diagnóstico médico.</strong> Baseado apenas nas imagens enviadas (em RM/TC, cortes selecionados, não o estudo completo). Deve ser revisado por profissional habilitado antes de qualquer decisão.',
+            validationTitle: 'Validação do profissional responsável',
+            validationText: 'Declaro que revisei as imagens e o conteúdo desta análise, e que a conduta adotada, dentro das atribuições da minha profissão, é de minha responsabilidade.',
+            sign: ['Assinatura e carimbo', 'Registro profissional (CRM, CREFITO…)', 'Data'],
+            generatedBy: d => `Gerado por IA em ${d}`,
+            disclaimer: '<strong>AVISO CFM/COFFITO/LGPD:</strong> Documento gerado por Inteligência Artificial como ferramenta de apoio à decisão clínica. <strong>Não substitui</strong> o laudo radiológico, o diagnóstico nem a conduta do médico responsável: o diagnóstico por imagem e a indicação de cirurgia ou medicamento são atos médicos (Lei 12.842/2013). Fisioterapeutas o utilizam, dentro das atribuições definidas pelo COFFITO e do Código de Ética e Deontologia da Fisioterapia (Resolução COFFITO nº 424/2013), para planejar a reabilitação e decidir o encaminhamento. O uso da IA deve ser informado ao paciente, os dados devem ser tratados conforme a LGPD e a decisão final deve ser registrada pelo profissional habilitado.',
+            popupBlocked: 'O navegador bloqueou a janela do PDF. Permita pop-ups para este site e tente de novo.',
+        },
+        en: {
+            htmlLang: 'en',
+            levels: { forte: 'High certainty', moderado: 'Moderate certainty', baixo: 'Low certainty' },
+            noResponsible: 'Responsible professional not provided',
+            responsible: 'Responsible professional',
+            issued: 'Issued on',
+            reportNo: 'Report no.',
+            clinicalInfo: 'Clinical information provided',
+            image: 'Image',
+            imageAlt: i => `Exam image ${i}`,
+            examImage: 'Exam image',
+            examImages: 'Exam images',
+            findings: 'Findings marked on the images',
+            findingsNote: 'Green: high certainty · Yellow: moderate · Red: low. Mark positions are estimated by the AI and approximate.',
+            analysis: 'AI-assisted analysis',
+            docTitle: 'Three Health report',
+            subtitle: 'Orthopedics · Musculoskeletal system',
+            banner: '<strong>AI-generated support document — not a radiology report or a medical diagnosis.</strong> Based only on the images provided (for MRI/CT, selected slices, not the full study). It must be reviewed by a licensed professional before any decision.',
+            validationTitle: 'Review by the responsible professional',
+            validationText: 'I declare that I have reviewed the images and the content of this analysis, and that the management adopted, within the scope of my profession, is my responsibility.',
+            sign: ['Signature', 'Professional license no.', 'Date'],
+            generatedBy: d => `AI-generated on ${d}`,
+            disclaimer: '<strong>NOTICE:</strong> This document was generated by artificial intelligence as a clinical decision-support tool. It <strong>does not replace</strong> the radiology report, the diagnosis or the management decided by the responsible physician. Diagnosis, imaging interpretation and the indication of surgery or medication remain the responsibility of licensed professionals, within the scope of practice defined by local regulations. Patients should be informed that AI was used, personal health data must be handled under the applicable data-protection law (e.g. GDPR, HIPAA), and the final decision must be recorded by the licensed professional.',
+            popupBlocked: 'The browser blocked the PDF window. Allow pop-ups for this site and try again.',
+        },
     };
 
+    function textFor(lang) {
+        return TEXT[lang === 'en' ? 'en' : 'pt-BR'];
+    }
+
     function buildLaudoHTML(opts) {
+        const t = textFor(opts.lang);
         const responsible = opts.responsible || {};
-        const responsibleName = responsible.name || 'Responsável não informado';
+        const responsibleName = responsible.name || t.noResponsible;
         const responsibleDetails = [responsible.role, responsible.register, responsible.organization].filter(Boolean).join(' · ');
         const images = (opts.images || []).filter(img => img && img.src);
         const meta = (opts.meta || []).filter(m => m && m.value);
 
         const identItems = [
-            `<div class="ident-wide"><span class="label">Responsável pela análise</span>
+            `<div class="ident-wide"><span class="label">${esc(t.responsible)}</span>
                 <span class="value value-strong">${esc(responsibleName)}</span>
                 ${responsibleDetails ? `<span class="value-sub">${esc(responsibleDetails)}</span>` : ''}</div>`,
-            `<div><span class="label">Data de emissão</span><span class="value">${esc(opts.generatedAt)}</span></div>`,
-            ...(opts.documentId ? [`<div><span class="label">Nº do laudo</span><span class="value">${esc(opts.documentId)}</span></div>`] : []),
+            `<div><span class="label">${esc(t.issued)}</span><span class="value">${esc(opts.generatedAt)}</span></div>`,
+            ...(opts.documentId ? [`<div><span class="label">${esc(t.reportNo)}</span><span class="value">${esc(opts.documentId)}</span></div>`] : []),
             ...meta.map(m => `<div><span class="label">${esc(m.label)}</span><span class="value">${esc(m.value)}</span></div>`),
         ];
 
         const sections = [];
         if (opts.clinicalInfo) {
-            sections.push(['Informações clínicas fornecidas', clinicalListHTML(opts.clinicalInfo)]);
+            sections.push([t.clinicalInfo, clinicalListHTML(opts.clinicalInfo)]);
         }
         if (images.length) {
-            const figures = images.map((img, i) => `<figure><img src="${esc(img.src)}" alt="Imagem ${i + 1} do exame">${
-                images.length > 1 ? `<figcaption>${esc(img.label || `Imagem ${i + 1}`)}</figcaption>` : ''}</figure>`).join('');
-            sections.push([images.length === 1 ? 'Imagem do exame' : 'Imagens do exame', `<div class="images">${figures}</div>`]);
+            const figures = images.map((img, i) => `<figure><img src="${esc(img.src)}" alt="${esc(t.imageAlt(i + 1))}">${
+                images.length > 1 ? `<figcaption>${esc(img.label || `${t.image} ${i + 1}`)}</figcaption>` : ''}</figure>`).join('');
+            sections.push([images.length === 1 ? t.examImage : t.examImages, `<div class="images">${figures}</div>`]);
         }
-        const findings = (opts.findings || []).filter(f => f && FINDING_LEVELS[f.certeza]);
+        const findings = (opts.findings || []).filter(f => f && FINDING_COLORS[f.certeza]);
         if (findings.length) {
-            const rows = findings.map(f => `<li><span class="f-num" style="background:${FINDING_LEVELS[f.certeza].color}">${esc(f.numero)}</span>
-                <div><strong>${esc(f.estrutura)}</strong> <span class="f-level" style="border-color:${FINDING_LEVELS[f.certeza].color}">${esc(FINDING_LEVELS[f.certeza].label)}</span>
-                <div class="f-local">${images.length > 1 ? `Imagem ${esc(f.imagem)} · ` : ''}${esc(f.local)}</div></div></li>`).join('');
-            sections.push(['Achados marcados nas imagens', `<ol class="findings">${rows}</ol>
-                <p class="f-note">Verde: forte grau de certeza · Amarelo: moderado · Vermelho: baixo. A posição das marcações é estimada pela IA e aproximada.</p>`]);
+            const rows = findings.map(f => `<li><span class="f-num" style="background:${FINDING_COLORS[f.certeza]}">${esc(f.numero)}</span>
+                <div><strong>${esc(f.estrutura)}</strong> <span class="f-level" style="border-color:${FINDING_COLORS[f.certeza]}">${esc(t.levels[f.certeza])}</span>
+                <div class="f-local">${images.length > 1 ? `${t.image} ${esc(f.imagem)} · ` : ''}${esc(f.local)}</div></div></li>`).join('');
+            sections.push([t.findings, `<ol class="findings">${rows}</ol>
+                <p class="f-note">${esc(t.findingsNote)}</p>`]);
         }
-        sections.push(['Análise de apoio por inteligência artificial', `<div class="report">${opts.reportHTML || ''}</div>`]);
+        sections.push([t.analysis, `<div class="report">${opts.reportHTML || ''}</div>`]);
 
         const sectionsHTML = sections.map(([title, body], i) => `
     <section class="section">
@@ -180,10 +237,10 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
     </section>`).join('');
 
         return `<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="${t.htmlLang}">
 <head>
 <meta charset="UTF-8">
-<title>Laudo Three Health — ${esc(opts.generatedAt)}</title>
+<title>${esc(t.docTitle)} — ${esc(opts.generatedAt)}</title>
 <style>${CSS}</style>
 </head>
 <body>
@@ -198,23 +255,20 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
             ${opts.badge ? `<span class="badge">${esc(opts.badge)}</span>` : ''}
         </div>
         <div class="doc-title-block">
-            <div class="doc-title">Análise de apoio por inteligência artificial</div>
-            <div class="doc-subtitle">Ortopedia · Sistema musculoesquelético</div>
+            <div class="doc-title">${esc(t.analysis)}</div>
+            <div class="doc-subtitle">${esc(t.subtitle)}</div>
         </div>
     </header>
 
-    <div class="support-banner"><strong>Documento de apoio gerado por IA — não é laudo radiológico nem diagnóstico médico.</strong>
-        Baseado apenas nas imagens enviadas (em RM/TC, cortes selecionados, não o estudo completo). Deve ser revisado por profissional habilitado antes de qualquer decisão.</div>
+    <div class="support-banner">${t.banner}</div>
     <div class="ident">${identItems.join('')}</div>
     ${sectionsHTML}
 
     <div class="validation">
-        <h2 class="section-title" style="margin-bottom:6px">Validação do profissional responsável</h2>
-        <p class="validation-text">Declaro que revisei as imagens e o conteúdo desta análise, e que a conduta adotada, dentro das atribuições da minha profissão, é de minha responsabilidade.</p>
+        <h2 class="section-title" style="margin-bottom:6px">${esc(t.validationTitle)}</h2>
+        <p class="validation-text">${esc(t.validationText)}</p>
         <div class="sign-grid">
-            <div class="sign-line">Assinatura e carimbo</div>
-            <div class="sign-line">Registro profissional (CRM, CREFITO…)</div>
-            <div class="sign-line">Data</div>
+            ${t.sign.map(label => `<div class="sign-line">${esc(label)}</div>`).join('')}
         </div>
     </div>
 
@@ -227,14 +281,9 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
                 </div>
                 <div class="logo-underline"></div>
             </div>
-            <span>Gerado por IA em ${esc(opts.generatedAt)}</span>
+            <span>${esc(t.generatedBy(opts.generatedAt))}</span>
         </div>
-        <div class="disclaimer">
-            <strong>AVISO CFM/COFFITO/LGPD:</strong> Documento gerado por Inteligência Artificial como ferramenta de apoio à decisão clínica.
-            <strong>Não substitui</strong> o laudo radiológico, o diagnóstico nem a conduta do médico responsável: o diagnóstico por imagem e a indicação de cirurgia ou medicamento são atos médicos (Lei 12.842/2013).
-            Fisioterapeutas o utilizam, dentro das atribuições definidas pelo COFFITO e do Código de Ética e Deontologia da Fisioterapia (Resolução COFFITO nº 424/2013), para planejar a reabilitação e decidir o encaminhamento.
-            O uso da IA deve ser informado ao paciente, os dados devem ser tratados conforme a LGPD e a decisão final deve ser registrada pelo profissional habilitado.
-        </div>
+        <div class="disclaimer">${t.disclaimer}</div>
     </footer>
 </div>
 <script>window.onload = function () { window.print(); };<\/script>
@@ -246,7 +295,7 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
         const win = window.open('', '_blank', 'width=900,height=700');
         if (!win) {
             if (window.showToast) {
-                window.showToast('O navegador bloqueou a janela do PDF. Permita pop-ups para este site e tente de novo.', 'warning', 6000);
+                window.showToast(textFor(opts.lang).popupBlocked, 'warning', 6000);
             }
             return;
         }
@@ -254,8 +303,12 @@ body { font-family: 'Nunito', Arial, sans-serif; font-size: 12.5px; color: var(-
         win.document.close();
     }
 
-    function nowBR() {
+    function nowBR(lang) {
         const now = new Date();
+        if (lang === 'en') {
+            const pad = n => String(n).padStart(2, '0');
+            return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        }
         const date = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
         const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         return `${date} às ${time}`;

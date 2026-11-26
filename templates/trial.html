@@ -714,6 +714,14 @@
                         </div>
                     </div>
 
+                    <div class="form-group laudo-idioma-group">
+                        <label for="trial_laudo_idioma">Idioma do laudo <span class="label-en">· Report language</span></label>
+                        <select id="trial_laudo_idioma" data-remember="laudo_idioma">
+                            <option value="pt-BR" selected>Português (Brasil)</option>
+                            <option value="en">English</option>
+                        </select>
+                    </div>
+
                     <label class="consent-check" for="trial_privacy_consent">
                         <input type="checkbox" id="trial_privacy_consent" value="accepted" required>
                         <span>
@@ -1159,6 +1167,7 @@
             lastClinicalInfo = parts.join(' | ');
             formData.append('description', lastClinicalInfo);
             formData.append('privacy_consent', 'accepted');
+            formData.append('laudo_idioma', document.getElementById('trial_laudo_idioma')?.value || 'pt-BR');
 
             try {
                 const resp = await fetch('/trial/analyze', { method: 'POST', body: formData });
@@ -1258,6 +1267,12 @@
             const reportEl = document.getElementById('report-content');
             // O laudo vem da IA: renderLaudoInto escapa o texto e só insere as próprias tags.
             renderLaudoInto(reportEl, data.analysis || '');
+            const lang = data.laudo_idioma === 'en' ? 'en' : 'pt-BR';
+            reportEl.dataset.lang = lang;
+            if (lang === 'en') reportEl.setAttribute('lang', 'en'); else reportEl.removeAttribute('lang');
+            if (data.translation_failed && window.showToast) {
+                window.showToast('Não foi possível traduzir o laudo para o inglês desta vez: ele está em português.', 'warning', 7000);
+            }
 
             // Show/hide new analysis button and last-analysis warning
             const btnNew = document.getElementById('btn-new-analysis');
@@ -1333,15 +1348,18 @@
 
         function downloadPDF() {
             const imgEl = document.getElementById('r-image');
+            const reportEl = document.getElementById('report-content');
+            const lang = reportEl.dataset.lang === 'en' ? 'en' : 'pt-BR';
             openLaudoPdf({
-                reportHTML: document.getElementById('report-content').innerHTML,
-                generatedAt: laudoNowBR(),
-                badge: 'Teste gratuito',
+                reportHTML: reportEl.innerHTML,
+                generatedAt: laudoNowBR(lang),
+                badge: lang === 'en' ? 'Free trial' : 'Teste gratuito',
+                lang,
                 meta: laudoPdfMeta({
                     exam_type: document.getElementById('r-exam-type').textContent,
                     references_used: lastResult ? lastResult.references_used : 0,
                     num_images: 1,
-                }, lastResult ? lastResult.consensus : null),
+                }, lastResult ? lastResult.consensus : null, lang),
                 clinicalInfo: lastClinicalInfo,
                 images: imgEl && imgEl.src ? [{ src: imgEl.src }] : [],
                 findings: lastResult ? (lastResult.annotations || []) : [],

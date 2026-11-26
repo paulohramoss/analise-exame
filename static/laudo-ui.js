@@ -131,6 +131,7 @@
         analisando: 'Analisando as imagens com os modelos de IA',
         consenso: 'Gerando o laudo de consenso entre os modelos',
         marcando_achados: 'Marcando os achados nas imagens',
+        traduzindo: 'Traduzindo o laudo para o inglês',
         lendo_valores: 'Lendo os valores do relatório',
         interpretando: 'Interpretando os resultados',
         salvando: 'Salvando o laudo',
@@ -142,9 +143,17 @@
 
     /* Metadados do PDF — os mesmos campos, na mesma ordem, nas três páginas.
        O laudo nunca expõe o fornecedor/modelo de IA usado: sempre "Software próprio". */
-    function laudoPdfMeta(exam) {
+    function laudoPdfMeta(exam, _consensus, lang) {
         exam = exam || {};
         const refs = Number(exam.references_used || 0);
+        if (lang === 'en') {
+            return [
+                { label: 'Region', value: exam.exam_type || '—' },
+                { label: 'Images analyzed', value: String(exam.num_images || 1) },
+                { label: 'References used', value: refs > 0 ? `${refs} ${refs === 1 ? 'image' : 'images'}` : 'None' },
+                { label: 'AI analysis', value: 'Proprietary software' },
+            ];
+        }
         return [
             { label: 'Região', value: exam.exam_type || '—' },
             { label: 'Imagens analisadas', value: String(exam.num_images || 1) },
